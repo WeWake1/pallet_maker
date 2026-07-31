@@ -10,6 +10,7 @@
     "sheet": "tsx src/cli/sheet.ts",
     "dxf": "tsx src/cli/dxf.ts",
     "costing": "tsx src/cli/costing.ts",
+    "guide": "tsx src/cli/guide.ts",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",

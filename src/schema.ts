@@ -17,6 +17,7 @@ export const LayerKindSchema = z.enum([
   'block',
   'runner',
   'bottom_deck',
+  'panel',
 ]);
 
 export const NailSpecSchema = z.object({
@@ -99,6 +100,7 @@ export const PalletSchema = z.object({
     'stringer_2way',
     'plywood_type1',
     'plywood_type2',
+    'plywood_type3',
     'wing',
     'other',
   ]),

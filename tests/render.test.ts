@@ -109,18 +109,19 @@ describe('nail dots', () => {
   });
 
   it('sit at every crossing of a deck board and the layer against it', () => {
-    const top = layout.nailDots.filter((d) => d.deckKind === 'top_deck');
+    const top = layout.nailDots.filter((d) => d.face === 'top');
     expect(top).toHaveLength(21);
-    expect(new Set(top.map((d) => d.supportKind))).toEqual(new Set(['bearer']));
+    expect(new Set(top.map((d) => d.lowerKind))).toEqual(new Set(['bearer']));
     expect(new Set(top.map((d) => Math.round(d.x)))).toEqual(new Set([50, 500, 950]));
-    const bottom = layout.nailDots.filter((d) => d.deckKind === 'bottom_deck');
-    expect(new Set(bottom.map((d) => d.supportKind))).toEqual(new Set(['block']));
+    const bottom = layout.nailDots.filter((d) => d.face === 'bottom');
+    // Nailed up from below, so the blocks are the upper member of that joint.
+    expect(new Set(bottom.map((d) => d.upperKind))).toEqual(new Set(['block']));
   });
 
   it('share an uneven count as evenly as whole nails allow', () => {
     const pallet = loadFixture('block-1000x800');
     pallet.nails[0]!.count = 25;
-    const uneven = computeLayout(pallet).nailDots.filter((d) => d.deckKind === 'top_deck');
+    const uneven = computeLayout(pallet).nailDots.filter((d) => d.face === 'top');
     expect(uneven).toHaveLength(25);
     const perCrossing = new Map<string, number>();
     for (const dot of uneven) {
@@ -211,6 +212,10 @@ describe('the SVG itself', () => {
       'wide-centre-block-row',
       'wing-both-decks',
       'nudged-top-board',
+      'plywood-type1',
+      'plywood-type2',
+      'plywood-type3',
+      'stringer-2way',
     ]) {
       const fixture = computeLayout(loadFixture(name));
       for (const view of ALL_VIEWS) {

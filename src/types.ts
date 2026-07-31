@@ -13,8 +13,12 @@ export type Direction = 'along_length' | 'across_width';
 export type PalletType =
   | 'block_4way'
   | 'stringer_2way'
+  /** Blocks and a bottom deck, with a plywood sheet straight on top. */
   | 'plywood_type1'
+  /** As type 1, with centre boards between the blocks and the sheet. */
   | 'plywood_type2'
+  /** A whole boarded pallet, with a plywood sheet laid over its top deck. */
+  | 'plywood_type3'
   | 'wing'
   | 'other';
 
@@ -32,7 +36,13 @@ export type LayerKind =
   | 'bearer'
   | 'block'
   | 'runner'
-  | 'bottom_deck';
+  | 'bottom_deck'
+  /**
+   * A plywood sheet laid over a deck that is already there, rather than one
+   * replacing the top boards. A sheet that replaces them is a `top_deck` whose
+   * content is a sheet; this kind exists for the pallet that has both.
+   */
+  | 'panel';
 
 export interface NailSpec {
   /** e.g. "top board to centre board" */

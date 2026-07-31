@@ -107,13 +107,22 @@ export function projectPlanPoint(
 const TOLERANCE = 1e-6;
 
 /**
- * In the top view the top boards are solid and everything below is faint; in the
- * bottom view it is the other way up. In the side and end views a piece is faint
- * when something in front of it covers it completely.
+ * In the top view the layer you would be looking at is solid and everything
+ * below it is faint; in the bottom view it is the other way up. That is the
+ * topmost layer rather than the one called `top_deck`, because a plywood sheet
+ * laid over a boarded deck is what you see from above.
+ *
+ * In the side and end views a piece is faint when something in front of it
+ * covers it completely.
  */
-function isNear(target: ReturnType<typeof place> & { piece: PlacedPiece }, all: Array<ReturnType<typeof place> & { piece: PlacedPiece }>, view: ViewKind): boolean {
-  if (view === 'top') return target.piece.layerKind === 'top_deck';
-  if (view === 'bottom') return target.piece.layerKind === 'bottom_deck';
+function isNear(
+  target: ReturnType<typeof place> & { piece: PlacedPiece },
+  all: Array<ReturnType<typeof place> & { piece: PlacedPiece }>,
+  view: ViewKind,
+  faces: { top: string | undefined; bottom: string | undefined },
+): boolean {
+  if (view === 'top') return target.piece.layerId === faces.top;
+  if (view === 'bottom') return target.piece.layerId === faces.bottom;
   return !all.some(
     (other) =>
       other !== target &&
@@ -125,13 +134,22 @@ function isNear(target: ReturnType<typeof place> & { piece: PlacedPiece }, all: 
   );
 }
 
+/** The layers a viewer meets first from above and from below. */
+export function facesOf(layout: Layout): { top: string | undefined; bottom: string | undefined } {
+  return {
+    top: layout.layers[0]?.layerId,
+    bottom: layout.layers.at(-1)?.layerId,
+  };
+}
+
 /** Every piece, projected and sorted back to front so a painter's pass works. */
 export function projectPieces(layout: Layout, view: ViewKind): Projected[] {
+  const faces = facesOf(layout);
   const placed = layout.pieces.map((piece, index) => ({
     piece,
     index,
     ...place(piece, layout, view),
   }));
-  const projected = placed.map((item) => ({ ...item, near: isNear(item, placed, view) }));
+  const projected = placed.map((item) => ({ ...item, near: isNear(item, placed, view, faces) }));
   return projected.sort((a, b) => a.depth - b.depth);
 }

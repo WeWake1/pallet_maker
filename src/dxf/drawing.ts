@@ -20,6 +20,7 @@ import type { LayerDefinition, Pair, Point } from './writer.js';
  */
 
 const LAYER_NAME: Record<LayerKind, string> = {
+  panel: 'PLYWOOD_PANEL',
   top_deck: 'TOP_BOARDS',
   bearer: 'CENTRE_BOARDS',
   block: 'BLOCKS',
@@ -29,6 +30,7 @@ const LAYER_NAME: Record<LayerKind, string> = {
 
 /** AutoCAD colour indices, close to the colours the sheet uses. */
 const LAYER_COLOUR: Record<LayerKind, number> = {
+  panel: 42,
   top_deck: 30,
   bearer: 5,
   block: 6,

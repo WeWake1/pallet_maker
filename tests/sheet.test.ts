@@ -144,6 +144,10 @@ describe('the sheet', () => {
       'joined-middle-pair',
       'wide-centre-block-row',
       'nudged-top-board',
+      'plywood-type1',
+      'plywood-type2',
+      'plywood-type3',
+      'stringer-2way',
     ]) {
       const fixture = loadFixture(name);
       const sheet = renderSheet(fixture, computeLayout(fixture));

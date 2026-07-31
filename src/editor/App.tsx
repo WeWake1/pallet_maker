@@ -30,6 +30,7 @@ const FIXTURES = Object.entries(fixtureModules)
   .sort((a, b) => a.name.localeCompare(b.name));
 
 const LAYER_KINDS: Array<[LayerKind, string]> = [
+  ['panel', 'Plywood sheet over the deck'],
   ['top_deck', 'Top boards'],
   ['bearer', 'Centre boards'],
   ['block', 'Blocks'],
@@ -331,8 +332,9 @@ export function App() {
                   options={[
                     ['block_4way', 'Block, 4-way'],
                     ['stringer_2way', 'Stringer, 2-way'],
-                    ['plywood_type1', 'Plywood type 1'],
-                    ['plywood_type2', 'Plywood type 2'],
+                    ['plywood_type1', 'Plywood type 1, sheet on blocks'],
+                    ['plywood_type2', 'Plywood type 2, sheet on centre boards'],
+                    ['plywood_type3', 'Plywood type 3, sheet over a boarded deck'],
                     ['wing', 'Wing'],
                     ['other', 'Other'],
                   ]}

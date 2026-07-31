@@ -182,6 +182,10 @@ describe('the DXF', () => {
       'joined-middle-pair',
       'wide-centre-block-row',
       'nudged-top-board',
+      'plywood-type1',
+      'plywood-type2',
+      'plywood-type3',
+      'stringer-2way',
     ]) {
       const drawing = palletToDxf(computeLayout(loadFixture(name)));
       const parsed = readEntities(drawing);

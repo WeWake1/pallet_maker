@@ -28,6 +28,7 @@ export interface ComponentGroup {
 
 /** Domain vocabulary, used verbatim on the sheet. */
 const HEADING: Record<LayerKind, string> = {
+  panel: 'Plywood sheet',
   top_deck: 'Top boards',
   bearer: 'Centre boards',
   block: 'Blocks',
@@ -36,6 +37,7 @@ const HEADING: Record<LayerKind, string> = {
 };
 
 const DESCRIPTION: Record<LayerKind, string> = {
+  panel: 'Plywood sheet',
   top_deck: 'Top board',
   bearer: 'Centre board',
   block: 'Block',

@@ -16,6 +16,7 @@ export interface LayerStyle {
 
 /** One colour per layer kind. A runner replaces the block layer, so it shares its hue. */
 export const LAYER_STYLE: Record<LayerKind, LayerStyle> = {
+  panel: { stroke: '#8a6a2f', fill: '#f6ecd4' },
   top_deck: { stroke: '#a8551f', fill: '#f2ddc9' },
   bearer: { stroke: '#1f5f7a', fill: '#d3e6ee' },
   block: { stroke: '#5a3f8c', fill: '#e2daf0' },

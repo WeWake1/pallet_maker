@@ -17,6 +17,16 @@ export function boundingBox(pieces: PlacedPiece[]): BoundingBox | null {
 }
 
 /**
+ * Gaps are shared out by division, so a deck that ends flush can land a
+ * ten-thousandth of a nanometre past its base. Flush is flush.
+ */
+const FLUSH = 1e-6;
+
+function settle(value: number): number {
+  return Math.abs(value) < FLUSH ? 0 : value;
+}
+
+/**
  * A wing is not a special case: it is the difference between a deck outline and
  * the base footprint below it. Positive on a side means the deck hangs out.
  */
@@ -26,10 +36,10 @@ export function overhangOf(
 ): Overhang | null {
   if (!deck || !base) return null;
   return {
-    lengthStart: base.x0 - deck.x0,
-    lengthEnd: deck.x1 - base.x1,
-    widthStart: base.y0 - deck.y0,
-    widthEnd: deck.y1 - base.y1,
+    lengthStart: settle(base.x0 - deck.x0),
+    lengthEnd: settle(deck.x1 - base.x1),
+    widthStart: settle(base.y0 - deck.y0),
+    widthEnd: settle(deck.y1 - base.y1),
   };
 }
 

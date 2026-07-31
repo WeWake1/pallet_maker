@@ -1,7 +1,7 @@
 import { hasOverhang } from '../geometry/footprint.js';
 import type { LayerLayout, Layout, Overhang } from '../geometry/types.js';
 import { renderDimension } from './dimension.js';
-import { projectPieces, projectPlanPoint, viewFrame, VIEW_TITLE } from './project.js';
+import { facesOf, projectPieces, projectPlanPoint, viewFrame, VIEW_TITLE } from './project.js';
 import type { Projected, ViewKind } from './project.js';
 import { mmLabel, packLanes, renderTitle, Scene, TIER } from './scene.js';
 import type { DimSpec, Side } from './scene.js';
@@ -185,8 +185,7 @@ function drawPieces(
 /** Nail dots appear in the top and bottom views only. */
 function drawNails(scene: Scene, layout: Layout, view: ViewKind): string {
   if (view !== 'top' && view !== 'bottom') return '';
-  const kind = view === 'top' ? 'top_deck' : 'bottom_deck';
-  const dots = layout.nailDots.filter((dot) => dot.deckKind === kind);
+  const dots = layout.nailDots.filter((dot) => dot.face === view);
   return group(
     { 'pointer-events': 'none' },
     dots.map((dot) => {
@@ -306,10 +305,11 @@ function overhangDims(layout: Layout, view: ViewKind, overhang: Overhang | null)
   return dims;
 }
 
-/** The layer this view emphasises: the top boards, or the bottom boards. */
+/** The layer this view emphasises: whichever one the viewer meets first. */
 function nearLayer(layout: Layout, view: ViewKind): LayerLayout | undefined {
-  const kind = view === 'bottom' ? 'bottom_deck' : 'top_deck';
-  return layout.layers.find((layer) => layer.kind === kind);
+  const faces = facesOf(layout);
+  const id = view === 'bottom' ? faces.bottom : faces.top;
+  return layout.layers.find((layer) => layer.layerId === id);
 }
 
 /**

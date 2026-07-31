@@ -17,6 +17,7 @@ component.
 | [src/render/](src/render/) | SVG views, built from `PlacedPiece[]` alone |
 | [src/sheet/](src/sheet/) | The A4 sheet and its PDF export |
 | [src/editor/](src/editor/) | The React editor: form, live preview, nudge |
+| [docs/guide.ts](docs/guide.ts) | The user guide, drawings and all |
 | [src/dxf/](src/dxf/) | DXF R12 output, from `PlacedPiece[]` |
 | [src/costing/](src/costing/) | Timber volume and cost, at the rates in the config |
 | [config/rates.json](config/rates.json) | Every rate the tool knows. Edit here, nowhere else |
@@ -44,6 +45,7 @@ npm run sheet -- fixtures/wing-both-decks.json --out out # the spec sheet, HTML 
 npm run sheet -- fixtures/wing-both-decks.json --html-only
 npm run dxf -- fixtures/wing-both-decks.json --out out    # R12 DXF
 npm run costing -- fixtures/block-1000x800.json           # timber volume and cost
+npm run guide                                            # the user guide, HTML and PDF
 ```
 
 `views` writes each view twice, in colour and desaturated, plus an HTML contact
@@ -174,6 +176,40 @@ has to hold even if a later version of this program forgets the rule.
 PDFs are served from the store rather than from the editor's working copy, and
 named for the design and its revision, so what is printed is what is recorded.
 
+### Backups
+
+Every start copies the database into `data/backups/` and keeps the last twenty
+(`PALLET_BACKUPS` to change that). The copy is taken with SQLite's own backup,
+not a file copy that could catch a half-written page, and the frozen-row
+triggers come with it: a snapshot is as much the record as the original.
+
+The triggers stop the program from spoiling the file. They do nothing about a
+disk fault, so copy the `data` folder somewhere else now and then.
+
+## The pallets it knows about
+
+A pallet is layers, and a layer is boards, a block grid or a plywood sheet.
+Everything below falls out of that; none of it is a code path of its own.
+
+| | |
+|---|---|
+| Block, 4-way | Top boards, centre boards, a 3 x 3 block grid, bottom boards |
+| Stringer, 2-way | Runners in place of the block layer: full length pieces along the pallet, so forks go in from two sides only |
+| Wing | Any of these with the deck wider than the base. Span and offset, not a special case |
+| Plywood type 1 | A sheet straight onto the blocks |
+| Plywood type 2 | A sheet onto centre boards that connect the blocks |
+| Plywood type 3 | A whole boarded pallet with a sheet laid over its top deck |
+
+A sheet that *replaces* the top boards is a `top_deck` whose content is a sheet,
+which is what "plywood sheet replaces the top board layer" means. Type 3 is the
+one that does not replace anything, so it has a layer kind of its own: `panel`.
+That is the model being widened rather than a branch being added for one pallet.
+
+Nails follow from the same idea. A joint is any two layers that meet, and a nail
+spec names the two by their vocabulary — "plywood sheet to centre board", "top
+board to runner". Only the joints at the two faces are drawn, since an internal
+joint is under timber and cannot be seen.
+
 ## DXF
 
 The plan, at 1:1 in millimetres, one CAD layer per pallet layer kind so the shop
@@ -210,6 +246,15 @@ appears on the sheet: that is a specification, not a quotation.
 
 Stages 1 to 7 are complete: geometry, flat views, isometric, sheet and PDF,
 editor, storage and revisions, DXF and costing.
+
+The fixtures in [fixtures/](fixtures/) are the shapes the model has been taken
+all the way through, from layout to sheet, DXF and costing: a plain block
+pallet, two board widths, a joined pair, a deeper centre block row, a wing with
+both decks overhanging, a nudged board, a plywood panel deck, and runners in
+place of blocks. More special cases will surface. The layer and slot model is
+deliberately general so that most of them are data rather than code; when one
+truly does not fit, widen the model rather than adding a branch for that one
+pallet.
 
 Stage 8, spreadsheet import, is deliberately not built. The brief says to build
 it only if manual entry has proved slow in practice, and to decide after

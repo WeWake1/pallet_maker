@@ -3,9 +3,11 @@ import { EPSILON } from './distribute.js';
 import type { LayerLayout, LayoutIssue, PlacedPiece } from './types.js';
 
 /**
- * One nail, positioned in plan. Nail dots are placed automatically wherever a
- * deck board crosses the bearer, block or runner layer next to it, and the
- * count from the matching NailSpec is shared evenly across those crossings.
+ * One nail, positioned in plan.
+ *
+ * A joint is any two layers that meet, and a nail dot goes wherever a piece of
+ * one crosses a piece of the other. The count from the matching NailSpec is
+ * shared evenly across those crossings.
  *
  * Computed here rather than in a renderer so that the sheet and the DXF place
  * their dots in exactly the same spot.
@@ -13,22 +15,27 @@ import type { LayerLayout, LayoutIssue, PlacedPiece } from './types.js';
 export interface NailDot {
   x: number;
   y: number;
-  deckLayerId: string;
-  deckKind: LayerKind;
-  supportLayerId: string;
-  supportKind: LayerKind;
+  upperLayerId: string;
+  upperKind: LayerKind;
+  lowerLayerId: string;
+  lowerKind: LayerKind;
+  /**
+   * Which face of the pallet this joint is nailed from, if either. Only these
+   * are drawn: the top view shows what is nailed down from above, the bottom
+   * view what is nailed up from below, and an internal joint is under timber
+   * and cannot be seen.
+   */
+  face: 'top' | 'bottom' | null;
   /** The NailSpec label the count came from. */
   label: string;
 }
 
-const DECK_KINDS: LayerKind[] = ['top_deck', 'bottom_deck'];
-const SUPPORT_KINDS: LayerKind[] = ['bearer', 'block', 'runner'];
-
 /** Words a user is likely to write in a NailSpec label, per layer kind. */
 const LABEL_TERMS: Array<{ kind: LayerKind; terms: string[] }> = [
+  { kind: 'panel', terms: ['plywood sheet', 'plywood', 'panel'] },
   { kind: 'top_deck', terms: ['top board', 'top deck', 'top'] },
   { kind: 'bottom_deck', terms: ['bottom board', 'bottom deck', 'bottom'] },
-  { kind: 'bearer', terms: ['centre board', 'center board', 'bearer', 'centre', 'center'] },
+  { kind: 'bearer', terms: ['centre board', 'center board', 'connector', 'bearer', 'centre', 'center'] },
   { kind: 'block', terms: ['block'] },
   { kind: 'runner', terms: ['runner', 'stringer'] },
 ];
@@ -48,41 +55,35 @@ function kindsMentioned(label: string): LayerKind[] {
   return hits.sort((a, b) => a.at - b.at).map((hit) => hit.kind);
 }
 
+/**
+ * What a layer may be called in a nail spec. A top deck made of a plywood sheet
+ * answers to "top board" and to "plywood" alike, because it is both: the sheet
+ * that replaces the top boards.
+ */
+export function aliasesOf(layer: LayerLayout): LayerKind[] {
+  return layer.kind === 'top_deck' && layer.contentType === 'sheet'
+    ? ['top_deck', 'panel']
+    : [layer.kind];
+}
+
 /** The NailSpec whose label names this pair of layers, in either order. */
 export function matchNailSpec(
   nails: NailSpec[],
-  deckKind: LayerKind,
-  supportKind: LayerKind,
+  upper: LayerKind[],
+  lower: LayerKind[],
 ): NailSpec | null {
   for (const spec of nails) {
     const kinds = kindsMentioned(spec.label);
     if (kinds.length < 2) continue;
-    const [first, second] = kinds;
+    const [first, second] = kinds as [LayerKind, LayerKind];
     if (
-      (first === deckKind && second === supportKind) ||
-      (first === supportKind && second === deckKind)
+      (upper.includes(first) && lower.includes(second)) ||
+      (lower.includes(first) && upper.includes(second))
     ) {
       return spec;
     }
   }
   return null;
-}
-
-/** The support layer immediately against this deck: below a top deck, above a bottom deck. */
-function adjacentSupport(deck: LayerLayout, supports: LayerLayout[]): LayerLayout | null {
-  let best: LayerLayout | null = null;
-  for (const support of supports) {
-    if (deck.kind === 'top_deck') {
-      if (support.zBottom + support.thickness > deck.zBottom + EPSILON) continue;
-      if (!best || support.zBottom + support.thickness > best.zBottom + best.thickness) {
-        best = support;
-      }
-    } else {
-      if (support.zBottom + EPSILON < deck.zBottom + deck.thickness) continue;
-      if (!best || support.zBottom < best.zBottom) best = support;
-    }
-  }
-  return best;
 }
 
 /** Whole numbers of nails per crossing, shared as evenly as the count allows. */
@@ -101,8 +102,6 @@ interface Crossing {
   y0: number;
   x1: number;
   y1: number;
-  deckLayerId: string;
-  supportLayerId: string;
 }
 
 /** Dots inside one crossing, spread along its longer side. */
@@ -123,6 +122,13 @@ function dotsIn(crossing: Crossing, count: number): Array<{ x: number; y: number
   return dots;
 }
 
+function describe(layer: LayerLayout): string {
+  return `the ${layer.kind.replace('_', ' ')} layer at position ${layer.order}`;
+}
+
+/**
+ * @param layers ordered top to bottom, as the document lists them.
+ */
 export function computeNailDots(
   nails: NailSpec[],
   layers: LayerLayout[],
@@ -131,66 +137,65 @@ export function computeNailDots(
   const dots: NailDot[] = [];
   const issues: LayoutIssue[] = [];
 
-  const decks = layers.filter((l) => DECK_KINDS.includes(l.kind));
-  const supports = layers.filter((l) => SUPPORT_KINDS.includes(l.kind));
-
-  for (const deck of decks) {
-    const support = adjacentSupport(deck, supports);
-    if (!support) continue;
+  for (let i = 0; i + 1 < layers.length; i++) {
+    const upper = layers[i]!;
+    const lower = layers[i + 1]!;
+    // The topmost joint is nailed from above and the lowest from below. On a
+    // two layer pallet the one joint is both, and above is what you see.
+    const face = i === 0 ? 'top' : i + 1 === layers.length - 1 ? 'bottom' : null;
 
     const crossings: Crossing[] = [];
-    for (const d of pieces.filter((p) => p.layerId === deck.layerId)) {
-      for (const s of pieces.filter((p) => p.layerId === support.layerId)) {
-        const x0 = Math.max(d.x, s.x);
-        const x1 = Math.min(d.x + d.dx, s.x + s.dx);
-        const y0 = Math.max(d.y, s.y);
-        const y1 = Math.min(d.y + d.dy, s.y + s.dy);
-        if (x1 - x0 > EPSILON && y1 - y0 > EPSILON) {
-          crossings.push({
-            x0,
-            y0,
-            x1,
-            y1,
-            deckLayerId: deck.layerId,
-            supportLayerId: support.layerId,
-          });
-        }
+    for (const a of pieces.filter((piece) => piece.layerId === upper.layerId)) {
+      for (const b of pieces.filter((piece) => piece.layerId === lower.layerId)) {
+        const x0 = Math.max(a.x, b.x);
+        const x1 = Math.min(a.x + a.dx, b.x + b.dx);
+        const y0 = Math.max(a.y, b.y);
+        const y1 = Math.min(a.y + a.dy, b.y + b.dy);
+        if (x1 - x0 > EPSILON && y1 - y0 > EPSILON) crossings.push({ x0, y0, x1, y1 });
       }
     }
 
     if (crossings.length === 0) {
-      issues.push({
-        severity: 'warning',
-        code: 'no_crossings',
-        layerId: deck.layerId,
-        layerKind: deck.kind,
-        message: `Layer "${deck.layerId}" (${deck.kind}) never crosses layer "${support.layerId}" (${support.kind}), so it has nothing to nail to`,
-      });
+      if (face) {
+        issues.push({
+          severity: 'warning',
+          code: 'no_crossings',
+          layerId: upper.layerId,
+          layerKind: upper.kind,
+          message: `${describe(upper)} never crosses ${describe(lower)}, so it has nothing to nail to`,
+        });
+      }
       continue;
     }
 
-    const spec = matchNailSpec(nails, deck.kind, support.kind);
+    const spec = matchNailSpec(nails, aliasesOf(upper), aliasesOf(lower));
     if (!spec) {
-      issues.push({
-        severity: 'warning',
-        code: 'no_nail_spec',
-        layerId: deck.layerId,
-        layerKind: deck.kind,
-        message: `No nail spec names ${deck.kind} to ${support.kind}, so layer "${deck.layerId}" gets no nail dots`,
-      });
+      // Only worth saying for a joint that would have been drawn.
+      if (face) {
+        issues.push({
+          severity: 'warning',
+          code: 'no_nail_spec',
+          layerId: upper.layerId,
+          layerKind: upper.kind,
+          message:
+            `No nail spec names ${upper.kind.replace('_', ' ')} to ${lower.kind.replace('_', ' ')}, ` +
+            `so the ${face} face gets no nail dots`,
+        });
+      }
       continue;
     }
 
     const shares = shareEvenly(spec.count, crossings.length);
-    crossings.forEach((crossing, i) => {
-      for (const dot of dotsIn(crossing, shares[i]!)) {
+    crossings.forEach((crossing, index) => {
+      for (const dot of dotsIn(crossing, shares[index]!)) {
         dots.push({
           x: dot.x,
           y: dot.y,
-          deckLayerId: deck.layerId,
-          deckKind: deck.kind,
-          supportLayerId: support.layerId,
-          supportKind: support.kind,
+          upperLayerId: upper.layerId,
+          upperKind: upper.kind,
+          lowerLayerId: lower.layerId,
+          lowerKind: lower.kind,
+          face,
           label: spec.label,
         });
       }

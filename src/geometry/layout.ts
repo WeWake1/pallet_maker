@@ -441,6 +441,7 @@ function checkGridShape(layer: Layer, grid: BlockGrid, issues: LayoutIssue[]): b
 
 /** The layer/content pairings that are normal. Anything else is worth a look. */
 const EXPECTED_CONTENT: Record<string, string[]> = {
+  panel: ['sheet'],
   top_deck: ['sequence', 'sheet'],
   bottom_deck: ['sequence', 'sheet'],
   bearer: ['sequence'],

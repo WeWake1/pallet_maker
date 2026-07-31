@@ -76,6 +76,23 @@ export function newLayer(
     runOffsetMm: 0,
   };
 
+  if (kind === 'panel') {
+    return {
+      ...base,
+      direction: 'along_length' as const,
+      content: {
+        type: 'sheet',
+        sheet: {
+          partNo,
+          thickness: 12,
+          width: extent.overallWidth,
+          length: extent.overallLength,
+          material: 'plywood',
+        },
+      },
+    };
+  }
+
   if (kind === 'block') {
     return {
       ...base,

@@ -12,6 +12,7 @@ import { Button, Check, Field, NumberInput, Panel, Select, TextInput } from './u
  */
 
 const KIND_LABEL: Array<[Layer['kind'], string]> = [
+  ['panel', 'Plywood sheet over the deck'],
   ['top_deck', 'Top boards'],
   ['bearer', 'Centre boards'],
   ['block', 'Blocks'],

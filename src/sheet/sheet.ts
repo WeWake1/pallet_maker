@@ -22,8 +22,9 @@ const DECK_TYPE: Record<Pallet['deckType'], string> = {
 const PALLET_TYPE: Record<Pallet['palletType'], string> = {
   block_4way: 'Block, 4-way',
   stringer_2way: 'Stringer, 2-way',
-  plywood_type1: 'Plywood type 1',
-  plywood_type2: 'Plywood type 2',
+  plywood_type1: 'Plywood type 1, sheet on blocks',
+  plywood_type2: 'Plywood type 2, sheet on centre boards',
+  plywood_type3: 'Plywood type 3, sheet over a boarded deck',
   wing: 'Wing',
   other: 'Other',
 };
@@ -193,9 +194,9 @@ function nailsBlock(pallet: Pallet): string {
 }
 
 function materialBlock(pallet: Pallet): string {
-  // The deck surface is read off the top layer rather than stored: a sheet
-  // layer is a panel, a sequence of boards is slatted.
-  const topLayer = pallet.layers.find((layer) => layer.kind === 'top_deck');
+  // The deck surface is read off the topmost layer rather than stored: a sheet
+  // there is a panel, whether it replaced the top boards or was laid over them.
+  const topLayer = [...pallet.layers].sort((a, b) => a.order - b.order)[0];
   const surface = topLayer?.content.type === 'sheet' ? 'Plywood panel' : 'Slatted';
 
   const rows: Array<[string, string]> = [
