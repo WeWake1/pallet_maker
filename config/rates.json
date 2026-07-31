@@ -1,0 +1,20 @@
+{
+  "currency": "INR",
+
+  "timberPerCft": {
+    "default": 850,
+    "pine": 850,
+    "hardwood": 1400,
+    "plywood": 2200
+  },
+
+  "nailsPerThousand": {
+    "default": 900,
+    "wire nail": 900
+  },
+
+  "overhead": {
+    "perPallet": 60,
+    "percentOfMaterial": 8
+  }
+}

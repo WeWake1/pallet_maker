@@ -1,0 +1,89 @@
+{
+  "id": "fix-joined-middle-pair",
+  "palletCode": "AP-003",
+  "clientName": "Demo Client",
+  "palletName": "1000 x 800 joined middle pair",
+
+  "overallLength": 1000,
+  "overallWidth": 800,
+
+  "palletType": "block_4way",
+  "deckType": "single_face",
+  "entry": "4_way",
+
+  "species": "pine",
+  "planing": "none",
+
+  "nails": [
+    { "label": "top board to centre board", "type": "wire nail", "sizeMm": 50, "count": 21 }
+  ],
+
+  "revision": "A",
+  "revisionDate": "2026-07-27",
+  "frozen": false,
+
+  "layers": [
+    {
+      "id": "top",
+      "kind": "top_deck",
+      "order": 1,
+      "direction": "along_length",
+      "content": {
+        "type": "sequence",
+        "slots": [
+          { "partNo": 1, "thickness": 18, "width": 100, "length": 1000, "material": "pine" },
+          { "partNo": 1, "thickness": 18, "width": 100, "length": 1000, "material": "pine" },
+          { "partNo": 1, "thickness": 18, "width": 100, "length": 1000, "material": "pine" },
+          { "partNo": 1, "thickness": 18, "width": 100, "length": 1000, "material": "pine" },
+          { "partNo": 1, "thickness": 18, "width": 100, "length": 1000, "material": "pine", "joinedToPrev": true },
+          { "partNo": 1, "thickness": 18, "width": 100, "length": 1000, "material": "pine" },
+          { "partNo": 1, "thickness": 18, "width": 100, "length": 1000, "material": "pine" }
+        ]
+      }
+    },
+    {
+      "id": "centre",
+      "kind": "bearer",
+      "order": 2,
+      "direction": "across_width",
+      "content": {
+        "type": "sequence",
+        "slots": [
+          { "partNo": 2, "thickness": 20, "width": 100, "length": 800, "material": "pine" },
+          { "partNo": 2, "thickness": 20, "width": 100, "length": 800, "material": "pine" },
+          { "partNo": 2, "thickness": 20, "width": 100, "length": 800, "material": "pine" }
+        ]
+      }
+    },
+    {
+      "id": "blocks",
+      "kind": "block",
+      "order": 3,
+      "direction": "along_length",
+      "content": {
+        "type": "grid",
+        "grid": {
+          "rows": 3,
+          "cols": 3,
+          "cells": [
+            [
+              { "partNo": 3, "lengthMm": 100, "widthMm": 100, "heightMm": 100, "material": "pine" },
+              { "partNo": 3, "lengthMm": 100, "widthMm": 100, "heightMm": 100, "material": "pine" },
+              { "partNo": 3, "lengthMm": 100, "widthMm": 100, "heightMm": 100, "material": "pine" }
+            ],
+            [
+              { "partNo": 3, "lengthMm": 100, "widthMm": 100, "heightMm": 100, "material": "pine" },
+              { "partNo": 3, "lengthMm": 100, "widthMm": 100, "heightMm": 100, "material": "pine" },
+              { "partNo": 3, "lengthMm": 100, "widthMm": 100, "heightMm": 100, "material": "pine" }
+            ],
+            [
+              { "partNo": 3, "lengthMm": 100, "widthMm": 100, "heightMm": 100, "material": "pine" },
+              { "partNo": 3, "lengthMm": 100, "widthMm": 100, "heightMm": 100, "material": "pine" },
+              { "partNo": 3, "lengthMm": 100, "widthMm": 100, "heightMm": 100, "material": "pine" }
+            ]
+          ]
+        }
+      }
+    }
+  ]
+}

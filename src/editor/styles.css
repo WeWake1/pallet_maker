@@ -1,0 +1,10 @@
+@import 'tailwindcss';
+
+/* Tailwind styles the editor chrome only. The spec sheet has its own styles
+   and never sees any of this. */
+
+html,
+body,
+#root {
+  height: 100%;
+}
