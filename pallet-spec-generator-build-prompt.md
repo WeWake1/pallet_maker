@@ -313,9 +313,13 @@ revision.
 4. Load and material — static, dynamic, species, planing, surface
 
 **Right column — drawing:**
-Isometric and top view on the first row, bottom view and end view on the second,
-side view spanning the full width on the third. A footer line reading
-"First-angle projection, all dimensions in mm".
+Top view and bottom view on the first row, side view and end view on the second,
+isometric spanning the full width on the third. The two plans go together and
+the two elevations go together, the way a drawing office reads them, and the
+picture of the finished pallet closes the sheet. The rows are not equal in
+height: an elevation is a long thin band and needs less than a plan, and what it
+does not need goes to the isometric. A footer line reads "First-angle
+projection, all dimensions in mm".
 
 Do not add a detail bubble section, a part colour key section, a drawn-and-
 approved block, or QC check points. These were considered and deliberately cut.

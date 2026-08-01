@@ -106,6 +106,13 @@ it is fixed in millimetres ([src/sheet/layout.ts](src/sheet/layout.ts)), and eac
 view is rendered to the exact pixel size of its cell rather than scaled to fit,
 so the stroke weights land on paper as drawn.
 
+The drawings run top and bottom view on the first row, side and end view on the
+second, isometric across the full width on the third: plans with plans,
+elevations with elevations, and the finished pallet closing the sheet. The rows
+are deliberately unequal. An elevation is a long thin band that would sit in the
+middle of a tall row with air above and below it, so it takes a fifth of the
+height and the isometric takes what is left.
+
 Each view fits its own cell rather than sharing one scale across the sheet. A
 shared scale would size everything off the top view, and the side view — 1000
 long against 156 tall — would then use a fifth of the row it is given.

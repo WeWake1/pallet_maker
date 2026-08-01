@@ -16,7 +16,9 @@ export default defineConfig({
     port: 5180,
     open: true,
     // The API runs beside the dev server; in a build the same server serves both.
-    proxy: { '/api': 'http://localhost:5179' },
+    // Anchored on the trailing slash so the editor's own /api.ts module is not
+    // mistaken for an API route and proxied away.
+    proxy: { '^/api/': 'http://localhost:5179' },
   },
   build: { outDir: '../../dist/editor', emptyOutDir: true },
 });

@@ -86,6 +86,22 @@ describe('the sheet', () => {
     expect([...html.matchAll(/<svg/g)]).toHaveLength(5);
   });
 
+  it('lays the views out the way a drawing office reads them', () => {
+    // Plans together, elevations together, the picture of the finished pallet
+    // across the bottom.
+    const order = [...html.matchAll(/<text[^>]*>([A-Z ]+VIEW|ISOMETRIC)<\/text>/g)].map(
+      (m) => m[1],
+    );
+    expect(order).toEqual([
+      'TOP VIEW',
+      'BOTTOM VIEW',
+      'SIDE VIEW',
+      'END VIEW',
+      'ISOMETRIC',
+    ]);
+    expect(html).toContain(`.row.iso { height: ${DRAWING.isoRowHeight}mm; }`);
+  });
+
   it('keeps every id unique across the five inlined views', () => {
     const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]!);
     expect(ids.length).toBeGreaterThan(0);
@@ -97,12 +113,17 @@ describe('the sheet', () => {
       (m) => ({ width: Number(m[1]), height: Number(m[2]) }),
     );
     expect(sizes).toHaveLength(5);
-    const wideCell = { w: mmToPx(DRAWING.width), h: mmToPx(DRAWING.wideRowHeight) };
-    const pairCell = { w: mmToPx(DRAWING.pairCellWidth), h: mmToPx(DRAWING.pairRowHeight) };
+    const pairWidth = mmToPx(DRAWING.pairCellWidth);
+    // The isometric is the only view on a full-width row; the four flat views
+    // share the two pair rows, and the taller of those bounds them all.
+    const tallestPairRow = mmToPx(
+      Math.max(DRAWING.planRowHeight, DRAWING.elevationRowHeight),
+    );
     for (const size of sizes) {
-      expect(size.width).toBeLessThanOrEqual(wideCell.w + 1);
-      const cell = size.width > pairCell.w ? wideCell : pairCell;
-      expect(size.height).toBeLessThanOrEqual(cell.h + 1);
+      expect(size.width).toBeLessThanOrEqual(mmToPx(DRAWING.width) + 1);
+      const cellHeight =
+        size.width > pairWidth ? mmToPx(DRAWING.isoRowHeight) : tallestPairRow;
+      expect(size.height).toBeLessThanOrEqual(cellHeight + 1);
     }
   });
 
@@ -118,6 +139,14 @@ describe('the sheet', () => {
     expect(text).toContain('wire nail');
     expect(text).toContain('Static load 3000 kg');
     expect(text).toContain('Species pine');
+  });
+
+  it('does not repeat the material on every component row', () => {
+    // The species is stated once, under load and material.
+    const components = /<h2>Components<\/h2>([\s\S]*?)<\/table>/.exec(html)![1]!;
+    expect(components).not.toContain('Material');
+    expect(components).not.toContain('pine');
+    expect([...components.matchAll(/<th>/g)]).toHaveLength(4);
   });
 
   it('reports the wing overhang in the data column as well as on the drawing', () => {
@@ -199,7 +228,7 @@ describe('dimension lanes', () => {
     const layout = computeLayout(loadFixture('two-top-widths'));
     const svg = renderView(layout, 'top', {
       fitWidth: mmToPx(DRAWING.pairCellWidth),
-      fitHeight: mmToPx(DRAWING.pairRowHeight),
+      fitHeight: mmToPx(DRAWING.planRowHeight),
     });
     // Rotated labels carry their centre in the transform, upright ones in x/y.
     const placed = [...svg.matchAll(/<text x="([\d.-]+)" y="([\d.-]+)"[^>]*>([^<]+)</g)].map(
@@ -227,8 +256,11 @@ describe('the sheet fits its page', () => {
         DRAWING.height +
         SHEET.footerHeight,
     ).toBeCloseTo(PAGE.height - 2 * PAGE.padding, 6);
-    expect(2 * DRAWING.pairRowHeight + DRAWING.wideRowHeight + 2 * SHEET.rowGap).toBeLessThanOrEqual(
-      DRAWING.height + 1e-6,
-    );
+    expect(
+      DRAWING.planRowHeight +
+        DRAWING.elevationRowHeight +
+        DRAWING.isoRowHeight +
+        2 * SHEET.rowGap,
+    ).toBeLessThanOrEqual(DRAWING.height + 1e-6);
   });
 });

@@ -116,7 +116,6 @@ describe('the three plywood pallets', () => {
         description: 'Plywood sheet',
         quantity: 1,
         thickness: 12,
-        material: 'plywood',
       });
       const html = renderSheet(pallet, layout);
       expect(html).toContain('Plywood panel');

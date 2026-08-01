@@ -34,13 +34,22 @@ const drawingHeight =
   contentHeight - SHEET.headerHeight - SHEET.headerGap - SHEET.footerHeight;
 
 /**
- * Isometric and top on the first row, bottom and end on the second, side across
- * the full width on the third.
+ * The two plans on the first row, the two elevations on the second, the
+ * isometric across the full width on the third.
+ *
+ * The rows are not the same height because the views are not the same shape. A
+ * plan is about as deep as it is wide and wants the height; an elevation is a
+ * long thin band that would only sit in the middle of a tall row with air above
+ * and below it. What the elevations do not need goes to the isometric, which is
+ * the picture of the finished pallet and reads better large.
  */
+const rowsHeight = drawingHeight - 2 * SHEET.rowGap;
+
 export const DRAWING = {
   width: drawingWidth,
   height: drawingHeight,
   pairCellWidth: (drawingWidth - SHEET.columnGap) / 2,
-  pairRowHeight: (drawingHeight - 2 * SHEET.rowGap) * 0.36,
-  wideRowHeight: (drawingHeight - 2 * SHEET.rowGap) * 0.28,
+  planRowHeight: rowsHeight * 0.36,
+  elevationRowHeight: rowsHeight * 0.2,
+  isoRowHeight: rowsHeight * 0.44,
 } as const;

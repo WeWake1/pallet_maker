@@ -7,6 +7,10 @@ import type { LayerKind, Pallet } from '../types.js';
  *
  * Quantities are counted off the drawing, dimensions are read from the data.
  * The two can never disagree, because both come from the same document.
+ *
+ * No material per row: the pallet states its species once, and where a part is
+ * made of something else — the panel on a plywood pallet — the part names it.
+ * Costing reads material off the pieces, not off this table.
  */
 
 export interface ComponentRow {
@@ -17,7 +21,6 @@ export interface ComponentRow {
   thickness: number;
   width: number;
   length: number;
-  material: string;
 }
 
 export interface ComponentGroup {
@@ -68,7 +71,6 @@ export function componentTable(pallet: Pallet, layout: Layout): ComponentGroup[]
           thickness: slot.thickness,
           width: slot.width,
           length: slot.length,
-          material: slot.material,
         });
       }
     } else if (content.type === 'grid') {
@@ -80,7 +82,6 @@ export function componentTable(pallet: Pallet, layout: Layout): ComponentGroup[]
           thickness: cell.heightMm,
           width: cell.widthMm,
           length: cell.lengthMm,
-          material: cell.material,
         });
       }
     } else {
@@ -92,7 +93,6 @@ export function componentTable(pallet: Pallet, layout: Layout): ComponentGroup[]
         thickness: sheet.thickness,
         width: sheet.width,
         length: sheet.length,
-        material: sheet.material,
       });
     }
 

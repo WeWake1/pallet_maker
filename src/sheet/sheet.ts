@@ -55,21 +55,25 @@ export function renderSheet(
   const groups = componentTable(pallet, layout);
   const grey = options.greyscale === true;
 
-  const cell = {
+  const plan = {
     fitWidth: mmToPx(DRAWING.pairCellWidth),
-    fitHeight: mmToPx(DRAWING.pairRowHeight),
+    fitHeight: mmToPx(DRAWING.planRowHeight),
   };
-  const wide = {
+  const elevation = {
+    fitWidth: mmToPx(DRAWING.pairCellWidth),
+    fitHeight: mmToPx(DRAWING.elevationRowHeight),
+  };
+  const iso = {
     fitWidth: mmToPx(DRAWING.width),
-    fitHeight: mmToPx(DRAWING.wideRowHeight),
+    fitHeight: mmToPx(DRAWING.isoRowHeight),
   };
 
   const views = {
-    iso: renderIsometric(layout, { ...cell, greyscale: grey, idPrefix: 'sheet' }),
-    top: renderView(layout, 'top', { ...cell, greyscale: grey, idPrefix: 'sheet' }),
-    bottom: renderView(layout, 'bottom', { ...cell, greyscale: grey, idPrefix: 'sheet' }),
-    end: renderView(layout, 'end', { ...cell, greyscale: grey, idPrefix: 'sheet' }),
-    side: renderView(layout, 'side', { ...wide, greyscale: grey, idPrefix: 'sheet' }),
+    top: renderView(layout, 'top', { ...plan, greyscale: grey, idPrefix: 'sheet' }),
+    bottom: renderView(layout, 'bottom', { ...plan, greyscale: grey, idPrefix: 'sheet' }),
+    side: renderView(layout, 'side', { ...elevation, greyscale: grey, idPrefix: 'sheet' }),
+    end: renderView(layout, 'end', { ...elevation, greyscale: grey, idPrefix: 'sheet' }),
+    iso: renderIsometric(layout, { ...iso, greyscale: grey, idPrefix: 'sheet' }),
   };
 
   const size = `${mmLabel(layout.overallLength)} × ${mmLabel(layout.overallWidth)} × ${mmLabel(layout.overallHeight)}`;
@@ -107,16 +111,16 @@ export function renderSheet(
     </section>
 
     <section class="drawing">
-      <div class="row pair">
-        <figure>${views.iso}</figure>
+      <div class="row plan">
         <figure>${views.top}</figure>
-      </div>
-      <div class="row pair">
         <figure>${views.bottom}</figure>
+      </div>
+      <div class="row elevation">
+        <figure>${views.side}</figure>
         <figure>${views.end}</figure>
       </div>
-      <div class="row wide">
-        <figure>${views.side}</figure>
+      <div class="row iso">
+        <figure>${views.iso}</figure>
       </div>
       <p class="projection">First-angle projection, all dimensions in mm</p>
     </section>
@@ -150,7 +154,7 @@ function componentsBlock(groups: ComponentGroup[]): string {
     .filter((group) => group.rows.length > 0)
     .map(
       (group) =>
-        `<tr class="group"><td colspan="5">${esc(group.heading)}</td></tr>` +
+        `<tr class="group"><td colspan="4">${esc(group.heading)}</td></tr>` +
         group.rows
           .map(
             (row) =>
@@ -159,7 +163,6 @@ function componentsBlock(groups: ComponentGroup[]): string {
               `<td>${esc(row.description)}${row.variant ? ` <span class="variant">${esc(row.variant)}</span>` : ''}</td>` +
               `<td class="num">${row.quantity}</td>` +
               `<td class="dims">${mmLabel(row.thickness)} × ${mmLabel(row.width)} × ${mmLabel(row.length)}</td>` +
-              `<td>${esc(row.material)}</td>` +
               `</tr>`,
           )
           .join(''),
@@ -169,7 +172,7 @@ function componentsBlock(groups: ComponentGroup[]): string {
   return block(
     'Components',
     `<table class="grid">
-      <thead><tr><th>Part</th><th>Description</th><th>Qty</th><th>T × W × L</th><th>Material</th></tr></thead>
+      <thead><tr><th>Part</th><th>Description</th><th>Qty</th><th>T × W × L</th></tr></thead>
       <tbody>${body}</tbody>
     </table>`,
   );
@@ -307,8 +310,9 @@ function styles(): string {
 
   .drawing { flex: 1; display: flex; flex-direction: column; min-width: 0; }
   .row { display: flex; gap: ${SHEET.columnGap}mm; margin-bottom: ${SHEET.rowGap}mm; }
-  .row.pair { height: ${DRAWING.pairRowHeight}mm; }
-  .row.wide { height: ${DRAWING.wideRowHeight}mm; }
+  .row.plan { height: ${DRAWING.planRowHeight}mm; }
+  .row.elevation { height: ${DRAWING.elevationRowHeight}mm; }
+  .row.iso { height: ${DRAWING.isoRowHeight}mm; }
   .row figure {
     margin: 0;
     flex: 1;
