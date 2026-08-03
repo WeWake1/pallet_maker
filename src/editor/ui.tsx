@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 
 /** Small form controls. Tailwind styles the editor chrome only. */
@@ -42,6 +43,24 @@ export function TextInput({
 }
 
 /**
+ * What a number field shows: what is being typed, while it is still being
+ * typed, and otherwise the value it has been given.
+ *
+ * Text on its way to being a number, and text that already reads as the value,
+ * both belong to whoever is typing. Anything else means the value moved on its
+ * own — a layer row set every board at once, say — and what it says now is what
+ * is true, so the typing is dropped in favour of it.
+ *
+ * A value that is not a number shows nothing, leaving the placeholder. That is
+ * how a field standing for several components at once says they do not agree.
+ */
+export function numberText(typed: string | null, value: number): string {
+  const partial = typed === '' || typed === '-';
+  if (typed !== null && (partial || Number.parseInt(typed, 10) === value)) return typed;
+  return Number.isFinite(value) ? String(value) : '';
+}
+
+/**
  * Every dimension in the system is an integer number of millimetres. The field
  * keeps what is typed while it is being typed, and only reports whole numbers.
  */
@@ -49,31 +68,51 @@ export function NumberInput({
   value,
   onChange,
   min,
+  max,
   step = 1,
   disabled,
+  placeholder,
   onKeyDown,
   inputRef,
 }: {
   value: number;
   onChange: (value: number) => void;
   min?: number;
+  max?: number;
   step?: number;
   disabled?: boolean;
+  placeholder?: string;
   onKeyDown?: (event: React.KeyboardEvent<HTMLInputElement>) => void;
   inputRef?: React.Ref<HTMLInputElement>;
 }) {
+  /**
+   * What has been typed so far, while it is still being typed.
+   *
+   * Clearing a field is how a number gets replaced, and half-cleared is not a
+   * number. Without somewhere to keep that, the field reported nothing, the
+   * value it was given never changed, and React put the old digits back — so
+   * emptying 100 to type 120 left 1, and typing gave 1120. The half-typed text
+   * lives here until it is a number or the field is left.
+   */
+  const [typed, setTyped] = useState<string | null>(null);
+
   return (
     <input
       ref={inputRef}
       className={`${inputClass} tabular-nums`}
       type="number"
-      value={Number.isFinite(value) ? value : ''}
+      value={numberText(typed, value)}
       min={min}
+      max={max}
       step={step}
       disabled={disabled}
+      placeholder={placeholder}
       onKeyDown={onKeyDown}
+      onBlur={() => setTyped(null)}
       onChange={(event) => {
-        const next = Number.parseInt(event.target.value, 10);
+        const text = event.target.value;
+        setTyped(text);
+        const next = Number.parseInt(text, 10);
         if (Number.isFinite(next)) onChange(next);
       }}
     />
@@ -160,6 +199,50 @@ export function Button({
     >
       {children}
     </button>
+  );
+}
+
+/**
+ * Detail folded away until it is wanted.
+ *
+ * A layer is nearly always one size repeated, and the row above describes the
+ * whole of it, so the component-by-component table underneath is a correction
+ * tool rather than something to be read. It opens closed, except where the
+ * components already differ and the table is the only place that says how.
+ */
+export function Disclosure({
+  summary,
+  defaultOpen = false,
+  openWhen = false,
+  children,
+}: {
+  summary: string;
+  defaultOpen?: boolean;
+  /** Unfold, whatever state it was left in, while this holds. */
+  openWhen?: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen || openWhen);
+
+  // Something outside has pointed at what is folded away — a board clicked on
+  // the drawing, say. Hiding what the click just selected would make the click
+  // look like it did nothing.
+  useEffect(() => {
+    if (openWhen) setOpen(true);
+  }, [openWhen]);
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center gap-1.5 rounded px-1 py-1 text-left text-xs text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+      >
+        <span className="text-[10px] text-slate-400">{open ? '▼' : '▶'}</span>
+        {summary}
+      </button>
+      {open && <div className="mt-1">{children}</div>}
+    </div>
   );
 }
 

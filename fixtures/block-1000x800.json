@@ -3,29 +3,35 @@
   "palletCode": "AP-001",
   "clientName": "Demo Client",
   "palletName": "1000 x 800",
-
   "overallLength": 1000,
   "overallWidth": 800,
-
   "palletType": "block_4way",
   "deckType": "double_face_non_reversible",
   "entry": "4_way",
-
   "species": "pine",
   "planing": "none",
   "staticLoadKg": 4000,
   "dynamicLoadKg": 1500,
-
   "nails": [
-    { "label": "top board to centre board", "type": "wire nail", "sizeMm": 50, "count": 21 },
-    { "label": "centre board to block", "type": "wire nail", "sizeMm": 65, "count": 18 },
-    { "label": "bottom board to block", "type": "wire nail", "sizeMm": 65, "count": 9 }
+    {
+      "label": "top board to centre board",
+      "type": "wire nail",
+      "sizeMm": 50,
+      "count": 21
+    },
+    {
+      "label": "centre board to block",
+      "type": "wire nail",
+      "sizeMm": 65,
+      "count": 18
+    },
+    {
+      "label": "bottom board to block",
+      "type": "wire nail",
+      "sizeMm": 65,
+      "count": 9
+    }
   ],
-
-  "revision": "A",
-  "revisionDate": "2026-07-27",
-  "frozen": false,
-
   "layers": [
     {
       "id": "top",
@@ -35,13 +41,48 @@
       "content": {
         "type": "sequence",
         "slots": [
-          { "partNo": 1, "thickness": 18, "width": 100, "length": 1000, "material": "pine" },
-          { "partNo": 1, "thickness": 18, "width": 100, "length": 1000, "material": "pine" },
-          { "partNo": 1, "thickness": 18, "width": 100, "length": 1000, "material": "pine" },
-          { "partNo": 1, "thickness": 18, "width": 100, "length": 1000, "material": "pine" },
-          { "partNo": 1, "thickness": 18, "width": 100, "length": 1000, "material": "pine" },
-          { "partNo": 1, "thickness": 18, "width": 100, "length": 1000, "material": "pine" },
-          { "partNo": 1, "thickness": 18, "width": 100, "length": 1000, "material": "pine" }
+          {
+            "length": 1000,
+            "width": 100,
+            "thickness": 18,
+            "material": "pine"
+          },
+          {
+            "length": 1000,
+            "width": 100,
+            "thickness": 18,
+            "material": "pine"
+          },
+          {
+            "length": 1000,
+            "width": 100,
+            "thickness": 18,
+            "material": "pine"
+          },
+          {
+            "length": 1000,
+            "width": 100,
+            "thickness": 18,
+            "material": "pine"
+          },
+          {
+            "length": 1000,
+            "width": 100,
+            "thickness": 18,
+            "material": "pine"
+          },
+          {
+            "length": 1000,
+            "width": 100,
+            "thickness": 18,
+            "material": "pine"
+          },
+          {
+            "length": 1000,
+            "width": 100,
+            "thickness": 18,
+            "material": "pine"
+          }
         ]
       }
     },
@@ -53,9 +94,24 @@
       "content": {
         "type": "sequence",
         "slots": [
-          { "partNo": 2, "thickness": 20, "width": 100, "length": 800, "material": "pine" },
-          { "partNo": 2, "thickness": 20, "width": 100, "length": 800, "material": "pine" },
-          { "partNo": 2, "thickness": 20, "width": 100, "length": 800, "material": "pine" }
+          {
+            "length": 800,
+            "width": 100,
+            "thickness": 20,
+            "material": "pine"
+          },
+          {
+            "length": 800,
+            "width": 100,
+            "thickness": 20,
+            "material": "pine"
+          },
+          {
+            "length": 800,
+            "width": 100,
+            "thickness": 20,
+            "material": "pine"
+          }
         ]
       }
     },
@@ -71,19 +127,64 @@
           "cols": 3,
           "cells": [
             [
-              { "partNo": 3, "lengthMm": 100, "widthMm": 100, "heightMm": 100, "material": "pine" },
-              { "partNo": 3, "lengthMm": 100, "widthMm": 100, "heightMm": 100, "material": "pine" },
-              { "partNo": 3, "lengthMm": 100, "widthMm": 100, "heightMm": 100, "material": "pine" }
+              {
+                "lengthMm": 100,
+                "widthMm": 100,
+                "heightMm": 100,
+                "material": "pine"
+              },
+              {
+                "lengthMm": 100,
+                "widthMm": 100,
+                "heightMm": 100,
+                "material": "pine"
+              },
+              {
+                "lengthMm": 100,
+                "widthMm": 100,
+                "heightMm": 100,
+                "material": "pine"
+              }
             ],
             [
-              { "partNo": 3, "lengthMm": 100, "widthMm": 100, "heightMm": 100, "material": "pine" },
-              { "partNo": 3, "lengthMm": 100, "widthMm": 100, "heightMm": 100, "material": "pine" },
-              { "partNo": 3, "lengthMm": 100, "widthMm": 100, "heightMm": 100, "material": "pine" }
+              {
+                "lengthMm": 100,
+                "widthMm": 100,
+                "heightMm": 100,
+                "material": "pine"
+              },
+              {
+                "lengthMm": 100,
+                "widthMm": 100,
+                "heightMm": 100,
+                "material": "pine"
+              },
+              {
+                "lengthMm": 100,
+                "widthMm": 100,
+                "heightMm": 100,
+                "material": "pine"
+              }
             ],
             [
-              { "partNo": 3, "lengthMm": 100, "widthMm": 100, "heightMm": 100, "material": "pine" },
-              { "partNo": 3, "lengthMm": 100, "widthMm": 100, "heightMm": 100, "material": "pine" },
-              { "partNo": 3, "lengthMm": 100, "widthMm": 100, "heightMm": 100, "material": "pine" }
+              {
+                "lengthMm": 100,
+                "widthMm": 100,
+                "heightMm": 100,
+                "material": "pine"
+              },
+              {
+                "lengthMm": 100,
+                "widthMm": 100,
+                "heightMm": 100,
+                "material": "pine"
+              },
+              {
+                "lengthMm": 100,
+                "widthMm": 100,
+                "heightMm": 100,
+                "material": "pine"
+              }
             ]
           ]
         }
@@ -97,11 +198,28 @@
       "content": {
         "type": "sequence",
         "slots": [
-          { "partNo": 4, "thickness": 18, "width": 100, "length": 800, "material": "pine" },
-          { "partNo": 4, "thickness": 18, "width": 100, "length": 800, "material": "pine" },
-          { "partNo": 4, "thickness": 18, "width": 100, "length": 800, "material": "pine" }
+          {
+            "length": 800,
+            "width": 100,
+            "thickness": 18,
+            "material": "pine"
+          },
+          {
+            "length": 800,
+            "width": 100,
+            "thickness": 18,
+            "material": "pine"
+          },
+          {
+            "length": 800,
+            "width": 100,
+            "thickness": 18,
+            "material": "pine"
+          }
         ]
       }
     }
-  ]
+  ],
+  "clientId": "client-c28b5710",
+  "updatedAt": "2026-01-01"
 }

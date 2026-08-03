@@ -10,7 +10,7 @@ import type {
   SheetSpec,
   Slot,
 } from '../types.js';
-import { newGrid, newLayer, newSlot, nextPartNo, runLength } from './templates.js';
+import { newCell, newGrid, newLayer, newSlot, runLength } from './templates.js';
 
 /**
  * Editor state.
@@ -40,8 +40,11 @@ export type Action =
   | { type: 'addSlot'; layerId: string }
   | { type: 'removeSlot'; layerId: string; index: number }
   | { type: 'patchSlot'; layerId: string; index: number; patch: Partial<Slot> }
+  | { type: 'setSlotCount'; layerId: string; count: number }
+  | { type: 'patchAllSlots'; layerId: string; patch: Partial<Slot> }
   | { type: 'patchGrid'; layerId: string; patch: Partial<Omit<BlockGrid, 'cells'>> }
   | { type: 'patchCell'; layerId: string; row: number; col: number; patch: Partial<BlockCell> }
+  | { type: 'patchAllCells'; layerId: string; patch: Partial<BlockCell> }
   | { type: 'fillGrid'; layerId: string; row: number; col: number }
   | { type: 'patchSheet'; layerId: string; patch: Partial<SheetSpec> }
   | { type: 'addNail' }
@@ -56,6 +59,30 @@ export function sameSource(a: PieceSource, b: PieceSource): boolean {
   if (a.kind === 'slot' && b.kind === 'slot') return a.index === b.index;
   if (a.kind === 'cell' && b.kind === 'cell') return a.row === b.row && a.col === b.col;
   return true;
+}
+
+/**
+ * As many boards as one layer will ever be given at once. A deck is a handful
+ * of boards, so a number past this is a typing slip, and turning it into ten
+ * thousand rows would be worse than ignoring it.
+ */
+export const MAX_SLOTS = 200;
+
+/** The same guard for a grid, which is counted on both sides. */
+export const MAX_GRID_SIDE = 20;
+
+/**
+ * Another board for a layer, matching the last one it has.
+ *
+ * A deck is nearly always one size repeated, so the size carries over. Where
+ * the board sits does not: a nudge and a join belong to the one board they were
+ * set on, and copying those would move a board nobody asked to move.
+ */
+function anotherSlot(pallet: Pallet, layer: Layer, slots: Slot[]): Slot {
+  const previous = slots.at(-1);
+  return previous
+    ? { ...previous, nudgeMm: 0, joinedToPrev: false }
+    : newSlot(pallet.species || 'pine', runLength(pallet, layer.direction));
 }
 
 /** Layers are ordered top to bottom, and `order` just follows the list. */
@@ -100,9 +127,7 @@ export function reducer(state: EditorState, action: Action): EditorState {
 
     case 'addLayer': {
       const material = pallet.species || 'pine';
-      pallet.layers.push(
-        newLayer(action.kind, pallet.layers.length + 1, nextPartNo(pallet), material, pallet),
-      );
+      pallet.layers.push(newLayer(action.kind, pallet.layers.length + 1, material, pallet));
       renumber(pallet);
       break;
     }
@@ -134,24 +159,22 @@ export function reducer(state: EditorState, action: Action): EditorState {
       const layer = findLayer(pallet, action.layerId);
       if (layer && layer.content.type !== action.contentType) {
         const material = pallet.species || 'pine';
-        const partNo = nextPartNo(pallet);
         layer.content =
           action.contentType === 'grid'
-            ? { type: 'grid', grid: newGrid(3, 3, partNo, material) }
+            ? { type: 'grid', grid: newGrid(3, 3, material) }
             : action.contentType === 'sheet'
               ? {
                   type: 'sheet',
                   sheet: {
-                    partNo,
-                    thickness: 12,
-                    width: pallet.overallWidth,
                     length: pallet.overallLength,
+                    width: pallet.overallWidth,
+                    thickness: 12,
                     material: 'plywood',
                   },
                 }
               : {
                   type: 'sequence',
-                  slots: [newSlot(partNo, material, runLength(pallet, layer.direction))],
+                  slots: [newSlot(material, runLength(pallet, layer.direction))],
                 };
         if (selection?.layerId === layer.id) selection = null;
       }
@@ -161,17 +184,49 @@ export function reducer(state: EditorState, action: Action): EditorState {
     case 'addSlot': {
       const layer = findLayer(pallet, action.layerId);
       if (layer?.content.type === 'sequence') {
-        const previous = layer.content.slots.at(-1);
-        // A new board matches the last one, since a deck is usually one size.
-        layer.content.slots.push(
-          previous
-            ? { ...previous, nudgeMm: 0, joinedToPrev: false }
-            : newSlot(
-                nextPartNo(pallet),
-                pallet.species || 'pine',
-                runLength(pallet, layer.direction),
-              ),
-        );
+        const slots = layer.content.slots;
+        if (slots.length < MAX_SLOTS) slots.push(anotherSlot(pallet, layer, slots));
+      }
+      break;
+    }
+
+    /**
+     * How many boards the layer has, set as a number rather than reached by
+     * clicking Add seven times. Boards already there are left exactly as they
+     * are; the count only adds to the end or takes from it.
+     */
+    case 'setSlotCount': {
+      const layer = findLayer(pallet, action.layerId);
+      if (layer?.content.type === 'sequence') {
+        const slots = layer.content.slots;
+        const count = Math.min(Math.max(Math.round(action.count), 1), MAX_SLOTS);
+        while (slots.length < count) slots.push(anotherSlot(pallet, layer, slots));
+        if (slots.length > count) {
+          slots.length = count;
+          // The first board is never joined to one before it, so a board that
+          // becomes the first has to stop claiming that it is.
+          if (slots[0]) slots[0].joinedToPrev = false;
+          if (
+            selection?.layerId === layer.id &&
+            selection.source.kind === 'slot' &&
+            selection.source.index >= count
+          ) {
+            selection = null;
+          }
+        }
+      }
+      break;
+    }
+
+    /**
+     * One size for every board in the layer, which is what eight designs in ten
+     * want. Only what is passed is written, so the nudge and the join each
+     * board carries survive being resized with the rest.
+     */
+    case 'patchAllSlots': {
+      const layer = findLayer(pallet, action.layerId);
+      if (layer?.content.type === 'sequence') {
+        for (const slot of layer.content.slots) Object.assign(slot, action.patch);
       }
       break;
     }
@@ -199,6 +254,10 @@ export function reducer(state: EditorState, action: Action): EditorState {
       if (layer?.content.type === 'grid') {
         const grid = layer.content.grid;
         Object.assign(grid, action.patch);
+        // A grid of blocks is a few by a few. Anything past that is a slip of
+        // the keyboard, and building the matrix it asks for would hang the tab.
+        grid.rows = Math.min(Math.max(Math.round(grid.rows), 1), MAX_GRID_SIDE);
+        grid.cols = Math.min(Math.max(Math.round(grid.cols), 1), MAX_GRID_SIDE);
         // Keep the cell matrix the shape the counts claim.
         const template = grid.cells[0]?.[0];
         grid.cells = Array.from({ length: grid.rows }, (_, r) =>
@@ -206,9 +265,7 @@ export function reducer(state: EditorState, action: Action): EditorState {
             { length: grid.cols },
             (_, c) =>
               grid.cells[r]?.[c] ??
-              (template
-                ? { ...template }
-                : { partNo: nextPartNo(pallet), lengthMm: 100, widthMm: 100, heightMm: 100, material: pallet.species || 'pine' }),
+              (template ? { ...template } : newCell(pallet.species || 'pine')),
           ),
         );
       }
@@ -220,6 +277,15 @@ export function reducer(state: EditorState, action: Action): EditorState {
       if (layer?.content.type === 'grid') {
         const cell = layer.content.grid.cells[action.row]?.[action.col];
         if (cell) Object.assign(cell, action.patch);
+      }
+      break;
+    }
+
+    /** One size for every block in the grid, the same idea as for boards. */
+    case 'patchAllCells': {
+      const layer = findLayer(pallet, action.layerId);
+      if (layer?.content.type === 'grid') {
+        for (const cell of layer.content.grid.cells.flat()) Object.assign(cell, action.patch);
       }
       break;
     }

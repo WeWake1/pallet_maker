@@ -33,9 +33,6 @@
       "count": 9
     }
   ],
-  "revision": "A",
-  "revisionDate": "2026-07-28",
-  "frozen": false,
   "layers": [
     {
       "id": "panel",
@@ -45,10 +42,9 @@
       "content": {
         "type": "sheet",
         "sheet": {
-          "partNo": 1,
-          "thickness": 12,
-          "width": 1000,
           "length": 1200,
+          "width": 1000,
+          "thickness": 12,
           "material": "plywood"
         }
       }
@@ -62,24 +58,21 @@
         "type": "sequence",
         "slots": [
           {
-            "partNo": 2,
-            "thickness": 20,
-            "width": 100,
             "length": 1000,
+            "width": 100,
+            "thickness": 20,
             "material": "pine"
           },
           {
-            "partNo": 2,
-            "thickness": 20,
-            "width": 100,
             "length": 1000,
+            "width": 100,
+            "thickness": 20,
             "material": "pine"
           },
           {
-            "partNo": 2,
-            "thickness": 20,
-            "width": 100,
             "length": 1000,
+            "width": 100,
+            "thickness": 20,
             "material": "pine"
           }
         ]
@@ -98,21 +91,18 @@
           "cells": [
             [
               {
-                "partNo": 3,
                 "lengthMm": 100,
                 "widthMm": 100,
                 "heightMm": 100,
                 "material": "pine"
               },
               {
-                "partNo": 3,
                 "lengthMm": 100,
                 "widthMm": 100,
                 "heightMm": 100,
                 "material": "pine"
               },
               {
-                "partNo": 3,
                 "lengthMm": 100,
                 "widthMm": 100,
                 "heightMm": 100,
@@ -121,21 +111,18 @@
             ],
             [
               {
-                "partNo": 3,
                 "lengthMm": 100,
                 "widthMm": 100,
                 "heightMm": 100,
                 "material": "pine"
               },
               {
-                "partNo": 3,
                 "lengthMm": 100,
                 "widthMm": 100,
                 "heightMm": 100,
                 "material": "pine"
               },
               {
-                "partNo": 3,
                 "lengthMm": 100,
                 "widthMm": 100,
                 "heightMm": 100,
@@ -144,21 +131,18 @@
             ],
             [
               {
-                "partNo": 3,
                 "lengthMm": 100,
                 "widthMm": 100,
                 "heightMm": 100,
                 "material": "pine"
               },
               {
-                "partNo": 3,
                 "lengthMm": 100,
                 "widthMm": 100,
                 "heightMm": 100,
                 "material": "pine"
               },
               {
-                "partNo": 3,
                 "lengthMm": 100,
                 "widthMm": 100,
                 "heightMm": 100,
@@ -178,28 +162,27 @@
         "type": "sequence",
         "slots": [
           {
-            "partNo": 4,
-            "thickness": 18,
-            "width": 100,
             "length": 1000,
+            "width": 100,
+            "thickness": 18,
             "material": "pine"
           },
           {
-            "partNo": 4,
-            "thickness": 18,
-            "width": 100,
             "length": 1000,
+            "width": 100,
+            "thickness": 18,
             "material": "pine"
           },
           {
-            "partNo": 4,
-            "thickness": 18,
-            "width": 100,
             "length": 1000,
+            "width": 100,
+            "thickness": 18,
             "material": "pine"
           }
         ]
       }
     }
-  ]
+  ],
+  "clientId": "client-c28b5710",
+  "updatedAt": "2026-01-01"
 }

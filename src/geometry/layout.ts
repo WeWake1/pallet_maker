@@ -9,6 +9,7 @@ import type {
 import { EPSILON, distribute, distributeEvenly } from './distribute.js';
 import { boundingBox, overhangOf } from './footprint.js';
 import { computeNailDots } from './nails.js';
+import { cellSignature, partNumbers, sheetSignature, slotSignature } from './parts.js';
 import type {
   Layout,
   LayerLayout,
@@ -79,6 +80,10 @@ export function analysePallet(pallet: Pallet): Layout {
     });
   }
 
+  // Part numbers follow the sizes in the document, so they are worked out once
+  // for the whole pallet and looked up as each piece is placed.
+  const parts = partNumbers(pallet);
+
   const ordered = [...pallet.layers].sort((a, b) => a.order - b.order);
   const seenOrders = new Set<number>();
   for (const layer of ordered) {
@@ -112,23 +117,21 @@ export function analysePallet(pallet: Pallet): Layout {
     switch (layer.content.type) {
       case 'sequence':
         layerLayouts.push(
-          placeSequence(pallet, layer, layer.content.slots, zBottom, thickness, pieces, issues),
+          placeSequence(pallet, layer, layer.content.slots, zBottom, thickness, pieces, issues, parts),
         );
         break;
       case 'sheet':
         layerLayouts.push(
-          placeSheet(pallet, layer, layer.content.sheet, zBottom, thickness, pieces, issues),
+          placeSheet(pallet, layer, layer.content.sheet, zBottom, thickness, pieces, issues, parts),
         );
         break;
       case 'grid':
         layerLayouts.push(
-          placeGrid(pallet, layer, layer.content.grid, zBottom, thickness, pieces, issues),
+          placeGrid(pallet, layer, layer.content.grid, zBottom, thickness, pieces, issues, parts),
         );
         break;
     }
   });
-
-  checkPartNumbers(pallet, issues);
 
   if (
     pallet.overallHeight > 0 &&
@@ -191,6 +194,7 @@ function placeSequence(
   thickness: number,
   pieces: PlacedPiece[],
   issues: LayoutIssue[],
+  parts: Map<string, number>,
 ): LayerLayout {
   const { run } = axesFor(layer.direction);
   const available = layer.spanMm ?? fullSpan(pallet, layer.direction);
@@ -221,7 +225,7 @@ function placeSequence(
     const at = spread.positions[i]!;
     checkRun(pallet, layer, slot.length, issues);
     pieces.push({
-      partNo: slot.partNo,
+      partNo: parts.get(slotSignature(layer, slot)) ?? 0,
       layerKind: layer.kind,
       layerId: layer.id,
       source: { kind: 'slot', index: i },
@@ -259,6 +263,7 @@ function placeSheet(
   thickness: number,
   pieces: PlacedPiece[],
   issues: LayoutIssue[],
+  parts: Map<string, number>,
 ): LayerLayout {
   const { run } = axesFor(layer.direction);
   const available = layer.spanMm ?? fullSpan(pallet, layer.direction);
@@ -269,7 +274,7 @@ function placeSheet(
 
   const at = spread.positions[0]!;
   pieces.push({
-    partNo: sheet.partNo,
+    partNo: parts.get(sheetSignature(layer, sheet)) ?? 0,
     layerKind: layer.kind,
     layerId: layer.id,
     source: { kind: 'sheet' },
@@ -305,6 +310,7 @@ function placeGrid(
   thickness: number,
   pieces: PlacedPiece[],
   issues: LayoutIssue[],
+  parts: Map<string, number>,
 ): LayerLayout {
   const shapeOk = checkGridShape(layer, grid, issues);
 
@@ -341,7 +347,7 @@ function placeGrid(
         const x = rows.positions[r]! + (rowExtents[r]! - cell.lengthMm) / 2;
         const y = cols.positions[c]! + (colExtents[c]! - cell.widthMm) / 2;
         pieces.push({
-          partNo: cell.partNo,
+          partNo: parts.get(cellSignature(layer, cell)) ?? 0,
           layerKind: layer.kind,
           layerId: layer.id,
           source: { kind: 'cell', row: r, col: c },
@@ -459,50 +465,5 @@ function checkKind(layer: Layer, issues: LayoutIssue[]): void {
       layerKind: layer.kind,
       message: `${describe(layer)} holds ${layer.content.type} content, normally ${expected.join(' or ')}`,
     });
-  }
-}
-
-/** Slots with identical dimensions share a partNo, so the reverse must hold. */
-function checkPartNumbers(pallet: Pallet, issues: LayoutIssue[]): void {
-  const seen = new Map<number, { signature: string; where: string }>();
-  for (const layer of pallet.layers) {
-    const entries: Array<{ partNo: number; signature: string }> = [];
-    const content = layer.content;
-    if (content.type === 'sequence') {
-      for (const slot of content.slots) {
-        entries.push({
-          partNo: slot.partNo,
-          signature: `${slot.thickness}x${slot.width}x${slot.length}/${slot.material}`,
-        });
-      }
-    } else if (content.type === 'grid') {
-      for (const cell of content.grid.cells.flat()) {
-        entries.push({
-          partNo: cell.partNo,
-          signature: `${cell.heightMm}x${cell.widthMm}x${cell.lengthMm}/${cell.material}`,
-        });
-      }
-    } else {
-      const s = content.sheet;
-      entries.push({
-        partNo: s.partNo,
-        signature: `${s.thickness}x${s.width}x${s.length}/${s.material}`,
-      });
-    }
-
-    for (const entry of entries) {
-      const prev = seen.get(entry.partNo);
-      if (!prev) {
-        seen.set(entry.partNo, { signature: entry.signature, where: describe(layer) });
-      } else if (prev.signature !== entry.signature) {
-        issues.push({
-          severity: 'error',
-          code: 'part_no_clash',
-          layerId: layer.id,
-          layerKind: layer.kind,
-          message: `Part ${entry.partNo} is ${entry.signature} in ${describe(layer)} but ${prev.signature} in ${prev.where}`,
-        });
-      }
-    }
   }
 }

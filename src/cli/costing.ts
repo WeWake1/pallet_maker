@@ -32,7 +32,9 @@ function main(argv: string[]): number {
   const money = (value: number): string =>
     `${costing.currency} ${value.toFixed(2).padStart(9)}`;
 
-  console.log(`${pallet.palletCode} ${pallet.palletName} rev ${pallet.revision}`);
+  console.log(
+    [pallet.palletCode, pallet.palletName, pallet.updatedAt].filter((part) => part !== '').join(' '),
+  );
   console.log('');
   console.log(`Timber  ${costing.cft.toFixed(3)} cft`);
   for (const line of costing.materials) {

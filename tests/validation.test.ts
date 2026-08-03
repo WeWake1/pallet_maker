@@ -69,15 +69,18 @@ describe('other validation', () => {
     expect(codes).toContain('run_overflow');
   });
 
-  it('rejects one part number used for two different sizes', () => {
+  it('cannot have a part number used for two different sizes', () => {
+    // Part numbers are derived from the sizes rather than typed in, so a board
+    // given its own size gets its own number and there is nothing to clash.
     const pallet = loadFixture('block-1000x800');
     const centre = sequenceLayer(pallet, 'centre');
     if (centre.content.type === 'sequence') {
       centre.content.slots[1]!.width = 150;
     }
-    const issues = validatePallet(pallet).filter((i) => i.code === 'part_no_clash');
-    expect(issues).toHaveLength(1);
-    expect(issues[0]!.message).toContain('Part 2');
+    const layout = computeLayout(pallet);
+    const centres = layout.pieces.filter((p) => p.layerId === 'centre');
+    expect(new Set(centres.map((p) => p.partNo)).size).toBe(2);
+    expect(validatePallet(pallet).filter((i) => i.severity === 'error')).toEqual([]);
   });
 
   it('rejects a grid whose cells do not match its declared size', () => {

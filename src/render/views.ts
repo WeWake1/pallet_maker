@@ -6,7 +6,15 @@ import type { Projected, ViewKind } from './project.js';
 import { mmLabel, packLanes, renderTitle, Scene, TIER } from './scene.js';
 import type { DimSpec, Side } from './scene.js';
 import { circle, el, group, rect, svgDocument } from './svg.js';
-import { FAR, LAYER_STYLE, NAIL_INK, NAIL_RADIUS, NEAR, SELECTION_INK } from './theme.js';
+import {
+  LAYER_STYLE,
+  NAIL_INK,
+  NAIL_RADIUS,
+  PRINT_EMPHASIS,
+  SCREEN_EMPHASIS,
+  SELECTION_INK,
+} from './theme.js';
+import type { Emphasis, Weight } from './theme.js';
 
 export interface ViewOptions {
   targetWidth?: number;
@@ -33,6 +41,12 @@ export interface ViewOptions {
   interactive?: boolean;
   /** Outline this piece as the selected one. An index into `layout.pieces`. */
   selectedPiece?: number;
+  /**
+   * How hard the layers behind the near one are held back. Default `print`,
+   * which is what the sheet and the PDF want; the editor asks for `screen`,
+   * where those layers are being worked on rather than merely referred to.
+   */
+  emphasis?: 'print' | 'screen';
 }
 
 const TOLERANCE = 1e-6;
@@ -43,8 +57,10 @@ export function renderView(layout: Layout, view: ViewKind, options: ViewOptions 
   const { dims, scene } = layOut(frame, buildDimensions(layout, view, projected), options);
   const idPrefix = `${options.idPrefix ?? 'view'}-${view}`;
 
+  const emphasis = options.emphasis === 'screen' ? SCREEN_EMPHASIS : PRINT_EMPHASIS;
+
   const body = [
-    drawPieces(scene, projected, view, `${idPrefix}-near`, options.interactive === true),
+    drawPieces(scene, projected, view, `${idPrefix}-near`, emphasis, options.interactive === true),
     drawNails(scene, layout, view),
     group({ 'pointer-events': 'none' }, dims.map((dim) => renderDimension(scene, dim))),
     drawSelection(scene, projected, layout, options.selectedPiece),
@@ -90,17 +106,17 @@ function layOut(
 function pieceRect(
   scene: Scene,
   item: Projected,
-  ghost: boolean,
+  weight: Weight,
   pieceIndex?: number,
 ): string {
   const style = LAYER_STYLE[item.piece.layerKind];
-  const emphasis = item.near ? NEAR : FAR;
+  const filled = weight.fillOpacity > 0;
   return rect(scene.px(item.u), scene.py(item.v), scene.len(item.du), scene.len(item.dv), {
-    fill: ghost ? 'none' : style.fill,
-    'fill-opacity': ghost ? undefined : emphasis.fillOpacity,
+    fill: filled ? style.fill : 'none',
+    'fill-opacity': filled ? weight.fillOpacity : undefined,
     stroke: style.stroke,
-    'stroke-width': emphasis.strokeWidth,
-    opacity: emphasis.opacity,
+    'stroke-width': weight.strokeWidth,
+    opacity: weight.opacity,
     'data-piece': pieceIndex,
   });
 }
@@ -145,16 +161,26 @@ function drawPieces(
   projected: Projected[],
   view: ViewKind,
   clipId: string,
+  emphasis: Emphasis,
   interactive = false,
 ): string {
   const body = group(
     { 'shape-rendering': 'geometricPrecision' },
     projected.map((item) =>
-      pieceRect(scene, item, false, interactive ? item.index : undefined),
+      pieceRect(
+        scene,
+        item,
+        item.near ? emphasis.near : emphasis.far,
+        interactive ? item.index : undefined,
+      ),
     ),
   );
 
   if (view !== 'top' && view !== 'bottom') return body;
+  // Nothing shows through: the near layer is solid, and what is under it is
+  // seen through the gaps between its boards.
+  if (emphasis.ghost === null) return body;
+  const ghost = emphasis.ghost;
 
   const near = projected.filter((item) => item.near);
   const behind = projected.filter((item) => !item.near);
@@ -177,7 +203,7 @@ function drawPieces(
       // The ghosts sit over the boards, so they must not take the clicks meant
       // for the boards underneath them.
       { 'clip-path': `url(#${clipId})`, 'pointer-events': 'none' },
-      behind.map((item) => pieceRect(scene, item, true)),
+      behind.map((item) => pieceRect(scene, item, ghost)),
     )
   );
 }

@@ -1,32 +1,31 @@
+import { duplicatePallet } from '../duplicate.js';
+import { newId, today } from '../ids.js';
 import { parsePallet } from '../schema.js';
-import { duplicatePallet, revisePallet } from '../revisions.js';
-import type { Pallet } from '../types.js';
+import type { Client, Pallet } from '../types.js';
 import type { Db } from './db.js';
 
 /**
- * Everything the tool does to stored designs. The rules about revisions live
- * here and in the database triggers behind it, not in the UI.
+ * Everything the tool does to stored designs.
+ *
+ * There is no history. Saving a design overwrites it, and the date it carries
+ * is the whole of what says how current it is. Keeping an old design means
+ * duplicating it before the rework starts, which makes two rows that have
+ * nothing to do with each other from then on.
  */
 
 export interface PalletSummary {
   id: string;
-  palletCode: string;
+  clientId: string;
   clientName: string;
+  palletCode: string;
   palletName: string;
-  revision: string;
-  revisionDate: string;
-  supersedes: string | null;
-  frozen: boolean;
   updatedAt: string;
-  /** Set when a later revision supersedes this one. */
-  supersededBy: string | null;
 }
 
-export class FrozenPalletError extends Error {
-  constructor(id: string) {
-    super(`Pallet ${id} is a published revision and is never edited. Revise it instead.`);
-    this.name = 'FrozenPalletError';
-  }
+/** A client and every design of theirs: one section of the dashboard. */
+export interface ClientDesigns {
+  client: Client;
+  designs: PalletSummary[];
 }
 
 export class PalletNotFoundError extends Error {
@@ -36,162 +35,207 @@ export class PalletNotFoundError extends Error {
   }
 }
 
-interface Row {
-  id: string;
-  pallet_code: string;
-  client_name: string;
-  pallet_name: string;
-  revision: string;
-  revision_date: string;
-  supersedes: string | null;
-  frozen: number;
-  updated_at: string;
-  doc: string;
-  superseded_by?: string | null;
+export class ClientNotFoundError extends Error {
+  constructor(id: string) {
+    super(`No client ${id}`);
+    this.name = 'ClientNotFoundError';
+  }
 }
 
-function toSummary(row: Row): PalletSummary {
-  return {
-    id: row.id,
-    palletCode: row.pallet_code,
-    clientName: row.client_name,
-    palletName: row.pallet_name,
-    revision: row.revision,
-    revisionDate: row.revision_date,
-    supersedes: row.supersedes,
-    frozen: row.frozen === 1,
-    updatedAt: row.updated_at,
-    supersededBy: row.superseded_by ?? null,
-  };
+export class DuplicateClientError extends Error {
+  constructor(name: string) {
+    super(`There is already a client called "${name}"`);
+    this.name = 'DuplicateClientError';
+  }
+}
+
+interface ClientRow {
+  id: string;
+  name: string;
+  created_at: string;
+}
+
+interface PalletRow {
+  id: string;
+  client_id: string;
+  pallet_code: string;
+  pallet_name: string;
+  updated_at: string;
+  doc: string;
+}
+
+function toClient(row: ClientRow): Client {
+  return { id: row.id, name: row.name, createdAt: row.created_at };
+}
+
+export class ClientRepository {
+  constructor(private readonly db: Db) {}
+
+  list(): Client[] {
+    return this.db
+      .prepare<[], ClientRow>('SELECT * FROM clients ORDER BY name COLLATE NOCASE')
+      .all()
+      .map(toClient);
+  }
+
+  get(id: string): Client {
+    const row = this.db.prepare<[string], ClientRow>('SELECT * FROM clients WHERE id = ?').get(id);
+    if (!row) throw new ClientNotFoundError(id);
+    return toClient(row);
+  }
+
+  create(name: string): Client {
+    const client: Client = { id: newId(), name: name.trim(), createdAt: today() };
+    if (client.name === '') throw new Error('A client needs a name');
+    if (this.named(client.name)) throw new DuplicateClientError(client.name);
+    this.db
+      .prepare('INSERT INTO clients (id, name, created_at) VALUES (?, ?, ?)')
+      .run(client.id, client.name, client.createdAt);
+    return client;
+  }
+
+  /**
+   * Rename, and refresh the copy of the name held on each of their designs. The
+   * copy is what lets a sheet be printed from the document alone, so it has to
+   * be brought along or a reprint would carry the old spelling.
+   */
+  rename(id: string, name: string): Client {
+    const client = this.get(id);
+    const next = name.trim();
+    if (next === '') throw new Error('A client needs a name');
+    const clash = this.named(next);
+    if (clash && clash.id !== id) throw new DuplicateClientError(next);
+
+    this.db.transaction(() => {
+      this.db.prepare('UPDATE clients SET name = ? WHERE id = ?').run(next, id);
+      const rows = this.db
+        .prepare<[string], PalletRow>('SELECT * FROM pallets WHERE client_id = ?')
+        .all(id);
+      const write = this.db.prepare('UPDATE pallets SET doc = ? WHERE id = ?');
+      for (const row of rows) {
+        const doc = JSON.parse(row.doc) as Record<string, unknown>;
+        doc.clientName = next;
+        write.run(JSON.stringify(doc), row.id);
+      }
+    })();
+
+    return { ...client, name: next };
+  }
+
+  /** Deleting a client deletes their designs with them: the rows cascade. */
+  delete(id: string): void {
+    this.get(id);
+    this.db.prepare('DELETE FROM clients WHERE id = ?').run(id);
+  }
+
+  private named(name: string): Client | undefined {
+    const row = this.db
+      .prepare<[string], ClientRow>('SELECT * FROM clients WHERE name = ? COLLATE NOCASE')
+      .get(name);
+    return row ? toClient(row) : undefined;
+  }
 }
 
 export class PalletRepository {
   constructor(private readonly db: Db) {}
 
-  /** Every stored revision, newest first. Superseded ones stay in the list. */
   list(): PalletSummary[] {
-    const rows = this.db
-      .prepare<[], Row>(
-        `SELECT p.*, later.id AS superseded_by
+    return this.db
+      .prepare<[], PalletRow & { client_name: string }>(
+        `SELECT p.*, c.name AS client_name
            FROM pallets p
-           LEFT JOIN pallets later ON later.supersedes = p.id
-          ORDER BY p.client_name, p.pallet_code, p.revision`,
+           JOIN clients c ON c.id = p.client_id
+          ORDER BY c.name COLLATE NOCASE, p.pallet_code, p.pallet_name`,
       )
-      .all();
-    return rows.map(toSummary);
+      .all()
+      .map((row) => ({
+        id: row.id,
+        clientId: row.client_id,
+        clientName: row.client_name,
+        palletCode: row.pallet_code,
+        palletName: row.pallet_name,
+        updatedAt: row.updated_at,
+      }));
+  }
+
+  /**
+   * The dashboard: every client, each with their designs. A client with none
+   * still gets a section, which is the point of their being a record of their
+   * own — a customer can be on the books before anything is drawn for them.
+   */
+  dashboard(clients: ClientRepository): ClientDesigns[] {
+    const byClient = new Map<string, PalletSummary[]>();
+    for (const design of this.list()) {
+      const designs = byClient.get(design.clientId) ?? [];
+      designs.push(design);
+      byClient.set(design.clientId, designs);
+    }
+    return clients.list().map((client) => ({
+      client,
+      designs: byClient.get(client.id) ?? [],
+    }));
   }
 
   get(id: string): Pallet {
-    const row = this.db.prepare<[string], Row>('SELECT * FROM pallets WHERE id = ?').get(id);
+    const row = this.db.prepare<[string], PalletRow>('SELECT * FROM pallets WHERE id = ?').get(id);
     if (!row) throw new PalletNotFoundError(id);
     return parsePallet(JSON.parse(row.doc));
   }
 
   has(id: string): boolean {
     return (
-      this.db.prepare<[string], { one: number }>('SELECT 1 AS one FROM pallets WHERE id = ?').get(id) !==
-      undefined
+      this.db
+        .prepare<[string], { one: number }>('SELECT 1 AS one FROM pallets WHERE id = ?')
+        .get(id) !== undefined
     );
   }
 
-  isFrozen(id: string): boolean {
-    const row = this.db
-      .prepare<[string], { frozen: number }>('SELECT frozen FROM pallets WHERE id = ?')
-      .get(id);
-    return row?.frozen === 1;
-  }
-
   /**
-   * Write a design. Creates the row if it is new.
+   * Write a design, creating the row if it is new. Overwrites what was there:
+   * the previous state is not kept anywhere.
    *
-   * A frozen revision is refused: editing one means making the next revision,
-   * which is a different row.
+   * The date and the copy of the client's name are set here rather than taken
+   * from the document, so neither can be stale or wrong about itself.
    */
-  save(input: Pallet): Pallet {
-    const pallet = parsePallet(input);
-    if (this.isFrozen(pallet.id)) throw new FrozenPalletError(pallet.id);
+  save(input: Pallet, clients: ClientRepository): Pallet {
+    const submitted = parsePallet(input);
+    const client = clients.get(submitted.clientId);
+    const pallet: Pallet = {
+      ...submitted,
+      clientName: client.name,
+      updatedAt: today(),
+    };
 
     this.db
       .prepare(
-        `INSERT INTO pallets
-           (id, pallet_code, client_name, pallet_name, revision, revision_date,
-            supersedes, frozen, updated_at, doc)
-         VALUES
-           (@id, @pallet_code, @client_name, @pallet_name, @revision, @revision_date,
-            @supersedes, @frozen, @updated_at, @doc)
+        `INSERT INTO pallets (id, client_id, pallet_code, pallet_name, updated_at, doc)
+         VALUES (@id, @client_id, @pallet_code, @pallet_name, @updated_at, @doc)
          ON CONFLICT(id) DO UPDATE SET
+           client_id = excluded.client_id,
            pallet_code = excluded.pallet_code,
-           client_name = excluded.client_name,
            pallet_name = excluded.pallet_name,
-           revision = excluded.revision,
-           revision_date = excluded.revision_date,
-           supersedes = excluded.supersedes,
-           frozen = excluded.frozen,
            updated_at = excluded.updated_at,
            doc = excluded.doc`,
       )
       .run({
         id: pallet.id,
+        client_id: pallet.clientId,
         pallet_code: pallet.palletCode,
-        client_name: pallet.clientName,
         pallet_name: pallet.palletName,
-        revision: pallet.revision,
-        revision_date: pallet.revisionDate,
-        supersedes: pallet.supersedes ?? null,
-        frozen: pallet.frozen ? 1 : 0,
-        updated_at: new Date().toISOString(),
+        updated_at: pallet.updatedAt,
         doc: JSON.stringify(pallet),
       });
 
     return pallet;
   }
 
-  /** Publish. From here the design is read-only and stays readable forever. */
-  freeze(id: string): Pallet {
-    const pallet = this.get(id);
-    if (pallet.frozen) return pallet;
-    return this.save({ ...pallet, frozen: true });
-  }
-
-  /**
-   * The next revision: a new row, the next letter, superseding the one it came
-   * from, with a fresh date. The old row is not touched.
-   */
-  revise(id: string): Pallet {
-    const previous = this.get(id);
-    return this.save(revisePallet(previous));
-  }
-
   /** A copy, which is a new design and linked to nothing. */
-  duplicate(id: string): Pallet {
-    return this.save(duplicatePallet(this.get(id)));
+  duplicate(id: string, clients: ClientRepository): Pallet {
+    return this.save(duplicatePallet(this.get(id)), clients);
   }
 
-  /** Only ever an unpublished draft. Frozen rows are refused by the database. */
   delete(id: string): void {
     if (!this.has(id)) throw new PalletNotFoundError(id);
-    if (this.isFrozen(id)) throw new FrozenPalletError(id);
     this.db.prepare('DELETE FROM pallets WHERE id = ?').run(id);
-  }
-
-  /** Oldest first: the whole history of a design, for looking up what was built. */
-  history(id: string): PalletSummary[] {
-    const chain: PalletSummary[] = [];
-    const byId = new Map(this.list().map((summary) => [summary.id, summary]));
-
-    let start = byId.get(id);
-    if (!start) throw new PalletNotFoundError(id);
-    while (start.supersedes) {
-      const previous = byId.get(start.supersedes);
-      if (!previous) break;
-      start = previous;
-    }
-
-    let current: PalletSummary | undefined = start;
-    while (current) {
-      chain.push(current);
-      current = current.supersededBy ? byId.get(current.supersededBy) : undefined;
-    }
-    return chain;
   }
 }

@@ -2,14 +2,16 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'r
 import { computeCosting } from '../costing/costing.js';
 import type { Costing } from '../costing/costing.js';
 import type { Rates } from '../costing/rates.js';
+import { duplicatePallet } from '../duplicate.js';
 import { analysePallet } from '../geometry/layout.js';
-import { duplicatePallet } from '../revisions.js';
 import { PalletSchema, parsePallet } from '../schema.js';
 import { renderSheet } from '../sheet/sheet.js';
-import type { LayerKind, Pallet } from '../types.js';
+import type { Client, LayerKind, Pallet } from '../types.js';
 import { api } from './api.js';
-import type { PalletSummary } from './api.js';
-import { DesignList } from './DesignList.jsx';
+import type { ClientDesigns } from './api.js';
+import { Dashboard } from './Dashboard.jsx';
+import { clearDraft, clearDrafts, draftAge, listDrafts, readDraft, writeDraft } from './drafts.js';
+import type { Draft } from './drafts.js';
 import { LayerEditor } from './LayerEditor.jsx';
 import { Preview } from './Preview.jsx';
 import { reducer, selectedSlot } from './state.js';
@@ -38,59 +40,67 @@ const LAYER_KINDS: Array<[LayerKind, string]> = [
   ['bottom_deck', 'Bottom boards'],
 ];
 
-export function App() {
-  const [state, dispatch] = useReducer(reducer, undefined, () => ({
-    pallet: newPallet(),
-    selection: null,
-  }));
-  const { pallet, selection } = state;
-  const fileInput = useRef<HTMLInputElement>(null);
+/** A design open in the editor: what is being edited, and what the store has. */
+interface OpenDesign {
+  pallet: Pallet;
+  /** The stored design, or null for one the store has never had. */
+  saved: Pallet | null;
+  /** Set when `pallet` came back from a draft rather than from the store. */
+  recoveredAt?: string;
+}
 
-  const [designs, setDesigns] = useState<PalletSummary[]>([]);
+/**
+ * Drafts worth keeping, given what the store currently holds.
+ *
+ * A draft for a client who has since been deleted can never be saved — the
+ * store would refuse the client id — so it is dropped rather than left on a
+ * dashboard with no section to sit in.
+ */
+function usableDrafts(sections: ClientDesigns[]): Draft[] {
+  const clients = new Set(sections.map((section) => section.client.id));
+  const kept: Draft[] = [];
+  const orphaned: string[] = [];
+  for (const draft of listDrafts()) {
+    if (clients.has(draft.pallet.clientId)) kept.push(draft);
+    else orphaned.push(draft.pallet.id);
+  }
+  clearDrafts(orphaned);
+  return kept;
+}
+
+/**
+ * Two screens: the dashboard of clients and their designs, and the editor for
+ * one of them. The dashboard is home; opening a card gives the editor the whole
+ * window.
+ */
+export function App() {
+  const [sections, setSections] = useState<ClientDesigns[]>([]);
+  const [drafts, setDrafts] = useState<Draft[]>([]);
   const [rates, setRates] = useState<Rates | null>(null);
-  const [savedDoc, setSavedDoc] = useState<string | null>(null);
+  const [open, setOpen] = useState<OpenDesign | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // The drawing is always regenerated from the data, on every keystroke.
-  const layout = useMemo(() => analysePallet(pallet), [pallet]);
-  const errors = layout.issues.filter((issue) => issue.severity === 'error');
-  const warnings = layout.issues.filter((issue) => issue.severity === 'warning');
-
-  // A design being worked on is allowed to be incomplete, but it has to be told
-  // what is still missing before it can be saved or printed.
-  const missing = useMemo(() => {
-    const parsed = PalletSchema.safeParse(pallet);
-    return parsed.success
-      ? []
-      : parsed.error.issues.map((issue) => `${issue.path.join('.') || 'pallet'}: ${issue.message}`);
-  }, [pallet]);
-  const chosen = selectedSlot(pallet, selection);
-
-  const stored = designs.some((design) => design.id === pallet.id);
-  const dirty = savedDoc !== JSON.stringify(pallet);
-  const canStore = missing.length === 0 && errors.length === 0;
-
-  const patch = (patch: Partial<Pallet>) => dispatch({ type: 'patchPallet', patch });
+  const clients = useMemo(() => sections.map((section) => section.client), [sections]);
 
   const refresh = useCallback(async () => {
-    setDesigns(await api.list());
+    const next = await api.dashboard();
+    setSections(next);
+    setDrafts(usableDrafts(next));
   }, []);
 
   /** Anything that talks to the store: one place to hold the error it returns. */
   const attempt = useCallback(
-    async (work: () => Promise<Pallet | null>) => {
+    async <T,>(work: () => Promise<T>): Promise<T | undefined> => {
       setBusy(true);
       setProblem(null);
       try {
         const result = await work();
-        if (result) {
-          dispatch({ type: 'replace', pallet: result });
-          setSavedDoc(JSON.stringify(result));
-        }
         await refresh();
+        return result;
       } catch (error) {
         setProblem(error instanceof Error ? error.message : String(error));
+        return undefined;
       } finally {
         setBusy(false);
       }
@@ -108,32 +118,290 @@ export function App() {
       .catch(() => setRates(null));
   }, [refresh]);
 
+  /**
+   * Open a stored design — or, where the browser held work that never reached
+   * the store, that work instead. The stored copy is carried along either way,
+   * so the editor knows what Save would be changing and the draft can be thrown
+   * away in favour of it.
+   */
+  const openDesign = async (id: string) => {
+    const saved = await attempt(() => api.get(id));
+    if (!saved) return;
+    const draft = readDraft(id);
+    setOpen(
+      draft
+        ? { pallet: draft.pallet, saved, recoveredAt: draft.at }
+        : { pallet: saved, saved },
+    );
+  };
+
+  /** Work on a design the store never had. The draft is the only copy there is. */
+  const openDraft = (draft: Draft) => {
+    setProblem(null);
+    setOpen({ pallet: draft.pallet, saved: null, recoveredAt: draft.at });
+  };
+
+  const discardDraft = (id: string) => {
+    clearDraft(id);
+    setDrafts((current) => current.filter((draft) => draft.pallet.id !== id));
+  };
+
+  /**
+   * A new design starts in the editor only. It reaches the dashboard when it is
+   * first saved, so backing out of one started by accident leaves nothing
+   * behind — though it is kept as a draft in the meantime, so closing the tab
+   * by accident is not the same as backing out.
+   */
+  const createDesign = (clientId: string) => {
+    const client = clients.find((candidate) => candidate.id === clientId);
+    if (!client) return;
+    setProblem(null);
+    setOpen({ pallet: newPallet(client), saved: null });
+  };
+
+  return (
+    <div className="flex h-full flex-col bg-slate-100 text-slate-900">
+      {problem && (
+        <div className="border-b border-red-200 bg-red-50 px-3 py-1.5 text-xs text-red-700">
+          {problem}
+        </div>
+      )}
+
+      {open ? (
+        <Editor
+          key={open.pallet.id}
+          initial={open.pallet}
+          saved={open.saved}
+          recoveredAt={open.recoveredAt}
+          clients={clients}
+          rates={rates}
+          onBack={() => {
+            setOpen(null);
+            // The editor writes out its pending draft as it goes; picking it up
+            // again here is what puts an unsaved design back on the dashboard.
+            void refresh().catch(() => undefined);
+          }}
+          onProblem={setProblem}
+          onRefresh={refresh}
+        />
+      ) : (
+        <>
+          <header className="flex items-center gap-2 border-b border-slate-300 bg-white px-3 py-2">
+            <h1 className="text-sm font-semibold">Pallet spec</h1>
+          </header>
+          <Dashboard
+            sections={sections}
+            drafts={drafts}
+            busy={busy}
+            onOpen={(id) => void openDesign(id)}
+            onOpenDraft={openDraft}
+            onDiscardDraft={discardDraft}
+            onCreate={createDesign}
+            onAddClient={(name) => void attempt(() => api.addClient(name))}
+            onRenameClient={(id, name) => void attempt(() => api.renameClient(id, name))}
+            onRemoveClient={(id) => void attempt(() => api.removeClient(id))}
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * How long typing pauses before the draft is written. Long enough that a number
+ * being typed is not written a digit at a time, short enough that nothing worth
+ * missing sits only on screen. The tab closing writes immediately regardless.
+ */
+const DRAFT_DELAY_MS = 500;
+
+/**
+ * One design, edited in place. Saving overwrites it: there is no previous
+ * version kept anywhere. To keep an old design, duplicate it before reworking
+ * it, which makes two rows that never meet again.
+ */
+function Editor({
+  initial,
+  saved,
+  recoveredAt,
+  clients,
+  rates,
+  onBack,
+  onProblem,
+  onRefresh,
+}: {
+  initial: Pallet;
+  /** What the store holds for this design, or null if it has never held it. */
+  saved: Pallet | null;
+  recoveredAt?: string;
+  clients: Client[];
+  rates: Rates | null;
+  onBack: () => void;
+  onProblem: (message: string | null) => void;
+  onRefresh: () => Promise<void>;
+}) {
+  const [state, dispatch] = useReducer(reducer, undefined, () => ({
+    pallet: initial,
+    selection: null,
+  }));
+  const { pallet, selection } = state;
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  const [stored, setStored] = useState(saved !== null);
+  const [savedDoc, setSavedDoc] = useState<string | null>(saved ? JSON.stringify(saved) : null);
+  const [recovered, setRecovered] = useState<string | null>(recoveredAt ?? null);
+  const [busy, setBusy] = useState(false);
+
+  // The drawing is always regenerated from the data, on every keystroke.
+  const layout = useMemo(() => analysePallet(pallet), [pallet]);
+  const errors = layout.issues.filter((issue) => issue.severity === 'error');
+  const warnings = layout.issues.filter((issue) => issue.severity === 'warning');
+
+  // A design being worked on is allowed to be incomplete, but it has to be told
+  // what is still missing before it can be saved or printed.
+  const missing = useMemo(() => {
+    const parsed = PalletSchema.safeParse(pallet);
+    return parsed.success
+      ? []
+      : parsed.error.issues.map((issue) => `${issue.path.join('.') || 'pallet'}: ${issue.message}`);
+  }, [pallet]);
+  const chosen = selectedSlot(pallet, selection);
+
+  const dirty = savedDoc !== JSON.stringify(pallet);
+  const canStore = missing.length === 0 && errors.length === 0;
+
+  const patch = (patch: Partial<Pallet>) => dispatch({ type: 'patchPallet', patch });
+
+  /**
+   * Work the store does not have: either changes since the last Save, or a
+   * design it has never had at all. This is exactly what a draft is for, and
+   * exactly what leaving the page would otherwise lose.
+   */
+  const unsaved = !stored || dirty;
+
+  // What the listeners below need to see, without re-registering on every
+  // keystroke. They fire when the page is going away, so they read the latest.
+  const latest = useRef({ pallet, unsaved });
+  useEffect(() => {
+    latest.current = { pallet, unsaved };
+  }, [pallet, unsaved]);
+
+  // The draft, written a moment after typing stops. Once the store has the same
+  // thing there is nothing left worth keeping, so the draft goes.
+  useEffect(() => {
+    if (!unsaved) {
+      clearDraft(pallet.id);
+      return;
+    }
+    const timer = setTimeout(() => writeDraft(pallet), DRAFT_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [pallet, unsaved]);
+
+  /**
+   * The tab going away, which is the case this is all for. The pending write
+   * has to land now — a timer that has not fired yet never will — and the
+   * browser is asked to confirm, so an accidental close is caught before it
+   * happens rather than only recovered from afterwards.
+   */
+  useEffect(() => {
+    const flush = () => {
+      if (latest.current.unsaved) writeDraft(latest.current.pallet);
+    };
+    const onHidden = () => {
+      if (document.visibilityState === 'hidden') flush();
+    };
+    const onLeave = (event: BeforeUnloadEvent) => {
+      flush();
+      if (latest.current.unsaved) event.preventDefault();
+    };
+    // `pagehide` and a hidden `visibilitychange` are the pair that fire
+    // reliably when a tab is closed or the phone is put down; `beforeunload` is
+    // what actually raises the "leave site?" prompt.
+    document.addEventListener('visibilitychange', onHidden);
+    window.addEventListener('pagehide', flush);
+    window.addEventListener('beforeunload', onLeave);
+    return () => {
+      document.removeEventListener('visibilitychange', onHidden);
+      window.removeEventListener('pagehide', flush);
+      window.removeEventListener('beforeunload', onLeave);
+      // Leaving for the dashboard unmounts this editor, and the pending write
+      // still has to land or the last thing typed would be the one thing lost.
+      flush();
+    };
+  }, []);
+
+  /**
+   * Stop keeping this design in the browser — it has been saved, thrown away,
+   * or deleted. The flush on the way out is told not to write it straight back.
+   */
+  const abandonDraft = useCallback(() => {
+    latest.current = { ...latest.current, unsaved: false };
+    clearDraft(pallet.id);
+  }, [pallet.id]);
+
+  /**
+   * Throw the recovered work away. Where the store has a copy the editor goes
+   * back to it; where it has none there is nothing to go back to, so the design
+   * itself goes.
+   */
+  const discardRecovered = () => {
+    abandonDraft();
+    setRecovered(null);
+    if (saved) dispatch({ type: 'replace', pallet: saved });
+    else onBack();
+  };
+
+  const attempt = useCallback(
+    async (work: () => Promise<Pallet | null>) => {
+      setBusy(true);
+      onProblem(null);
+      try {
+        const result = await work();
+        if (result) {
+          dispatch({ type: 'replace', pallet: result });
+          setSavedDoc(JSON.stringify(result));
+          setStored(true);
+          // The store now holds this, so the browser's copy has nothing left to
+          // say and the recovery notice has nothing left to warn about.
+          abandonDraft();
+          setRecovered(null);
+        }
+        await onRefresh();
+      } catch (error) {
+        onProblem(error instanceof Error ? error.message : String(error));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [abandonDraft, onProblem, onRefresh],
+  );
+
   // Costed as it is edited, not only once it has been saved.
   const costing = useMemo(
     () => (rates ? computeCosting(layout, pallet.nails, rates) : null),
     [layout, pallet.nails, rates],
   );
 
-  const load = (id: string) => attempt(() => api.get(id));
-  const save = () => attempt(() => (stored ? api.save(pallet) : api.create(pallet)));
-  const freeze = () =>
-    attempt(async () => {
-      if (!stored || dirty) await (stored ? api.save(pallet) : api.create(pallet));
-      return api.freeze(pallet.id);
-    });
-  const revise = () => attempt(() => api.revise(pallet.id));
+  const store = () => (stored ? api.save(pallet) : api.create(pallet));
+  const save = () => attempt(store);
+
   const copy = () =>
-    attempt(async () => (stored ? api.duplicate(pallet.id) : api.create(duplicatePallet(pallet))));
+    attempt(async () => {
+      const source = stored ? await store() : pallet;
+      return stored ? api.duplicate(source.id) : api.create(duplicatePallet(source));
+    });
+
   const remove = () =>
     attempt(async () => {
-      await api.remove(pallet.id);
-      return newPallet();
+      if (stored) await api.remove(pallet.id);
+      abandonDraft();
+      onBack();
+      return null;
     });
 
   /** The PDF comes from the store, so what is printed is what is recorded. */
   const openPdf = () =>
     attempt(async () => {
-      const saved = stored ? await api.save(pallet) : await api.create(pallet);
+      const saved = await store();
       window.open(api.sheetUrl(saved.id), '_blank');
       return saved;
     });
@@ -141,7 +409,7 @@ export function App() {
   /** The DXF comes from the store too, for the same reason the PDF does. */
   const openDxf = () =>
     attempt(async () => {
-      const saved = stored ? await api.save(pallet) : await api.create(pallet);
+      const saved = await store();
       window.open(api.dxfUrl(saved.id), '_blank');
       return saved;
     });
@@ -159,31 +427,74 @@ export function App() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = pallet.palletCode + '-rev-' + pallet.revision + '.json';
+    link.download = `${pallet.palletCode || 'pallet'}-${pallet.updatedAt}.json`;
     link.click();
     URL.revokeObjectURL(url);
   };
 
+  /**
+   * An imported document, or an example, replaces the geometry of the design
+   * being edited and keeps its identity. Which client a design belongs to is
+   * settled on the dashboard, not by whatever file happens to be opened into it.
+   */
+  const adopt = (incoming: Pallet) => {
+    dispatch({
+      type: 'replace',
+      pallet: {
+        ...incoming,
+        id: pallet.id,
+        clientId: pallet.clientId,
+        clientName: pallet.clientName,
+        palletCode: pallet.palletCode || incoming.palletCode,
+      },
+    });
+  };
+
   const importJson = async (file: File) => {
     try {
-      dispatch({ type: 'replace', pallet: parsePallet(JSON.parse(await file.text())) });
-      setSavedDoc(null);
+      adopt(parsePallet(JSON.parse(await file.text())));
     } catch (error) {
-      setProblem(error instanceof Error ? error.message : String(error));
+      onProblem(error instanceof Error ? error.message : String(error));
     }
   };
 
-  const open = (next: Pallet) => {
-    dispatch({ type: 'replace', pallet: next });
-    setSavedDoc(null);
-    setProblem(null);
-  };
-
   return (
-    <div className="flex h-full flex-col bg-slate-100 text-slate-900">
+    <>
+      {recovered && (
+        <div className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-900">
+          <span>
+            Restored what you were working on {draftAge(recovered)}.{' '}
+            {saved
+              ? 'These changes are not in the library until you press Save.'
+              : 'This design has never been saved.'}
+          </span>
+          <div className="ml-auto flex gap-1">
+            <Button
+              onClick={discardRecovered}
+              title={
+                saved
+                  ? 'Throw the restored changes away and go back to the saved design'
+                  : 'Throw this design away — the store has no copy of it'
+              }
+            >
+              {saved ? 'Use the saved version' : 'Discard'}
+            </Button>
+            <Button onClick={() => setRecovered(null)} title="Keep the restored work">
+              Dismiss
+            </Button>
+          </div>
+        </div>
+      )}
+
       <header className="flex items-center gap-2 border-b border-slate-300 bg-white px-3 py-2">
-        <h1 className="mr-2 text-sm font-semibold">Pallet spec</h1>
-        <Button onClick={() => open(newPallet())}>New</Button>
+        <Button onClick={onBack} title="Back to the design library">
+          ← Designs
+        </Button>
+        <h1 className="ml-1 mr-2 text-sm font-semibold">
+          {pallet.palletName || 'Untitled'}
+          <span className="ml-2 font-normal text-slate-400">{pallet.clientName}</span>
+        </h1>
+
         <Button onClick={() => fileInput.current?.click()}>Import</Button>
         <Button onClick={exportJson}>Export</Button>
         <input
@@ -202,10 +513,10 @@ export function App() {
           value=""
           onChange={(event) => {
             const found = FIXTURES.find((fixture) => fixture.name === event.target.value);
-            if (found) open(parsePallet(found.pallet));
+            if (found) adopt(parsePallet(found.pallet));
           }}
         >
-          <option value="">Open example…</option>
+          <option value="">Start from example…</option>
           {FIXTURES.map((fixture) => (
             <option key={fixture.name} value={fixture.name}>
               {fixture.name}
@@ -214,90 +525,73 @@ export function App() {
         </select>
 
         <div className="ml-auto flex items-center gap-2">
-          {pallet.frozen ? (
-            <span className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
-              Rev {pallet.revision} published — never edited
-            </span>
-          ) : (
-            <span className="text-xs text-slate-500">
-              Rev {pallet.revision} draft{dirty ? ' · unsaved' : ''}
-            </span>
-          )}
+          {/* Unsaved work is kept in this browser as it is typed, so say so
+              rather than only warning — the warning was the whole message
+              before, and it is not the frightening half that is true. */}
+          <span className="text-xs text-slate-500" title={unsaved ? 'Kept in this browser until you press Save' : undefined}>
+            {stored
+              ? dirty
+                ? 'unsaved changes · kept in this browser'
+                : `saved ${pallet.updatedAt}`
+              : 'not saved yet · kept in this browser'}
+          </span>
           <span className="text-xs text-slate-500">
             {layout.pieces.length} pieces · {layout.overallLength} × {layout.overallWidth} ×{' '}
             {layout.overallHeight}
           </span>
 
-          <Button onClick={() => void copy()} disabled={busy} title="A new design, linked to nothing">
+          <Button
+            onClick={() => void copy()}
+            disabled={busy || !canStore}
+            title="A copy, as a new design. This is how an old design is kept before reworking it."
+          >
             Duplicate
           </Button>
-          {pallet.frozen ? (
-            <Button
-              tone="primary"
-              onClick={() => void revise()}
-              disabled={busy}
-              title="Start the next revision. This one stays exactly as it is."
-            >
-              Revise
-            </Button>
-          ) : (
-            <>
-              <Button
-                onClick={() => void remove()}
-                tone="danger"
-                disabled={busy || !stored}
-                title="Delete this draft"
-              >
-                Delete
-              </Button>
-              <Button
-                onClick={() => void freeze()}
-                disabled={busy || !canStore}
-                title="Publish. From here it is read-only and kept forever."
-              >
-                Publish
-              </Button>
-              <Button onClick={() => void save()} disabled={busy || !canStore || !dirty}>
-                Save
-              </Button>
-            </>
-          )}
+          <Button
+            onClick={() => {
+              if (window.confirm('Delete this design? This cannot be undone.')) void remove();
+            }}
+            tone="danger"
+            disabled={busy}
+            title="Delete this design"
+          >
+            Delete
+          </Button>
           <Button onClick={openSheet} disabled={errors.length > 0}>
             Sheet
           </Button>
           <Button onClick={() => void openDxf()} disabled={busy || !canStore}>
             DXF
           </Button>
-          <Button tone="primary" onClick={() => void openPdf()} disabled={busy || !canStore}>
+          <Button onClick={() => void openPdf()} disabled={busy || !canStore}>
             PDF
+          </Button>
+          <Button tone="primary" onClick={() => void save()} disabled={busy || !canStore || !dirty}>
+            Save
           </Button>
         </div>
       </header>
 
-      {problem && (
-        <div className="border-b border-red-200 bg-red-50 px-3 py-1.5 text-xs text-red-700">
-          {problem}
-        </div>
-      )}
-
       <div className="flex min-h-0 flex-1">
-        <DesignList
-          designs={designs}
-          currentId={stored ? pallet.id : null}
-          onOpen={(id) => void load(id)}
-        />
-
         <div className="min-w-0 flex-1 space-y-2.5 overflow-y-auto p-2.5">
           <Panel title="Design">
-            {/* A published revision is read-only, so it does not invite an edit
-                that the store would only refuse. */}
-            <fieldset disabled={pallet.frozen} className="contents">
             <div className="grid grid-cols-4 gap-2">
-              <Field label="Pallet code">
+              {/* Optional: a design is drawn and printed long before the shop
+                  has a code to give it. */}
+              <Field label="Pallet code (optional)">
                 <TextInput value={pallet.palletCode} onChange={(palletCode) => patch({ palletCode })} placeholder="AP-001" />
               </Field>
+              {/* The name is a copy of the client's, kept on the document so a
+                  sheet can be printed from it alone. Both move together. */}
               <Field label="Client">
-                <TextInput value={pallet.clientName} onChange={(clientName) => patch({ clientName })} />
+                <Select
+                  value={pallet.clientId}
+                  options={clients.map((client) => [client.id, client.name] as [string, string])}
+                  onChange={(clientId) => {
+                    const client = clients.find((candidate) => candidate.id === clientId);
+                    if (client) patch({ clientId: client.id, clientName: client.name });
+                  }}
+                />
               </Field>
               <Field label="Client part no">
                 <TextInput
@@ -395,11 +689,14 @@ export function App() {
                   onChange={(value) => patch({ dynamicLoadKg: value > 0 ? value : undefined })}
                 />
               </Field>
-              <Field label="Revision">
-                <div className="flex gap-1">
-                  <TextInput value={pallet.revision} onChange={(revision) => patch({ revision })} />
-                  <TextInput value={pallet.revisionDate} onChange={(revisionDate) => patch({ revisionDate })} />
-                </div>
+              {/* Printed in the title block under the date. Free text: a client
+                  drawing number, "(old)", or nothing at all. */}
+              <Field label="Sheet note">
+                <TextInput
+                  value={pallet.note ?? ''}
+                  placeholder="printed beside the date"
+                  onChange={(value) => patch({ note: value === '' ? undefined : value })}
+                />
               </Field>
             </div>
 
@@ -408,7 +705,6 @@ export function App() {
                 <TextInput value={pallet.notes ?? ''} onChange={(value) => patch({ notes: value === '' ? undefined : value })} />
               </Field>
             </div>
-            </fieldset>
           </Panel>
 
           {pallet.layers.map((layer) => (
@@ -416,7 +712,6 @@ export function App() {
               key={layer.id}
               layer={layer}
               computed={layout.layers.find((computed) => computed.layerId === layer.id)}
-              frozen={pallet.frozen}
               selection={selection}
               dispatch={dispatch}
             />
@@ -427,7 +722,7 @@ export function App() {
             actions={
               <div className="flex flex-wrap gap-1">
                 {LAYER_KINDS.map(([kind, label]) => (
-                  <Button key={kind} disabled={pallet.frozen} onClick={() => dispatch({ type: 'addLayer', kind })}>
+                  <Button key={kind} onClick={() => dispatch({ type: 'addLayer', kind })}>
                     + {label}
                   </Button>
                 ))}
@@ -449,9 +744,8 @@ export function App() {
           <div className="border-t border-slate-200 p-2.5">
             {chosen ? (
               <NudgeControl
-                slotLabel={`Part ${chosen.slot.partNo}, board ${chosen.index + 1}`}
+                slotLabel={`${LAYER_KINDS.find(([kind]) => kind === chosen.layer.kind)?.[1] ?? chosen.layer.kind}, board ${chosen.index + 1}`}
                 value={chosen.slot.nudgeMm}
-                frozen={pallet.frozen}
                 dispatch={dispatch}
               />
             ) : (
@@ -486,7 +780,7 @@ export function App() {
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -497,12 +791,10 @@ export function App() {
 function NudgeControl({
   slotLabel,
   value,
-  frozen,
   dispatch,
 }: {
   slotLabel: string;
   value: number;
-  frozen: boolean;
   dispatch: (action: Action) => void;
 }) {
   return (
@@ -511,7 +803,6 @@ function NudgeControl({
         <Field label={`Nudge — ${slotLabel}`}>
           <NumberInput
             value={value}
-            disabled={frozen}
             onChange={(next) => dispatch({ type: 'setNudge', value: next })}
             onKeyDown={(event) => {
               const step = event.shiftKey ? 10 : 1;
@@ -526,13 +817,9 @@ function NudgeControl({
           />
         </Field>
       </div>
-      <Button disabled={frozen} onClick={() => dispatch({ type: 'nudge', delta: -1 })}>
-        −1
-      </Button>
-      <Button disabled={frozen} onClick={() => dispatch({ type: 'nudge', delta: 1 })}>
-        +1
-      </Button>
-      <Button disabled={frozen || value === 0} onClick={() => dispatch({ type: 'setNudge', value: 0 })}>
+      <Button onClick={() => dispatch({ type: 'nudge', delta: -1 })}>−1</Button>
+      <Button onClick={() => dispatch({ type: 'nudge', delta: 1 })}>+1</Button>
+      <Button disabled={value === 0} onClick={() => dispatch({ type: 'setNudge', value: 0 })}>
         Clear
       </Button>
     </div>
@@ -541,14 +828,7 @@ function NudgeControl({
 
 function Nails({ pallet, dispatch }: { pallet: Pallet; dispatch: (action: Action) => void }) {
   return (
-    <Panel
-      title="Nails"
-      actions={
-        <Button disabled={pallet.frozen} onClick={() => dispatch({ type: 'addNail' })}>
-          Add
-        </Button>
-      }
-    >
+    <Panel title="Nails" actions={<Button onClick={() => dispatch({ type: 'addNail' })}>Add</Button>}>
       <table className="w-full text-sm">
         <thead>
           <tr className="text-[10px] uppercase tracking-wide text-slate-400">
@@ -565,7 +845,6 @@ function Nails({ pallet, dispatch }: { pallet: Pallet; dispatch: (action: Action
               <td className="pr-1">
                 <TextInput
                   value={nail.label}
-                  disabled={pallet.frozen}
                   placeholder="top board to centre board"
                   onChange={(label) => dispatch({ type: 'patchNail', index, patch: { label } })}
                 />
@@ -573,7 +852,6 @@ function Nails({ pallet, dispatch }: { pallet: Pallet; dispatch: (action: Action
               <td className="pr-1">
                 <TextInput
                   value={nail.type}
-                  disabled={pallet.frozen}
                   onChange={(type) => dispatch({ type: 'patchNail', index, patch: { type } })}
                 />
               </td>
@@ -581,7 +859,6 @@ function Nails({ pallet, dispatch }: { pallet: Pallet; dispatch: (action: Action
                 <NumberInput
                   value={nail.sizeMm}
                   min={1}
-                  disabled={pallet.frozen}
                   onChange={(sizeMm) => dispatch({ type: 'patchNail', index, patch: { sizeMm } })}
                 />
               </td>
@@ -589,12 +866,11 @@ function Nails({ pallet, dispatch }: { pallet: Pallet; dispatch: (action: Action
                 <NumberInput
                   value={nail.count}
                   min={0}
-                  disabled={pallet.frozen}
                   onChange={(count) => dispatch({ type: 'patchNail', index, patch: { count } })}
                 />
               </td>
               <td>
-                <Button tone="danger" disabled={pallet.frozen} onClick={() => dispatch({ type: 'removeNail', index })}>
+                <Button tone="danger" onClick={() => dispatch({ type: 'removeNail', index })}>
                   ×
                 </Button>
               </td>

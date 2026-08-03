@@ -133,6 +133,29 @@ function depthKey(p: PlacedPiece): number {
 }
 
 /**
+ * What a viewpoint has to answer before its pieces can be put in order. The
+ * printed isometric and the editor's free 3D view differ only in these three,
+ * so they share the sort below rather than each having their own.
+ */
+export interface PaintRules {
+  /** True when a is behind b, so a is drawn first. */
+  behind: (a: PlacedPiece, b: PlacedPiece) => boolean;
+  /** True when the two pieces cover any of the same screen. */
+  overlaps: (a: PlacedPiece, b: PlacedPiece) => boolean;
+  /** Larger is nearer the eye. Only used to break ties. */
+  depth: (piece: PlacedPiece) => number;
+}
+
+/** Back-to-front ordering at the fixed isometric viewpoint. */
+export function orderForPainter(pieces: PlacedPiece[]): PlacedPiece[] {
+  return paintOrder(pieces, {
+    behind: isBehind,
+    overlaps: screenOverlap,
+    depth: depthKey,
+  });
+}
+
+/**
  * Back-to-front ordering.
  *
  * A scalar depth sort is not enough: a long deck board can have a farther
@@ -141,10 +164,10 @@ function depthKey(p: PlacedPiece): number {
  * behind another when it is entirely on the far side along one axis, and the
  * result is topologically sorted.
  */
-export function orderForPainter(pieces: PlacedPiece[]): PlacedPiece[] {
+export function paintOrder(pieces: PlacedPiece[], rules: PaintRules): PlacedPiece[] {
   const indexed = pieces.map((piece, index) => ({ piece, index }));
   const byDepth = [...indexed].sort(
-    (a, b) => depthKey(a.piece) - depthKey(b.piece) || a.index - b.index,
+    (a, b) => rules.depth(a.piece) - rules.depth(b.piece) || a.index - b.index,
   );
 
   const after = new Map<number, number[]>();
@@ -157,9 +180,9 @@ export function orderForPainter(pieces: PlacedPiece[]): PlacedPiece[] {
   for (const a of indexed) {
     for (const b of indexed) {
       if (a.index === b.index) continue;
-      if (!isBehind(a.piece, b.piece)) continue;
-      if (isBehind(b.piece, a.piece)) continue;
-      if (!screenOverlap(a.piece, b.piece)) continue;
+      if (!rules.behind(a.piece, b.piece)) continue;
+      if (rules.behind(b.piece, a.piece)) continue;
+      if (!rules.overlaps(a.piece, b.piece)) continue;
       after.get(a.index)!.push(b.index);
       inDegree.set(b.index, inDegree.get(b.index)! + 1);
     }
@@ -172,7 +195,7 @@ export function orderForPainter(pieces: PlacedPiece[]): PlacedPiece[] {
   const done = new Set<number>();
 
   while (ready.length > 0) {
-    ready.sort((a, b) => depthKey(a.piece) - depthKey(b.piece) || a.index - b.index);
+    ready.sort((a, b) => rules.depth(a.piece) - rules.depth(b.piece) || a.index - b.index);
     const next = ready.shift()!;
     ordered.push(next.piece);
     done.add(next.index);

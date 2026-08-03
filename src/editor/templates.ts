@@ -21,17 +21,11 @@ export function runLength(extent: Extent, direction: Direction): number {
   return direction === 'along_length' ? extent.overallLength : extent.overallWidth;
 }
 
-export function newSlot(
-  partNo: number,
-  material: string,
-  length: number,
-  overrides: Partial<Slot> = {},
-): Slot {
+export function newSlot(material: string, length: number, overrides: Partial<Slot> = {}): Slot {
   return {
-    partNo,
-    thickness: 18,
-    width: 100,
     length,
+    width: 100,
+    thickness: 18,
     material,
     joinedToPrev: false,
     nudgeMm: 0,
@@ -39,16 +33,16 @@ export function newSlot(
   };
 }
 
-export function newCell(partNo: number, material: string): BlockCell {
-  return { partNo, lengthMm: 100, widthMm: 100, heightMm: 100, material };
+export function newCell(material: string): BlockCell {
+  return { lengthMm: 100, widthMm: 100, heightMm: 100, material };
 }
 
-export function newGrid(rows: number, cols: number, partNo: number, material: string): BlockGrid {
+export function newGrid(rows: number, cols: number, material: string): BlockGrid {
   return {
     rows,
     cols,
     cells: Array.from({ length: rows }, () =>
-      Array.from({ length: cols }, () => newCell(partNo, material)),
+      Array.from({ length: cols }, () => newCell(material)),
     ),
     rowSpanMm: null,
     rowOffsetMm: 0,
@@ -61,7 +55,6 @@ export function newGrid(rows: number, cols: number, partNo: number, material: st
 export function newLayer(
   kind: LayerKind,
   order: number,
-  partNo: number,
   material: string,
   extent: Extent,
   count = 1,
@@ -83,10 +76,9 @@ export function newLayer(
       content: {
         type: 'sheet',
         sheet: {
-          partNo,
-          thickness: 12,
-          width: extent.overallWidth,
           length: extent.overallLength,
+          width: extent.overallWidth,
+          thickness: 12,
           material: 'plywood',
         },
       },
@@ -97,7 +89,7 @@ export function newLayer(
     return {
       ...base,
       direction: 'along_length' as const,
-      content: { type: 'grid', grid: newGrid(3, 3, partNo, material) },
+      content: { type: 'grid', grid: newGrid(3, 3, material) },
     };
   }
 
@@ -110,7 +102,7 @@ export function newLayer(
     direction,
     content: {
       type: 'sequence',
-      slots: Array.from({ length: count }, () => newSlot(partNo, material, length)),
+      slots: Array.from({ length: count }, () => newSlot(material, length)),
     },
   };
 }
@@ -128,13 +120,15 @@ export const DEFAULT_NAILS: NailSpec[] = [
  * complete pallet and the work is changing numbers rather than building a stack
  * of empty layers before anything can be seen.
  */
-export function newPallet(): Pallet {
+export function newPallet(client: { id: string; name: string }): Pallet {
+  const { id: clientId, name: clientName } = client;
   const species = 'pine';
   const extent = { overallLength: 1000, overallWidth: 800 };
   return {
     id: newId(),
     palletCode: '',
-    clientName: '',
+    clientId,
+    clientName,
     palletName: '1000 x 800',
     overallLength: extent.overallLength,
     overallWidth: extent.overallWidth,
@@ -145,30 +139,12 @@ export function newPallet(): Pallet {
     species,
     planing: 'none',
     nails: DEFAULT_NAILS.map((nail) => ({ ...nail })),
-    revision: 'A',
-    revisionDate: today(),
-    frozen: false,
+    updatedAt: today(),
     layers: [
-      newLayer('top_deck', 1, 1, species, extent, 7),
-      newLayer('bearer', 2, 2, species, extent, 3),
-      newLayer('block', 3, 3, species, extent),
-      newLayer('bottom_deck', 4, 4, species, extent, 3),
+      newLayer('top_deck', 1, species, extent, 7),
+      newLayer('bearer', 2, species, extent, 3),
+      newLayer('block', 3, species, extent),
+      newLayer('bottom_deck', 4, species, extent, 3),
     ],
   };
-}
-
-/** The next free part number, so a new row never collides with an existing one. */
-export function nextPartNo(pallet: Pallet): number {
-  let max = 0;
-  for (const layer of pallet.layers) {
-    const content = layer.content;
-    if (content.type === 'sequence') {
-      for (const slot of content.slots) max = Math.max(max, slot.partNo);
-    } else if (content.type === 'grid') {
-      for (const cell of content.grid.cells.flat()) max = Math.max(max, cell.partNo);
-    } else {
-      max = Math.max(max, content.sheet.partNo);
-    }
-  }
-  return max + 1;
 }

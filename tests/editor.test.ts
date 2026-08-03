@@ -2,13 +2,19 @@ import { describe, expect, it } from 'vitest';
 import { analysePallet, computeLayout } from '../src/geometry/layout.js';
 import { renderView } from '../src/render/views.js';
 import { PalletSchema } from '../src/schema.js';
-import { reducer, sameSource, selectedSlot } from '../src/editor/state.js';
+import { MAX_GRID_SIDE, MAX_SLOTS, reducer, sameSource, selectedSlot } from '../src/editor/state.js';
 import type { Action, EditorState } from '../src/editor/state.js';
-import { duplicatePallet } from '../src/revisions.js';
-import { newPallet, nextPartNo } from '../src/editor/templates.js';
+import { numberText } from '../src/editor/ui.js';
+import type { BlockCell, Slot } from '../src/types.js';
+import { duplicatePallet } from '../src/duplicate.js';
+import { newPallet } from '../src/editor/templates.js';
+import { partNumbers } from '../src/geometry/parts.js';
 import type { Pallet } from '../src/types.js';
 
-function start(pallet: Pallet = newPallet()): EditorState {
+/** Every design belongs to a client, so the tests need one to hand. */
+const CLIENT = { id: 'client-test', name: 'Demo Client' };
+
+function start(pallet: Pallet = newPallet(CLIENT)): EditorState {
   return { pallet, selection: null };
 }
 
@@ -18,12 +24,24 @@ function run(state: EditorState, ...actions: Action[]): EditorState {
 
 /** The first top board, which is what a click on the preview usually lands on. */
 function firstTopSlot(state: EditorState): Action {
-  const layer = state.pallet.layers.find((l) => l.kind === 'top_deck')!;
+  const layer = state.pallet.layers.find((layer) => layer.kind === 'top_deck')!;
   return { type: 'select', selection: { layerId: layer.id, source: { kind: 'slot', index: 0 } } };
 }
 
+function slotsOf(state: EditorState, layerId: string): Slot[] {
+  const content = state.pallet.layers.find((layer) => layer.id === layerId)!.content;
+  if (content.type !== 'sequence') throw new Error('expected boards');
+  return content.slots;
+}
+
+function cellsOf(state: EditorState, layerId: string): BlockCell[] {
+  const content = state.pallet.layers.find((layer) => layer.id === layerId)!.content;
+  if (content.type !== 'grid') throw new Error('expected a grid');
+  return content.grid.cells.flat();
+}
+
 describe('a new pallet', () => {
-  const pallet = newPallet();
+  const pallet = newPallet(CLIENT);
 
   it('is a whole plain block pallet, not an empty stack', () => {
     const layout = computeLayout(pallet);
@@ -31,19 +49,14 @@ describe('a new pallet', () => {
     expect(layout.issues.filter((issue) => issue.severity === 'error')).toEqual([]);
   });
 
-  it('is short only of the things the person has to supply', () => {
-    // A design being worked on is allowed to be incomplete. Naming it completes it.
-    const parsed = PalletSchema.safeParse(pallet);
-    expect(parsed.success).toBe(false);
-    if (!parsed.success) {
-      expect(parsed.error.issues.map((issue) => issue.path.join('.'))).toEqual([
-        'palletCode',
-        'clientName',
-      ]);
-    }
-    expect(
-      PalletSchema.safeParse({ ...pallet, palletCode: 'AP-010', clientName: 'A client' }).success,
-    ).toBe(true);
+  it('can be saved as it stands, with no pallet code typed in', () => {
+    // The client comes from the dashboard and everything else has a sensible
+    // default, so a new design is complete the moment it is created. A code is
+    // assigned by the shop later, if at all, and waiting for one only ever
+    // meant a placeholder was typed in and never corrected.
+    expect(pallet.palletCode).toBe('');
+    expect(PalletSchema.safeParse(pallet).success).toBe(true);
+    expect(PalletSchema.safeParse({ ...pallet, palletCode: 'AP-010' }).success).toBe(true);
   });
 
   it('gives each layer boards as long as the run they sit in', () => {
@@ -57,12 +70,12 @@ describe('a new pallet', () => {
 
 describe('copying a design', () => {
   it('is a full deep copy that shares nothing with the original', () => {
-    const original = newPallet();
+    const original = newPallet(CLIENT);
     original.clientName = 'First client';
     const copy = duplicatePallet(original);
 
     expect(copy.id).not.toBe(original.id);
-    expect(copy.layers.map((l) => l.id)).not.toEqual(original.layers.map((l) => l.id));
+    expect(copy.layers.map((layer) => layer.id)).not.toEqual(original.layers.map((layer) => layer.id));
 
     // Editing one client's pallet must never affect another's.
     const copyLayer = copy.layers[0]!;
@@ -78,15 +91,13 @@ describe('copying a design', () => {
     expect(original.clientName).toBe('First client');
   });
 
-  it('starts again at revision A and supersedes nothing', () => {
-    const original = newPallet();
-    original.revision = 'C';
-    original.frozen = true;
-    original.supersedes = 'something-else';
+  it('stays with the same client, which is where it will appear', () => {
+    const original = newPallet(CLIENT);
     const copy = duplicatePallet(original);
-    expect(copy.revision).toBe('A');
-    expect(copy.frozen).toBe(false);
-    expect(copy.supersedes).toBeUndefined();
+    expect(copy.clientId).toBe(CLIENT.id);
+    expect(copy.clientName).toBe(CLIENT.name);
+    // A copy is only worth making before a rework, so it is dated today.
+    expect(copy.updatedAt).toBe(new Date().toISOString().slice(0, 10));
   });
 });
 
@@ -135,22 +146,216 @@ describe('the form', () => {
     expect(computeLayout(next.pallet).pieces.filter((p) => p.layerKind === 'block')).toHaveLength(8);
   });
 
-  it('never hands out a part number that is already in use', () => {
+  it('numbers the parts itself, so a new layer never clashes with an old one', () => {
+    // Part numbers are not typed in and cannot be got wrong: they follow the
+    // sizes. A layer added to a whole pallet is simply the next number along.
+    const before = partNumbers(start().pallet);
     const state = run(start(), { type: 'addLayer', kind: 'runner' });
-    const numbers = state.pallet.layers.flatMap((layer) =>
-      layer.content.type === 'sequence'
-        ? layer.content.slots.map((s) => s.partNo)
-        : layer.content.type === 'grid'
-          ? layer.content.grid.cells.flat().map((c) => c.partNo)
-          : [layer.content.sheet.partNo],
+    const after = partNumbers(state.pallet);
+
+    expect([...before.values()]).toEqual([1, 2, 3, 4]);
+    expect([...after.values()]).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it('gives two boards of one size one number, and a resized board its own', () => {
+    const state = start();
+    const layer = state.pallet.layers[0]!;
+    expect(computeLayout(state.pallet).pieces.filter((p) => p.layerId === layer.id).map((p) => p.partNo))
+      .toEqual([1, 1, 1, 1, 1, 1, 1]);
+
+    // One board made wider is a part of its own, without anything being typed.
+    const widened = run(state, {
+      type: 'patchSlot',
+      layerId: layer.id,
+      index: 3,
+      patch: { width: 150 },
+    });
+    const numbers = computeLayout(widened.pallet)
+      .pieces.filter((p) => p.layerId === layer.id)
+      .map((p) => p.partNo);
+    expect(numbers).toEqual([1, 1, 1, 2, 1, 1, 1]);
+    // And it is a real part, not a clash to be reported.
+    expect(analysePallet(widened.pallet).issues.filter((i) => i.severity === 'error')).toEqual([]);
+  });
+});
+
+/**
+ * Eight designs in ten have every board in a layer the same size, so the layer
+ * is described once — a count and one set of numbers — rather than a row at a
+ * time. What is not the same for every board is where each one sits, so a size
+ * set across the layer must not disturb that.
+ */
+describe('setting a whole layer at once', () => {
+  it('makes as many boards as the count asks for, all matching', () => {
+    const state = start();
+    const layer = state.pallet.layers.find((l) => l.kind === 'bearer')!;
+    expect(slotsOf(state, layer.id)).toHaveLength(3);
+
+    const next = run(state, { type: 'setSlotCount', layerId: layer.id, count: 7 });
+    const slots = slotsOf(next, layer.id);
+    expect(slots).toHaveLength(7);
+    for (const slot of slots) {
+      expect(slot).toMatchObject({ thickness: 18, width: 100, length: 800, nudgeMm: 0 });
+    }
+  });
+
+  it('sets one size across every board, in a single edit', () => {
+    const state = start();
+    const layer = state.pallet.layers[0]!;
+    const next = run(state, {
+      type: 'patchAllSlots',
+      layerId: layer.id,
+      patch: { thickness: 22, width: 120, length: 1200 },
+    });
+
+    for (const slot of slotsOf(next, layer.id)) {
+      expect(slot).toMatchObject({ thickness: 22, width: 120, length: 1200 });
+    }
+    // Seven boards, described once. That is the whole of the point.
+    expect(slotsOf(next, layer.id)).toHaveLength(7);
+  });
+
+  it('leaves each board sitting where it was put', () => {
+    const state = start();
+    const layer = state.pallet.layers[0]!;
+    // One board nudged off the shared spacing, and one pair butted together:
+    // both are about position, and neither is a consequence of size.
+    const arranged = run(
+      state,
+      { type: 'patchSlot', layerId: layer.id, index: 0, patch: { nudgeMm: 12 } },
+      { type: 'patchSlot', layerId: layer.id, index: 3, patch: { joinedToPrev: true } },
     );
-    expect(nextPartNo(state.pallet)).toBeGreaterThan(Math.max(...numbers));
+    const resized = run(arranged, {
+      type: 'patchAllSlots',
+      layerId: layer.id,
+      patch: { width: 90 },
+    });
+
+    const slots = slotsOf(resized, layer.id);
+    expect(slots.every((slot) => slot.width === 90)).toBe(true);
+    expect(slots[0]!.nudgeMm).toBe(12);
+    expect(slots[3]!.joinedToPrev).toBe(true);
+    expect(slots[1]!.nudgeMm).toBe(0);
+  });
+
+  it('takes boards off the end when the count drops, and forgets nothing else', () => {
+    const state = start();
+    const layer = state.pallet.layers[0]!;
+    const marked = run(state, {
+      type: 'patchSlot',
+      layerId: layer.id,
+      index: 1,
+      patch: { width: 77 },
+    });
+    const fewer = run(marked, { type: 'setSlotCount', layerId: layer.id, count: 3 });
+
+    const slots = slotsOf(fewer, layer.id);
+    expect(slots).toHaveLength(3);
+    expect(slots[1]!.width).toBe(77);
+  });
+
+  it('drops a selection pointing at a board that no longer exists', () => {
+    const state = start();
+    const layer = state.pallet.layers[0]!;
+    const selected = run(state, {
+      type: 'select',
+      selection: { layerId: layer.id, source: { kind: 'slot', index: 6 } },
+    });
+    expect(run(selected, { type: 'setSlotCount', layerId: layer.id, count: 2 }).selection).toBeNull();
+    // A selection still within the layer is left where it is.
+    expect(run(selected, { type: 'setSlotCount', layerId: layer.id, count: 7 }).selection).not.toBeNull();
+  });
+
+  it('never leaves the first board claiming to be joined to one before it', () => {
+    const state = start();
+    const layer = state.pallet.layers[0]!;
+    const joined = run(state, {
+      type: 'patchSlot',
+      layerId: layer.id,
+      index: 5,
+      patch: { joinedToPrev: true },
+    });
+    const trimmed = run(joined, { type: 'setSlotCount', layerId: layer.id, count: 5 });
+    // Board 6 was joined to board 5; cutting to five is not what was meant, but
+    // a first board joined to nothing before it would not lay out at all.
+    const shortened = run(joined, { type: 'setSlotCount', layerId: layer.id, count: 1 });
+    expect(slotsOf(trimmed, layer.id)).toHaveLength(5);
+    expect(slotsOf(shortened, layer.id)[0]!.joinedToPrev).toBe(false);
+  });
+
+  it('sets every block in the grid at once, the same way', () => {
+    const state = start();
+    const blocks = state.pallet.layers.find((l) => l.kind === 'block')!;
+    const next = run(state, {
+      type: 'patchAllCells',
+      layerId: blocks.id,
+      patch: { lengthMm: 145, widthMm: 100, heightMm: 95 },
+    });
+
+    const cells = cellsOf(next, blocks.id);
+    expect(cells).toHaveLength(9);
+    for (const cell of cells) {
+      expect(cell).toMatchObject({ lengthMm: 145, widthMm: 100, heightMm: 95 });
+    }
+    expect(computeLayout(next.pallet).pieces.filter((p) => p.layerKind === 'block')).toHaveLength(9);
+  });
+
+  it('refuses a count that could only be a slip of the keyboard', () => {
+    const state = start();
+    const layer = state.pallet.layers[0]!;
+    const blocks = state.pallet.layers.find((l) => l.kind === 'block')!;
+
+    // A deck is a handful of boards. Building the ten thousand rows a stray
+    // keypress asks for would hang the tab and help nobody.
+    expect(slotsOf(run(state, { type: 'setSlotCount', layerId: layer.id, count: 10_000 }), layer.id))
+      .toHaveLength(MAX_SLOTS);
+    expect(slotsOf(run(state, { type: 'setSlotCount', layerId: layer.id, count: 0 }), layer.id))
+      .toHaveLength(1);
+
+    const huge = run(state, { type: 'patchGrid', layerId: blocks.id, patch: { rows: 999, cols: 999 } });
+    expect(cellsOf(huge, blocks.id)).toHaveLength(MAX_GRID_SIDE * MAX_GRID_SIDE);
+  });
+});
+
+/**
+ * Typing a number over one that is already there. Nearly every field in the
+ * editor is one of these, and the layer rows are the ones now typed into most.
+ */
+describe('a number field being typed into', () => {
+  it('lets a number be cleared on the way to replacing it', () => {
+    // Clearing 100 to type 120 used to leave a 1 behind and give 1120: the
+    // field reported nothing for the empty box, so the old value came back.
+    expect(numberText('', 1)).toBe('');
+    expect(numberText('1', 1)).toBe('1');
+    expect(numberText('12', 12)).toBe('12');
+    expect(numberText('120', 120)).toBe('120');
+  });
+
+  it('keeps a minus sign that has nothing after it yet, for a nudge', () => {
+    expect(numberText('-', 5)).toBe('-');
+    expect(numberText('-1', -1)).toBe('-1');
+  });
+
+  it('shows the value it is given when nothing is being typed', () => {
+    expect(numberText(null, 250)).toBe('250');
+    expect(numberText(null, 0)).toBe('0');
+  });
+
+  it('gives way when the value is changed by something other than typing', () => {
+    // A layer row setting every board at once: the board's own field was left
+    // mid-edit, and what the layer just said is what is true.
+    expect(numberText('7', 120)).toBe('120');
+  });
+
+  it('shows nothing at all where components disagree, leaving "mixed"', () => {
+    expect(numberText(null, Number.NaN)).toBe('');
+    expect(numberText('', Number.NaN)).toBe('');
   });
 });
 
 describe('selection and nudging', () => {
   it('takes a click on the drawing back to the slot that produced it', () => {
-    const pallet = newPallet();
+    const pallet = newPallet(CLIENT);
     const layout = computeLayout(pallet);
     const svg = renderView(layout, 'top', { interactive: true });
 
@@ -198,7 +403,7 @@ describe('selection and nudging', () => {
   });
 
   it('marks the selected board in the drawing without changing it', () => {
-    const pallet = newPallet();
+    const pallet = newPallet(CLIENT);
     const layout = computeLayout(pallet);
     const plain = renderView(layout, 'top', { interactive: true });
     const withSelection = renderView(layout, 'top', { interactive: true, selectedPiece: 2 });

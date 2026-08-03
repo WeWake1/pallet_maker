@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import type { Pallet } from './types.js';
+import { today } from './ids.js';
+import type { Client, Pallet } from './types.js';
 
 /**
  * Runtime shape of a pallet document. Every dimension is millimetres, integer.
@@ -28,10 +29,9 @@ export const NailSpecSchema = z.object({
 });
 
 export const SlotSchema = z.object({
-  partNo: z.number().int().positive(),
-  thickness: positiveMm,
-  width: positiveMm,
   length: positiveMm,
+  width: positiveMm,
+  thickness: positiveMm,
   material: z.string().min(1),
   joinedToPrev: z.boolean().default(false),
   nudgeMm: mm.default(0),
@@ -39,7 +39,6 @@ export const SlotSchema = z.object({
 });
 
 export const BlockCellSchema = z.object({
-  partNo: z.number().int().positive(),
   lengthMm: positiveMm,
   widthMm: positiveMm,
   heightMm: positiveMm,
@@ -58,10 +57,9 @@ export const BlockGridSchema = z.object({
 });
 
 export const SheetSpecSchema = z.object({
-  partNo: z.number().int().positive(),
-  thickness: positiveMm,
-  width: positiveMm,
   length: positiveMm,
+  width: positiveMm,
+  thickness: positiveMm,
   material: z.string().min(1),
 });
 
@@ -85,7 +83,11 @@ export const LayerSchema = z.object({
 
 export const PalletSchema = z.object({
   id: z.string().min(1),
-  palletCode: z.string().min(1),
+  // Optional. A design is drawn, saved and printed long before the shop has a
+  // code to give it, and refusing to save one without a code only meant a
+  // placeholder was typed in and never corrected.
+  palletCode: z.string().default(''),
+  clientId: z.string().min(1),
   clientName: z.string().min(1),
   clientPartNo: z.string().min(1).optional(),
   palletName: z.string().min(1),
@@ -119,10 +121,10 @@ export const PalletSchema = z.object({
   nails: z.array(NailSpecSchema).default([]),
   notes: z.string().optional(),
 
-  revision: z.string().min(1).default('A'),
-  revisionDate: z.string().min(1),
-  supersedes: z.string().min(1).optional(),
-  frozen: z.boolean().default(false),
+  // The store stamps this on every write. A document arriving from an older
+  // export, or from a hand-written fixture, is dated today rather than refused.
+  updatedAt: z.string().min(1).default(() => today()),
+  note: z.string().optional(),
 
   layers: z.array(LayerSchema).min(1),
 });
@@ -132,14 +134,30 @@ export type ParsedPallet = z.infer<typeof PalletSchema>;
 const _typeCheck: (p: ParsedPallet) => Pallet = (p) => p;
 void _typeCheck;
 
+export const ClientSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  createdAt: z.string().min(1).default(() => today()),
+});
+
+const _clientCheck: (c: z.infer<typeof ClientSchema>) => Client = (c) => c;
+void _clientCheck;
+
 /** Parse and validate a pallet document, throwing a readable error. */
 export function parsePallet(input: unknown): Pallet {
-  const result = PalletSchema.safeParse(input);
+  return parsed(PalletSchema.safeParse(input), 'pallet');
+}
+
+export function parseClient(input: unknown): Client {
+  return parsed(ClientSchema.safeParse(input), 'client');
+}
+
+function parsed<T>(result: z.SafeParseReturnType<unknown, T>, what: string): T {
   if (!result.success) {
     const lines = result.error.issues
       .map((issue) => `  - ${issue.path.join('.') || '(root)'}: ${issue.message}`)
       .join('\n');
-    throw new Error(`Invalid pallet document:\n${lines}`);
+    throw new Error(`Invalid ${what} document:\n${lines}`);
   }
   return result.data;
 }

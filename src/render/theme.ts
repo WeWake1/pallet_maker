@@ -24,10 +24,53 @@ export const LAYER_STYLE: Record<LayerKind, LayerStyle> = {
   bottom_deck: { stroke: '#3d6b2f', fill: '#dcead3' },
 };
 
-/** The layer being emphasised in this view. */
-export const NEAR = { opacity: 1, strokeWidth: 1.2, fillOpacity: 1 };
-/** Everything behind it. */
-export const FAR = { opacity: 0.3, strokeWidth: 0.4, fillOpacity: 0.55 };
+export interface Weight {
+  opacity: number;
+  strokeWidth: number;
+  fillOpacity: number;
+}
+
+export interface Emphasis {
+  /** The layer being emphasised in this view. */
+  near: Weight;
+  /** Everything behind it. */
+  far: Weight;
+  /**
+   * A piece behind the near layer, drawn a second time where the near layer
+   * covers it so that it shows through. A zero fill opacity makes it an outline
+   * only; null leaves the near layer solid and shows what is under it through
+   * the gaps between its boards, which is what it really looks like.
+   */
+  ghost: Weight | null;
+}
+
+/**
+ * On paper. A spec sheet is read for the layer the view is of, and the layers
+ * behind it are context: enough to see where the bearers run, not enough to be
+ * confused with the boards on top of them.
+ */
+export const PRINT_EMPHASIS: Emphasis = {
+  near: { opacity: 1, strokeWidth: 1.2, fillOpacity: 1 },
+  far: { opacity: 0.3, strokeWidth: 0.4, fillOpacity: 0.55 },
+  ghost: { opacity: 0.3, strokeWidth: 0.4, fillOpacity: 0 },
+};
+
+/**
+ * On screen. The editor preview is a working surface rather than a print, so
+ * the layers underneath are kept legible instead of being held back for the
+ * sake of the page — but the layer the view is of stays solid, and what is
+ * under it is seen through the gaps between its boards, as it would be if you
+ * were standing over the pallet.
+ */
+export const SCREEN_EMPHASIS: Emphasis = {
+  near: { opacity: 1, strokeWidth: 1.3, fillOpacity: 1 },
+  far: { opacity: 0.95, strokeWidth: 0.8, fillOpacity: 0.75 },
+  ghost: null,
+};
+
+/** Kept for anything still reading the print weights directly. */
+export const NEAR = PRINT_EMPHASIS.near;
+export const FAR = PRINT_EMPHASIS.far;
 
 export const INK = '#1b1b1b';
 export const DIM_INK = '#333333';

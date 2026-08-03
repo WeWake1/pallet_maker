@@ -15,7 +15,7 @@ import { newPallet } from '../src/editor/templates.js';
 const PAGE = { width: 210, height: 297, padding: 16 } as const;
 
 export function renderGuide(): string {
-  const pallet = newPallet();
+  const pallet = newPallet({ id: 'guide-client', name: 'Demo Client' });
   const layout = computeLayout(pallet);
   const view = (kind: 'top' | 'side') =>
     renderView(layout, kind, { targetWidth: 300, targetHeight: 190, title: false });
@@ -62,10 +62,12 @@ ${page(`
 
   <h2>The screen</h2>
   <table class="plain">
-    <tr><th>Left strip</th><td>Every design you have saved, grouped by client. Click a revision letter to open it.</td></tr>
+    <tr><th>Designs</th><td>The screen you land on: every client in turn, with their designs as cards. Click a card to open it.</td></tr>
+    <tr><th>+ Client</th><td>Adds a customer. They get a section of their own straight away, even before anything is drawn for them.</td></tr>
+    <tr><th>+ New design</th><td>The blank card at the end of a client's row. Starts a fresh design for that client.</td></tr>
     <tr><th>Middle</th><td>The form. This is where all the typing happens.</td></tr>
-    <tr><th>Right</th><td>The pallet seen from above, redrawn as you type, and any problems it has spotted.</td></tr>
-    <tr><th>Top bar</th><td>New, Import, Export, and the buttons for saving, publishing and printing.</td></tr>
+    <tr><th>Right</th><td>The pallet drawn as you type — top, bottom, side, end, or in 3D — and any problems it has spotted.</td></tr>
+    <tr><th>Top bar</th><td>Back to the designs, Import, Export, and the buttons for saving and printing.</td></tr>
   </table>
 `, 1)}
 
@@ -78,10 +80,17 @@ ${page(`
   </p>
   <ol>
     <li>Press <strong>New</strong>.</li>
-    <li>Fill in the pallet code and the client — the tool will not let you save without them.</li>
+    <li>Name the design. The pallet code is optional — fill it in when the shop gives you one.</li>
     <li>Set the overall length and width. Leave the height at 0 and it adds up the layers for you.</li>
-    <li>Work down the layers. For each one set the board thickness, width, length and timber.</li>
-    <li>Use <strong>Add board</strong> for another board in that layer, and the <strong>×</strong> to remove one.</li>
+    <li>
+      Work down the layers. For each one set the length, width, thickness, how
+      many boards and what timber — one row describes the whole layer.
+    </li>
+    <li>
+      Where one board differs from the rest, open the layer's board list and
+      correct that one. <strong>Add board</strong> and the <strong>×</strong>
+      to remove one are in there too.
+    </li>
     <li>Press <strong>Save</strong>.</li>
   </ol>
 
@@ -129,20 +138,18 @@ ${page(`
     would drift apart.
   </p>
 
-  <h2>Publishing and revising</h2>
+  <h2>Saving, and keeping an old design</h2>
   <p>
-    While a design is a draft you can change it as much as you like. When it is
-    settled, press <strong>Publish</strong>.
+    <strong>Save</strong> overwrites the design. There is no history and nothing
+    is kept behind your back: what is on screen is what is stored, and the date
+    on the card is the date you last saved it.
   </p>
-  <table class="plain">
-    <tr><th>Draft</th><td>Shown with a <code>*</code> in the design list. Editable, and can be deleted.</td></tr>
-    <tr><th>Published</th><td>Locked. The form goes grey and the only button left is Revise.</td></tr>
-    <tr><th>Revise</th><td>Starts the next letter — A becomes B — as a fresh draft. The published one is untouched and stays in the list forever.</td></tr>
-  </table>
   <p>
-    That is the point of publishing: a pallet built last year was built to rev A,
-    and if a client raises a complaint you can still print the exact sheet from
-    that date.
+    So if a design has been built to and you are about to rework it, press
+    <strong>Duplicate</strong> first. That gives you two designs which have
+    nothing to do with each other from then on — change one and the other is
+    untouched. Rename the one you are keeping to something like
+    <code>1000 x 800 (old)</code> and it will read plainly on the dashboard.
   </p>
 
   <div class="figure">
@@ -163,8 +170,8 @@ ${page(`
     <tr><th>Export</th><td>The design as a file you can keep or send. <strong>Import</strong> reads one back.</td></tr>
   </table>
   <p>
-    Both the PDF and the DXF are named for the design and its revision, so
-    <code>AP-001-rev-B.pdf</code> is exactly what it says it is.
+    Both the PDF and the DXF are named for the design and the date it was last
+    saved, so <code>AP-001-2026-08-03.pdf</code> is exactly what it says it is.
   </p>
 
   <h2>Where your designs live</h2>

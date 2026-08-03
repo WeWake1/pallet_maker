@@ -15,6 +15,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "serve": "tsx src/server/main.ts",
+    "serve:watch": "tsx watch src/server/main.ts",
     "start": "npm run build && npm run serve",
     "test": "vitest run",
     "test:watch": "vitest",

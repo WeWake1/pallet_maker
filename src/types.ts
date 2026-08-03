@@ -54,13 +54,11 @@ export interface NailSpec {
 }
 
 export interface Slot {
-  /** Slots with identical dimensions share a partNo. */
-  partNo: number;
-  thickness: number;
-  /** Extent across the direction the boards run. */
-  width: number;
   /** Extent along the direction the boards run. */
   length: number;
+  /** Extent across the direction the boards run. */
+  width: number;
+  thickness: number;
   material: string;
   /** No gap between this slot and the previous one. */
   joinedToPrev: boolean;
@@ -71,7 +69,6 @@ export interface Slot {
 }
 
 export interface BlockCell {
-  partNo: number;
   /** Along the pallet length. */
   lengthMm: number;
   /** Across the pallet width. */
@@ -95,12 +92,11 @@ export interface BlockGrid {
 }
 
 export interface SheetSpec {
-  partNo: number;
-  thickness: number;
-  /** Across the pallet width. */
-  width: number;
   /** Along the pallet length. */
   length: number;
+  /** Across the pallet width. */
+  width: number;
+  thickness: number;
   /** 'plywood' */
   material: string;
 }
@@ -135,10 +131,31 @@ export interface Layer {
   content: LayerContent;
 }
 
+/**
+ * A customer. Kept as a record of its own rather than as a name typed on each
+ * design, so that a client can be on the books before they have ordered
+ * anything, and so that correcting a spelling corrects it once.
+ */
+export interface Client {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
 export interface Pallet {
   id: string;
-  /** e.g. AP-001 */
+  /**
+   * e.g. AP-001. Empty until the shop has one to give it — a design is saved,
+   * printed and worked on by name long before it is assigned a code.
+   */
   palletCode: string;
+  /** Which client this design belongs to. The clients list is the authority. */
+  clientId: string;
+  /**
+   * The client's name as it stood when this was last written. A copy, kept so
+   * that a sheet can be printed from the document alone; renaming a client
+   * refreshes it on every design of theirs.
+   */
   clientName: string;
   clientPartNo?: string;
   /** e.g. "1000 x 800" */
@@ -161,13 +178,17 @@ export interface Pallet {
   nails: NailSpec[];
   notes?: string;
 
-  /** 'A', 'B', ... */
-  revision: string;
-  /** ISO date */
-  revisionDate: string;
-  /** id of the previous revision */
-  supersedes?: string;
-  frozen: boolean;
+  /**
+   * ISO date, set by the store every time the design is written. A design is
+   * edited in place and overwrites what was there, so this date is the whole of
+   * what says how current it is.
+   */
+  updatedAt: string;
+  /**
+   * Free text printed in the title block beside the date. Whatever the shop or
+   * the client needs it to say — "(old)", a client drawing number, nothing.
+   */
+  note?: string;
 
   /** Ordered top to bottom. */
   layers: Layer[];

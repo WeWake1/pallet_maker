@@ -152,6 +152,69 @@ empty stack of layers. Nearly every design is a variation on that one, so the
 work is changing numbers rather than building a pallet before anything can be
 seen.
 
+### One size for the whole layer
+
+In about eight designs in ten, every board in a layer is the same size. So each
+layer is headed by a row that describes the whole of it — length, width,
+thickness, how many, and what timber they are all made of. Seven identical top
+boards is three numbers and a 7, not seven rows of the same numbers typed out
+again. Blocks have the same row, over the whole grid.
+
+The board-by-board table underneath is a correction tool rather than something
+to read, so it is folded away. Its heading says how many components the layer
+has and whether they are all one size; opening it is how the odd board out gets
+its own numbers, and it opens by itself where a design already has more than one
+size in the layer, or where a board has just been clicked on the drawing. Where
+boards genuinely differ, the layer row above reads **mixed**.
+
+A size set across a layer writes only what it was given. Nudges and joins are
+each about where one board sits rather than what size it is, so they survive the
+whole layer being resized.
+
+### Dimensions read length, width, thickness
+
+Every size in the editor and on the sheet is stated in that order, which is the
+order the shop floor says them in, with the quantity last: a top board is
+`1000 × 100 × 18`, seven off.
+
+### Part numbers are worked out, not typed
+
+A part is a distinct piece of timber — one kind of component, one size, one
+material, one variant — and its number falls out of the design rather than being
+entered against each board. Numbering runs from the top layer down, in the order
+components appear. Two boards of one size share a number; widen one and it
+becomes a part of its own, with no field to keep in step and no way for a number
+to mean two different sizes. See [src/geometry/parts.ts](src/geometry/parts.ts);
+the numbers appear on the components table of the printed sheet.
+
+### The pallet code is optional
+
+A design is drawn, saved and printed long before the shop has a code to give it.
+Requiring one up front only meant a placeholder was typed in and never
+corrected, so a design saves without it and the sheet prints its name alone.
+
+### Unsaved work
+
+The store is only ever written by **Save** — a half-finished edit must never
+overwrite a design the shop is already building to, and there is no history to
+recover it from. That used to leave the work between one Save and the next with
+nowhere to live, so closing the tab lost it.
+
+Every edit is now written to `localStorage` as it is typed, half a second behind
+the keyboard, and immediately if the page is going away. Reopening a design
+picks its draft up and says where it came from; the draft is dropped as soon as
+the store holds the same thing. A design that was never saved has no row to be a
+card of, so its draft appears on the dashboard as one, marked *never saved* —
+without that, the only copy of an afternoon's work would be somewhere nothing on
+screen could reach. Leaving the page with unsaved work also raises the browser's
+own "leave site?" prompt, so an accidental close is caught rather than only
+recovered from.
+
+Drafts are not versions: nothing reads one but the editor that wrote it, they
+are never validated (half the point is holding a design too unfinished to save),
+and they are cleaned up after 30 days. Storage that is unavailable or full costs
+the drafts and nothing else — see [src/editor/drafts.ts](src/editor/drafts.ts).
+
 The editor is the one place a design may be incomplete. It lays out and previews
 whatever it has, listing what is still missing alongside anything the layout
 engine objects to, and refuses to print a sheet while the layout has errors.

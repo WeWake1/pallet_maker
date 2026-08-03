@@ -26,10 +26,10 @@ describe('the components table', () => {
     expect(groups[0]!.rows[0]).toMatchObject({
       partNo: 1,
       description: 'Top board',
-      quantity: 7,
-      thickness: 18,
-      width: 100,
       length: 1000,
+      width: 100,
+      thickness: 18,
+      quantity: 7,
     });
     expect(totalPieces(groups)).toBe(22);
   });
@@ -50,9 +50,9 @@ describe('the components table', () => {
     const pallet = loadFixture('wide-centre-block-row');
     const groups = componentTable(pallet, computeLayout(pallet));
     const blocks = groups.find((g) => g.heading === 'Blocks')!;
-    expect(blocks.rows.map((r) => [r.quantity, r.thickness, r.width, r.length])).toEqual([
-      [6, 100, 100, 100],
-      [3, 100, 100, 150],
+    expect(blocks.rows.map((r) => [r.length, r.width, r.thickness, r.quantity])).toEqual([
+      [100, 100, 100, 6],
+      [150, 100, 100, 3],
     ]);
   });
 });
@@ -68,14 +68,24 @@ describe('the sheet', () => {
     expect(html).toContain(`height: ${PAGE.height}mm`);
   });
 
-  it('heads the sheet with client, pallet and revision', () => {
+  it('heads the sheet with client, pallet, date and note', () => {
     const header = /<header>([\s\S]*?)<\/header>/.exec(html)![1]!;
     const text = textOf(header);
     expect(text).toContain('Demo Client');
     expect(text).toContain('1200 x 1000 wing');
     expect(text).toContain('AP-005');
-    expect(text).toContain('Rev A');
-    expect(text).toContain('2026-07-27');
+    // The date the design was last saved, which is what says how current it is.
+    expect(text).toContain(pallet.updatedAt);
+  });
+
+  it('prints the free-text note beside the date, and nothing when there is none', () => {
+    const noted = textOf(
+      /<header>([\s\S]*?)<\/header>/.exec(
+        renderSheet({ ...pallet, note: 'supersedes AP-004 (old)' }, layout),
+      )![1]!,
+    );
+    expect(noted).toContain('supersedes AP-004 (old)');
+    expect(textOf(/<header>([\s\S]*?)<\/header>/.exec(html)![1]!)).not.toContain('supersedes');
   });
 
   it('carries all five views, each once', () => {
@@ -134,7 +144,8 @@ describe('the sheet', () => {
   it('lists the components, the nails and the load and material', () => {
     const text = textOf(html);
     expect(text).toContain('Top board');
-    expect(text).toContain('18 × 100 × 1200');
+    // Length, then width, then thickness: the order the shop floor says them in.
+    expect(text).toContain('1200 × 100 × 18');
     expect(text).toContain('top board to centre board');
     expect(text).toContain('wire nail');
     expect(text).toContain('Static load 3000 kg');

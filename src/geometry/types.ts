@@ -23,6 +23,11 @@ export type PieceSource =
   | { kind: 'sheet' };
 
 export interface PlacedPiece {
+  /**
+   * Which part this piece is one of. Derived from its kind, size, material and
+   * variant — see `parts.ts` — never typed in, so pieces that share a number
+   * really are the same piece of timber.
+   */
   partNo: number;
   layerKind: LayerKind;
   /** Which layer produced this piece. Renderers group and emphasise by this. */

@@ -77,12 +77,18 @@ export function renderSheet(
   };
 
   const size = `${mmLabel(layout.overallLength)} × ${mmLabel(layout.overallWidth)} × ${mmLabel(layout.overallHeight)}`;
+  // A design without a code is a normal design, so the line under the name is
+  // the size alone rather than the size behind a dangling separator.
+  const subtitle = pallet.palletCode ? `${pallet.palletCode} · ${size}` : size;
+  const title = [pallet.palletCode, pallet.palletName, pallet.updatedAt]
+    .filter((part) => part !== '')
+    .join(' ');
 
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>${esc(pallet.palletCode)} ${esc(pallet.palletName)} rev ${esc(pallet.revision)}</title>
+<title>${esc(title)}</title>
 <style>${styles()}</style>
 </head>
 <body>
@@ -94,11 +100,14 @@ export function renderSheet(
     </div>
     <div class="what">
       <div class="name">${esc(pallet.palletName)}</div>
-      <div class="sub">${esc(pallet.palletCode)} · ${esc(size)}</div>
+      <div class="sub">${esc(subtitle)}</div>
     </div>
+    <!-- The date is stamped by the store on every save, so it is always the
+         date of the drawing on this page. The note underneath is free text and
+         says whatever the shop or the client needs it to. -->
     <div class="when">
-      <div class="name">Rev ${esc(pallet.revision)}</div>
-      <div class="sub">${esc(pallet.revisionDate)}</div>
+      <div class="name">${esc(pallet.updatedAt)}</div>
+      <div class="sub">${pallet.note ? esc(pallet.note) : ''}</div>
     </div>
   </header>
 
@@ -161,8 +170,8 @@ function componentsBlock(groups: ComponentGroup[]): string {
               `<tr>` +
               `<td class="num">${row.partNo}</td>` +
               `<td>${esc(row.description)}${row.variant ? ` <span class="variant">${esc(row.variant)}</span>` : ''}</td>` +
+              `<td class="dims">${mmLabel(row.length)} × ${mmLabel(row.width)} × ${mmLabel(row.thickness)}</td>` +
               `<td class="num">${row.quantity}</td>` +
-              `<td class="dims">${mmLabel(row.thickness)} × ${mmLabel(row.width)} × ${mmLabel(row.length)}</td>` +
               `</tr>`,
           )
           .join(''),
@@ -172,7 +181,7 @@ function componentsBlock(groups: ComponentGroup[]): string {
   return block(
     'Components',
     `<table class="grid">
-      <thead><tr><th>Part</th><th>Description</th><th>Qty</th><th>T × W × L</th></tr></thead>
+      <thead><tr><th>Part</th><th>Description</th><th>L × W × T</th><th>Qty</th></tr></thead>
       <tbody>${body}</tbody>
     </table>`,
   );

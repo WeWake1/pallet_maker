@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { backupDatabase, backupDirectoryFor, listBackups } from '../src/server/backup.js';
 import { openDb } from '../src/server/db.js';
 import type { Db } from '../src/server/db.js';
-import { PalletRepository } from '../src/server/repository.js';
+import { ClientRepository, PalletRepository } from '../src/server/repository.js';
 import { loadFixture } from './helpers.js';
 
 let directory: string;
@@ -23,36 +23,44 @@ afterEach(() => {
   rmSync(directory, { recursive: true, force: true });
 });
 
+/** A stored design, with the client it needs to belong to. */
+function store(target: Db, code: string) {
+  const clients = new ClientRepository(target);
+  const client = clients.list()[0] ?? clients.create('ACME Logistics');
+  const fixture = loadFixture('block-1000x800');
+  return new PalletRepository(target).save(
+    { ...fixture, palletCode: code, clientId: client.id, clientName: client.name },
+    clients,
+  );
+}
+
 describe('backups', () => {
   it('take a copy that holds the designs that were in it', async () => {
-    const pallets = new PalletRepository(db);
-    const saved = pallets.save({ ...loadFixture('block-1000x800'), palletCode: 'AP-500' });
-    pallets.freeze(saved.id);
+    const saved = store(db, 'AP-500');
 
     const file = await backupDatabase(db, dbPath);
     expect(existsSync(file)).toBe(true);
 
-    // The copy is a database of its own, and the design is in it as published.
+    // The copy is a database of its own, and the design is in it.
     const copy = openDb(file);
     try {
-      const inCopy = new PalletRepository(copy).get(saved.id);
-      expect(inCopy.palletCode).toBe('AP-500');
-      expect(inCopy.frozen).toBe(true);
+      expect(new PalletRepository(copy).get(saved.id).palletCode).toBe('AP-500');
     } finally {
       copy.close();
     }
   });
 
-  it('keep the rule about frozen rows, since the copy is the record too', async () => {
-    const pallets = new PalletRepository(db);
-    const saved = pallets.save({ ...loadFixture('block-1000x800'), palletCode: 'AP-501' });
-    pallets.freeze(saved.id);
+  /**
+   * Backups are the whole of the safety net now that saving overwrites, so a
+   * copy has to be a working database and not only a file on disk.
+   */
+  it('carry the clients across, so the copy opens as a whole library', async () => {
+    store(db, 'AP-501');
 
     const copy = openDb(await backupDatabase(db, dbPath));
     try {
-      expect(() =>
-        copy.prepare('UPDATE pallets SET pallet_name = ? WHERE id = ?').run('meddled', saved.id),
-      ).toThrow(/frozen revision is never edited/);
+      expect(new ClientRepository(copy).list().map((c) => c.name)).toEqual(['ACME Logistics']);
+      expect(new PalletRepository(copy).dashboard(new ClientRepository(copy))).toHaveLength(1);
     } finally {
       copy.close();
     }

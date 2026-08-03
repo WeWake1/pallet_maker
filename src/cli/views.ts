@@ -95,11 +95,16 @@ function contactSheet(
     )
     .join('');
 
+  // A pallet code is optional, so the heading is the name alone without one.
+  const heading = pallet.palletCode
+    ? `${pallet.palletCode} — ${pallet.palletName}`
+    : pallet.palletName;
+
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>${esc(pallet.palletCode)} ${esc(pallet.palletName)} — views</title>
+<title>${esc(heading)} — views</title>
 <style>
   body { font: 13px/1.5 'Helvetica Neue', Helvetica, Arial, sans-serif; margin: 24px; color: #1b1b1b; }
   h1 { font-size: 17px; margin: 0 0 2px; }
@@ -111,8 +116,8 @@ function contactSheet(
 </style>
 </head>
 <body>
-<h1>${esc(pallet.palletCode)} — ${esc(pallet.palletName)}</h1>
-<p class="meta">${esc(pallet.clientName)} · rev ${esc(pallet.revision)} ${esc(pallet.revisionDate)}
+<h1>${esc(heading)}</h1>
+<p class="meta">${esc(pallet.clientName)} · ${esc(pallet.updatedAt)}
  · ${layout.overallLength} × ${layout.overallWidth} × ${layout.overallHeight}
  · ${layout.pieces.length} pieces · ${layout.nailDots.length} nails</p>
 ${rows}

@@ -1,15 +1,55 @@
 import { useEffect, useRef } from 'react';
 import type { LayerLayout } from '../geometry/types.js';
 import { mmLabel } from '../render/scene.js';
-import type { Direction, Layer, LayerContent } from '../types.js';
+import type { BlockCell, Direction, Layer, LayerContent, SheetSpec, Slot } from '../types.js';
 import type { Action, Selection } from './state.js';
-import { sameSource } from './state.js';
-import { Button, Check, Field, NumberInput, Panel, Select, TextInput } from './ui.jsx';
+import { MAX_GRID_SIDE, MAX_SLOTS, sameSource } from './state.js';
+import { Button, Check, Disclosure, Field, NumberInput, Panel, Select, TextInput } from './ui.jsx';
 
 /**
- * The form is layer based: add slots one at a time and set what each one is.
+ * The form is layer based: say how many components the layer has and what size
+ * they are, then correct any that differ.
  * Nothing here draws anything; it edits the numbers the drawing is made from.
  */
+
+/**
+ * The value every component in a layer shares, or null where they differ.
+ *
+ * Nearly every layer is one size repeated, so nearly every one of these is a
+ * value, and the row that stands for the whole layer can be filled in.
+ */
+function common<T, V>(items: T[], read: (item: T) => V): V | null {
+  const first = items[0];
+  if (first === undefined) return null;
+  const value = read(first);
+  return items.every((item) => read(item) === value) ? value : null;
+}
+
+/** A number for a field standing in for a whole layer: blank when they differ. */
+function sharedNumber<T>(items: T[], read: (item: T) => number): number {
+  return common(items, read) ?? Number.NaN;
+}
+
+const MIXED = 'mixed';
+
+/**
+ * How many distinct sizes a layer's components come in.
+ *
+ * One is the normal case and the case the layer row describes on its own; more
+ * than one is the design that needs the table underneath opening.
+ */
+function sizeCount(sizes: string[]): number {
+  return new Set(sizes).size;
+}
+
+/** What the folded-away table is called, and whether it has anything to say. */
+function componentSummary(what: string, sizes: string[]): string {
+  const distinct = sizeCount(sizes);
+  const each = `${sizes.length} ${what}${sizes.length === 1 ? '' : 's'}`;
+  return distinct <= 1
+    ? `${each}, all the same — open to change one on its own`
+    : `${each} in ${distinct} sizes — open to see them`;
+}
 
 const KIND_LABEL: Array<[Layer['kind'], string]> = [
   ['panel', 'Plywood sheet over the deck'],
@@ -34,13 +74,11 @@ const CONTENTS: Array<[LayerContent['type'], string]> = [
 export function LayerEditor({
   layer,
   computed,
-  frozen,
   selection,
   dispatch,
 }: {
   layer: Layer;
   computed: LayerLayout | undefined;
-  frozen: boolean;
   selection: Selection | null;
   dispatch: (action: Action) => void;
 }) {
@@ -51,13 +89,13 @@ export function LayerEditor({
       title={KIND_LABEL.find(([kind]) => kind === layer.kind)?.[1] ?? layer.kind}
       actions={
         <div className="flex gap-1">
-          <Button onClick={() => dispatch({ type: 'moveLayer', layerId: layer.id, by: -1 })} disabled={frozen} title="Move up">
+          <Button onClick={() => dispatch({ type: 'moveLayer', layerId: layer.id, by: -1 })} title="Move up">
             ↑
           </Button>
-          <Button onClick={() => dispatch({ type: 'moveLayer', layerId: layer.id, by: 1 })} disabled={frozen} title="Move down">
+          <Button onClick={() => dispatch({ type: 'moveLayer', layerId: layer.id, by: 1 })} title="Move down">
             ↓
           </Button>
-          <Button tone="danger" onClick={() => dispatch({ type: 'removeLayer', layerId: layer.id })} disabled={frozen}>
+          <Button tone="danger" onClick={() => dispatch({ type: 'removeLayer', layerId: layer.id })}>
             Remove
           </Button>
         </div>
@@ -68,7 +106,6 @@ export function LayerEditor({
           <Select
             value={layer.kind}
             options={KIND_LABEL}
-            disabled={frozen}
             onChange={(kind) => dispatch({ type: 'patchLayer', layerId: layer.id, patch: { kind } })}
           />
         </Field>
@@ -76,7 +113,6 @@ export function LayerEditor({
           <Select
             value={layer.content.type}
             options={CONTENTS}
-            disabled={frozen}
             onChange={(contentType) => dispatch({ type: 'setContent', layerId: layer.id, contentType })}
           />
         </Field>
@@ -84,7 +120,7 @@ export function LayerEditor({
           <Select
             value={layer.direction}
             options={DIRECTIONS}
-            disabled={frozen || layer.content.type === 'grid'}
+            disabled={layer.content.type === 'grid'}
             onChange={(direction) => dispatch({ type: 'patchLayer', layerId: layer.id, patch: { direction } })}
           />
         </Field>
@@ -107,7 +143,6 @@ export function LayerEditor({
             <NumberInput
               value={layer.spanMm ?? 0}
               min={0}
-              disabled={frozen}
               onChange={(value) =>
                 dispatch({ type: 'patchLayer', layerId: layer.id, patch: { spanMm: value > 0 ? value : null } })
               }
@@ -116,7 +151,6 @@ export function LayerEditor({
           <Field label="Offset (mm)">
             <NumberInput
               value={layer.offsetMm}
-              disabled={frozen}
               onChange={(offsetMm) => dispatch({ type: 'patchLayer', layerId: layer.id, patch: { offsetMm } })}
             />
           </Field>
@@ -124,7 +158,6 @@ export function LayerEditor({
             <NumberInput
               value={layer.runSpanMm ?? 0}
               min={0}
-              disabled={frozen}
               onChange={(value) =>
                 dispatch({ type: 'patchLayer', layerId: layer.id, patch: { runSpanMm: value > 0 ? value : null } })
               }
@@ -133,7 +166,6 @@ export function LayerEditor({
           <Field label="Run offset (mm)">
             <NumberInput
               value={layer.runOffsetMm}
-              disabled={frozen}
               onChange={(runOffsetMm) => dispatch({ type: 'patchLayer', layerId: layer.id, patch: { runOffsetMm } })}
             />
           </Field>
@@ -141,66 +173,145 @@ export function LayerEditor({
       )}
 
       {layer.content.type === 'sequence' && (
-        <Slots layer={layer} slots={layer.content.slots} frozen={frozen} selection={selection} dispatch={dispatch} />
+        <Slots layer={layer} slots={layer.content.slots} selection={selection} dispatch={dispatch} />
       )}
-      {layer.content.type === 'grid' && <Grid layer={layer} frozen={frozen} dispatch={dispatch} />}
-      {layer.content.type === 'sheet' && <Sheet layer={layer} frozen={frozen} dispatch={dispatch} />}
+      {layer.content.type === 'grid' && <Grid layer={layer} dispatch={dispatch} />}
+      {layer.content.type === 'sheet' && <Sheet layer={layer} dispatch={dispatch} />}
     </Panel>
+  );
+}
+
+/**
+ * The whole layer in one row: how many boards, and the one size they all are.
+ *
+ * In about eight designs in ten every board in a layer is identical, so this is
+ * the row that actually gets filled in — seven boards is a 7 in the count, not
+ * seven rows of the same three numbers typed out again. Where a design is one
+ * of the other two in ten, the field reads "mixed" and the folded-away table
+ * below is still there to correct the odd board out.
+ */
+function AllBoards({
+  layer,
+  slots,
+  dispatch,
+}: {
+  layer: Layer;
+  slots: Slot[];
+  dispatch: (action: Action) => void;
+}) {
+  const all = (patch: Partial<Slot>) =>
+    dispatch({ type: 'patchAllSlots', layerId: layer.id, patch });
+
+  return (
+    <div className="rounded border border-slate-200 bg-slate-50 p-2">
+      <div className="grid grid-cols-5 gap-2">
+        <Field label="Length">
+          <NumberInput
+            value={sharedNumber(slots, (slot) => slot.length)}
+            min={1}
+            placeholder={MIXED}
+            onChange={(length) => all({ length })}
+          />
+        </Field>
+        <Field label="Width">
+          <NumberInput
+            value={sharedNumber(slots, (slot) => slot.width)}
+            min={1}
+            placeholder={MIXED}
+            onChange={(width) => all({ width })}
+          />
+        </Field>
+        <Field label="Thick">
+          <NumberInput
+            value={sharedNumber(slots, (slot) => slot.thickness)}
+            min={1}
+            placeholder={MIXED}
+            onChange={(thickness) => all({ thickness })}
+          />
+        </Field>
+        <Field label="Qty">
+          <NumberInput
+            value={slots.length}
+            min={1}
+            max={MAX_SLOTS}
+            onChange={(count) => dispatch({ type: 'setSlotCount', layerId: layer.id, count })}
+          />
+        </Field>
+        <Field label="Material">
+          <TextInput
+            value={common(slots, (slot) => slot.material) ?? ''}
+            placeholder={MIXED}
+            onChange={(material) => all({ material })}
+          />
+        </Field>
+      </div>
+      <p className="mt-1.5 text-[11px] text-slate-500">
+        Sets every board in this layer at once. Nudges and joins are left alone.
+      </p>
+    </div>
   );
 }
 
 function Slots({
   layer,
   slots,
-  frozen,
   selection,
   dispatch,
 }: {
   layer: Layer;
-  slots: import('../types.js').Slot[];
-  frozen: boolean;
+  slots: Slot[];
   selection: Selection | null;
   dispatch: (action: Action) => void;
 }) {
+  const sizes = slots.map((slot) => `${slot.length}x${slot.width}x${slot.thickness}`);
+  // A board picked on the drawing has to be reachable, so a selection inside
+  // this layer opens the table rather than hiding the row it just focused.
+  const selectedHere = selection?.layerId === layer.id && selection.source.kind === 'slot';
+
   return (
-    <div className="mt-3">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-[10px] uppercase tracking-wide text-slate-400">
-            <th className="w-8 text-left font-medium">#</th>
-            <th className="w-14 text-left font-medium">Part</th>
-            <th className="text-left font-medium">Thick</th>
-            <th className="text-left font-medium">Width</th>
-            <th className="text-left font-medium">Length</th>
-            <th className="text-left font-medium">Material</th>
-            <th className="text-left font-medium">Variant</th>
-            <th className="w-16 text-left font-medium">Nudge</th>
-            <th className="w-20 text-left font-medium">Joined</th>
-            <th className="w-8" />
-          </tr>
-        </thead>
-        <tbody>
-          {slots.map((slot, index) => (
-            <SlotRow
-              key={index}
-              layerId={layer.id}
-              slot={slot}
-              index={index}
-              frozen={frozen}
-              selected={
-                selection?.layerId === layer.id &&
-                sameSource(selection.source, { kind: 'slot', index })
-              }
-              dispatch={dispatch}
-            />
-          ))}
-        </tbody>
-      </table>
-      <div className="mt-2">
-        <Button onClick={() => dispatch({ type: 'addSlot', layerId: layer.id })} disabled={frozen}>
-          Add board
-        </Button>
-      </div>
+    <div className="mt-3 space-y-2">
+      <AllBoards layer={layer} slots={slots} dispatch={dispatch} />
+      <Disclosure
+        summary={componentSummary('board', sizes)}
+        defaultOpen={sizeCount(sizes) > 1}
+        openWhen={selectedHere}
+      >
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-[10px] uppercase tracking-wide text-slate-400">
+              <th className="w-8 text-left font-medium">#</th>
+              <th className="text-left font-medium">Length</th>
+              <th className="text-left font-medium">Width</th>
+              <th className="text-left font-medium">Thick</th>
+              <th className="text-left font-medium">Material</th>
+              <th className="text-left font-medium">Variant</th>
+              <th className="w-16 text-left font-medium">Nudge</th>
+              <th className="w-20 text-left font-medium">Joined</th>
+              <th className="w-8" />
+            </tr>
+          </thead>
+          <tbody>
+            {slots.map((slot, index) => (
+              <SlotRow
+                key={index}
+                layerId={layer.id}
+                slot={slot}
+                index={index}
+                selected={
+                  selection?.layerId === layer.id &&
+                  sameSource(selection.source, { kind: 'slot', index })
+                }
+                dispatch={dispatch}
+              />
+            ))}
+          </tbody>
+        </table>
+        <div className="mt-2">
+          <Button onClick={() => dispatch({ type: 'addSlot', layerId: layer.id })}>
+            Add board
+          </Button>
+        </div>
+      </Disclosure>
     </div>
   );
 }
@@ -209,20 +320,17 @@ function SlotRow({
   layerId,
   slot,
   index,
-  frozen,
   selected,
   dispatch,
 }: {
   layerId: string;
-  slot: import('../types.js').Slot;
+  slot: Slot;
   index: number;
-  frozen: boolean;
   selected: boolean;
   dispatch: (action: Action) => void;
 }) {
   const row = useRef<HTMLTableRowElement>(null);
-  const patch = (patch: Partial<import('../types.js').Slot>) =>
-    dispatch({ type: 'patchSlot', layerId, index, patch });
+  const patch = (patch: Partial<Slot>) => dispatch({ type: 'patchSlot', layerId, index, patch });
 
   // Clicking a board in the preview selects it and focuses its row here.
   useEffect(() => {
@@ -237,40 +345,36 @@ function SlotRow({
     >
       <td className="text-xs text-slate-400">{index + 1}</td>
       <td className="pr-1">
-        <NumberInput value={slot.partNo} min={1} disabled={frozen} onChange={(partNo) => patch({ partNo })} />
+        <NumberInput value={slot.length} min={1} onChange={(length) => patch({ length })} />
       </td>
       <td className="pr-1">
-        <NumberInput value={slot.thickness} min={1} disabled={frozen} onChange={(thickness) => patch({ thickness })} />
+        <NumberInput value={slot.width} min={1} onChange={(width) => patch({ width })} />
       </td>
       <td className="pr-1">
-        <NumberInput value={slot.width} min={1} disabled={frozen} onChange={(width) => patch({ width })} />
+        <NumberInput value={slot.thickness} min={1} onChange={(thickness) => patch({ thickness })} />
       </td>
       <td className="pr-1">
-        <NumberInput value={slot.length} min={1} disabled={frozen} onChange={(length) => patch({ length })} />
-      </td>
-      <td className="pr-1">
-        <TextInput value={slot.material} disabled={frozen} onChange={(material) => patch({ material })} />
+        <TextInput value={slot.material} onChange={(material) => patch({ material })} />
       </td>
       <td className="pr-1">
         <TextInput
           value={slot.variant ?? ''}
-          disabled={frozen}
           onChange={(value) => patch({ variant: value === '' ? undefined : value })}
         />
       </td>
       <td className="pr-1">
-        <NumberInput value={slot.nudgeMm} disabled={frozen} onChange={(nudgeMm) => patch({ nudgeMm })} />
+        <NumberInput value={slot.nudgeMm} onChange={(nudgeMm) => patch({ nudgeMm })} />
       </td>
       <td>
         <Check
           checked={slot.joinedToPrev}
-          disabled={frozen || index === 0}
+          disabled={index === 0}
           label=""
           onChange={(joinedToPrev) => patch({ joinedToPrev })}
         />
       </td>
       <td>
-        <Button tone="danger" disabled={frozen} onClick={() => dispatch({ type: 'removeSlot', layerId, index })}>
+        <Button tone="danger" onClick={() => dispatch({ type: 'removeSlot', layerId, index })}>
           ×
         </Button>
       </td>
@@ -280,24 +384,67 @@ function SlotRow({
 
 function Grid({
   layer,
-  frozen,
   dispatch,
 }: {
   layer: Layer;
-  frozen: boolean;
   dispatch: (action: Action) => void;
 }) {
   if (layer.content.type !== 'grid') return null;
   const grid = layer.content.grid;
+  const cells = grid.cells.flat();
+  const cellSizes = cells.map((cell) => `${cell.lengthMm}x${cell.widthMm}x${cell.heightMm}`);
+  const all = (patch: Partial<BlockCell>) =>
+    dispatch({ type: 'patchAllCells', layerId: layer.id, patch });
 
   return (
     <div className="mt-3">
-      <div className="grid grid-cols-6 gap-2">
+      {/* The nine blocks under a pallet are nearly always one size, so they are
+          set once here. The table below is for the design where they are not. */}
+      <div className="rounded border border-slate-200 bg-slate-50 p-2">
+        <div className="grid grid-cols-4 gap-2">
+          <Field label="Length">
+            <NumberInput
+              value={sharedNumber(cells, (cell) => cell.lengthMm)}
+              min={1}
+              placeholder={MIXED}
+              onChange={(lengthMm) => all({ lengthMm })}
+            />
+          </Field>
+          <Field label="Width">
+            <NumberInput
+              value={sharedNumber(cells, (cell) => cell.widthMm)}
+              min={1}
+              placeholder={MIXED}
+              onChange={(widthMm) => all({ widthMm })}
+            />
+          </Field>
+          <Field label="Height">
+            <NumberInput
+              value={sharedNumber(cells, (cell) => cell.heightMm)}
+              min={1}
+              placeholder={MIXED}
+              onChange={(heightMm) => all({ heightMm })}
+            />
+          </Field>
+          <Field label="Material">
+            <TextInput
+              value={common(cells, (cell) => cell.material) ?? ''}
+              placeholder={MIXED}
+              onChange={(material) => all({ material })}
+            />
+          </Field>
+        </div>
+        <p className="mt-1.5 text-[11px] text-slate-500">
+          Sets all {cells.length} blocks at once.
+        </p>
+      </div>
+
+      <div className="mt-3 grid grid-cols-6 gap-2">
         <Field label="Rows">
           <NumberInput
             value={grid.rows}
             min={1}
-            disabled={frozen}
+            max={MAX_GRID_SIDE}
             onChange={(rows) => dispatch({ type: 'patchGrid', layerId: layer.id, patch: { rows } })}
           />
         </Field>
@@ -305,7 +452,7 @@ function Grid({
           <NumberInput
             value={grid.cols}
             min={1}
-            disabled={frozen}
+            max={MAX_GRID_SIDE}
             onChange={(cols) => dispatch({ type: 'patchGrid', layerId: layer.id, patch: { cols } })}
           />
         </Field>
@@ -313,7 +460,6 @@ function Grid({
           <NumberInput
             value={grid.rowSpanMm ?? 0}
             min={0}
-            disabled={frozen}
             onChange={(value) =>
               dispatch({ type: 'patchGrid', layerId: layer.id, patch: { rowSpanMm: value > 0 ? value : null } })
             }
@@ -322,7 +468,6 @@ function Grid({
         <Field label="Row offset">
           <NumberInput
             value={grid.rowOffsetMm}
-            disabled={frozen}
             onChange={(rowOffsetMm) => dispatch({ type: 'patchGrid', layerId: layer.id, patch: { rowOffsetMm } })}
           />
         </Field>
@@ -330,7 +475,6 @@ function Grid({
           <NumberInput
             value={grid.colSpanMm ?? 0}
             min={0}
-            disabled={frozen}
             onChange={(value) =>
               dispatch({ type: 'patchGrid', layerId: layer.id, patch: { colSpanMm: value > 0 ? value : null } })
             }
@@ -339,98 +483,94 @@ function Grid({
         <Field label="Col offset">
           <NumberInput
             value={grid.colOffsetMm}
-            disabled={frozen}
             onChange={(colOffsetMm) => dispatch({ type: 'patchGrid', layerId: layer.id, patch: { colOffsetMm } })}
           />
         </Field>
       </div>
 
-      <table className="mt-3 w-full text-sm">
-        <thead>
-          <tr className="text-[10px] uppercase tracking-wide text-slate-400">
-            <th className="w-12 text-left font-medium">Cell</th>
-            <th className="w-14 text-left font-medium">Part</th>
-            <th className="text-left font-medium">Length</th>
-            <th className="text-left font-medium">Width</th>
-            <th className="text-left font-medium">Height</th>
-            <th className="text-left font-medium">Material</th>
-            <th className="w-24" />
-          </tr>
-        </thead>
-        <tbody>
-          {grid.cells.map((row, r) =>
-            row.map((cell, c) => {
-              const patch = (patch: Partial<import('../types.js').BlockCell>) =>
-                dispatch({ type: 'patchCell', layerId: layer.id, row: r, col: c, patch });
-              return (
-                <tr key={`${r}-${c}`} className="hover:bg-slate-50">
-                  <td className="text-xs text-slate-400">
-                    r{r + 1} c{c + 1}
-                  </td>
-                  <td className="pr-1">
-                    <NumberInput value={cell.partNo} min={1} disabled={frozen} onChange={(partNo) => patch({ partNo })} />
-                  </td>
-                  <td className="pr-1">
-                    <NumberInput value={cell.lengthMm} min={1} disabled={frozen} onChange={(lengthMm) => patch({ lengthMm })} />
-                  </td>
-                  <td className="pr-1">
-                    <NumberInput value={cell.widthMm} min={1} disabled={frozen} onChange={(widthMm) => patch({ widthMm })} />
-                  </td>
-                  <td className="pr-1">
-                    <NumberInput value={cell.heightMm} min={1} disabled={frozen} onChange={(heightMm) => patch({ heightMm })} />
-                  </td>
-                  <td className="pr-1">
-                    <TextInput value={cell.material} disabled={frozen} onChange={(material) => patch({ material })} />
-                  </td>
-                  <td>
-                    <Button
-                      disabled={frozen}
-                      title="Copy this cell to every cell in the grid"
-                      onClick={() => dispatch({ type: 'fillGrid', layerId: layer.id, row: r, col: c })}
-                    >
-                      Fill all
-                    </Button>
-                  </td>
-                </tr>
-              );
-            }),
-          )}
-        </tbody>
-      </table>
+      <div className="mt-3">
+        <Disclosure
+          summary={componentSummary('block', cellSizes)}
+          defaultOpen={sizeCount(cellSizes) > 1}
+        >
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-[10px] uppercase tracking-wide text-slate-400">
+                <th className="w-12 text-left font-medium">Cell</th>
+                <th className="text-left font-medium">Length</th>
+                <th className="text-left font-medium">Width</th>
+                <th className="text-left font-medium">Height</th>
+                <th className="text-left font-medium">Material</th>
+                <th className="w-24" />
+              </tr>
+            </thead>
+            <tbody>
+              {grid.cells.map((row, r) =>
+                row.map((cell, c) => {
+                  const patch = (patch: Partial<BlockCell>) =>
+                    dispatch({ type: 'patchCell', layerId: layer.id, row: r, col: c, patch });
+                  return (
+                    <tr key={`${r}-${c}`} className="hover:bg-slate-50">
+                      <td className="text-xs text-slate-400">
+                        r{r + 1} c{c + 1}
+                      </td>
+                      <td className="pr-1">
+                        <NumberInput value={cell.lengthMm} min={1} onChange={(lengthMm) => patch({ lengthMm })} />
+                      </td>
+                      <td className="pr-1">
+                        <NumberInput value={cell.widthMm} min={1} onChange={(widthMm) => patch({ widthMm })} />
+                      </td>
+                      <td className="pr-1">
+                        <NumberInput value={cell.heightMm} min={1} onChange={(heightMm) => patch({ heightMm })} />
+                      </td>
+                      <td className="pr-1">
+                        <TextInput value={cell.material} onChange={(material) => patch({ material })} />
+                      </td>
+                      <td>
+                        <Button
+                          title="Copy this cell to every cell in the grid"
+                          onClick={() => dispatch({ type: 'fillGrid', layerId: layer.id, row: r, col: c })}
+                        >
+                          Fill all
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                }),
+              )}
+            </tbody>
+          </table>
+        </Disclosure>
+      </div>
     </div>
   );
 }
 
 function Sheet({
   layer,
-  frozen,
   dispatch,
 }: {
   layer: Layer;
-  frozen: boolean;
   dispatch: (action: Action) => void;
 }) {
   if (layer.content.type !== 'sheet') return null;
   const sheet = layer.content.sheet;
-  const patch = (patch: Partial<import('../types.js').SheetSpec>) =>
+  const patch = (patch: Partial<SheetSpec>) =>
     dispatch({ type: 'patchSheet', layerId: layer.id, patch });
 
   return (
-    <div className="mt-3 grid grid-cols-5 gap-2">
-      <Field label="Part">
-        <NumberInput value={sheet.partNo} min={1} disabled={frozen} onChange={(partNo) => patch({ partNo })} />
-      </Field>
-      <Field label="Thickness">
-        <NumberInput value={sheet.thickness} min={1} disabled={frozen} onChange={(thickness) => patch({ thickness })} />
+    <div className="mt-3 grid grid-cols-4 gap-2">
+      <Field label="Length">
+        <NumberInput value={sheet.length} min={1} onChange={(length) => patch({ length })} />
       </Field>
       <Field label="Width">
-        <NumberInput value={sheet.width} min={1} disabled={frozen} onChange={(width) => patch({ width })} />
+        <NumberInput value={sheet.width} min={1} onChange={(width) => patch({ width })} />
       </Field>
-      <Field label="Length">
-        <NumberInput value={sheet.length} min={1} disabled={frozen} onChange={(length) => patch({ length })} />
+      <Field label="Thickness">
+        <NumberInput value={sheet.thickness} min={1} onChange={(thickness) => patch({ thickness })} />
       </Field>
       <Field label="Material">
-        <TextInput value={sheet.material} disabled={frozen} onChange={(material) => patch({ material })} />
+        <TextInput value={sheet.material} onChange={(material) => patch({ material })} />
       </Field>
     </div>
   );

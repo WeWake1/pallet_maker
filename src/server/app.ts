@@ -10,7 +10,13 @@ import { PalletLayoutError } from '../geometry/types.js';
 import { exportPdfBuffer } from '../sheet/pdf.js';
 import { renderSheet } from '../sheet/sheet.js';
 import type { Db } from './db.js';
-import { FrozenPalletError, PalletNotFoundError, PalletRepository } from './repository.js';
+import {
+  ClientNotFoundError,
+  ClientRepository,
+  DuplicateClientError,
+  PalletNotFoundError,
+  PalletRepository,
+} from './repository.js';
 
 /**
  * The local API. One user, one machine, no authentication: the whole point of
@@ -27,6 +33,7 @@ export interface AppOptions {
 export function createApp(db: Db, options: AppOptions = {}): Express {
   const app = express();
   const pallets = new PalletRepository(db);
+  const clients = new ClientRepository(db);
   app.use(express.json({ limit: '4mb' }));
 
   // Express 5 types a route parameter as possibly absent; on these routes it
@@ -39,10 +46,45 @@ export function createApp(db: Db, options: AppOptions = {}): Express {
       Promise.resolve(handler(req, res)).catch(next);
     };
 
+  // Documents are generated from the design as it stands at the moment they are
+  // asked for. A browser holding on to yesterday's copy would hand the shop
+  // floor a drawing of a pallet nobody is building any more, so never let one be
+  // cached.
+  const fresh = (res: Response): void => {
+    res.setHeader('Cache-Control', 'no-store, must-revalidate');
+  };
+
   // Rates go to the editor so it can cost a design as it is being changed,
   // rather than only once it has been saved.
   app.get('/api/rates', wrap((_req, res) => {
     res.json(options.rates ?? loadRates());
+  }));
+
+  // The dashboard, in one call: every client, each with their designs. Clients
+  // with none are included, which is why they are a record of their own.
+  app.get('/api/dashboard', wrap((_req, res) => {
+    res.json(pallets.dashboard(clients));
+  }));
+
+  app.get('/api/clients', wrap((_req, res) => {
+    res.json(clients.list());
+  }));
+
+  app.post('/api/clients', wrap((req, res) => {
+    const body = req.body as { name?: unknown };
+    res.status(201).json(clients.create(String(body.name ?? '')));
+  }));
+
+  app.patch('/api/clients/:id', wrap((req, res) => {
+    const body = req.body as { name?: unknown };
+    res.json(clients.rename(idOf(req), String(body.name ?? '')));
+  }));
+
+  // Deleting a client takes their designs with them, which the caller is told
+  // before it is offered.
+  app.delete('/api/clients/:id', wrap((req, res) => {
+    clients.delete(idOf(req));
+    res.status(204).end();
   }));
 
   app.get('/api/pallets', wrap((_req, res) => {
@@ -53,33 +95,22 @@ export function createApp(db: Db, options: AppOptions = {}): Express {
     res.json(pallets.get(idOf(req)));
   }));
 
-  app.get('/api/pallets/:id/history', wrap((req, res) => {
-    res.json(pallets.history(idOf(req)));
-  }));
-
   app.post('/api/pallets', wrap((req, res) => {
-    res.status(201).json(pallets.save(req.body));
+    res.status(201).json(pallets.save(req.body, clients));
   }));
 
+  // Saving overwrites. There is no previous version kept anywhere, by design.
   app.put('/api/pallets/:id', wrap((req, res) => {
     const body = req.body as { id?: string };
     if (body.id !== idOf(req)) {
       res.status(400).json({ error: 'The document id does not match the address' });
       return;
     }
-    res.json(pallets.save(req.body));
-  }));
-
-  app.post('/api/pallets/:id/freeze', wrap((req, res) => {
-    res.json(pallets.freeze(idOf(req)));
-  }));
-
-  app.post('/api/pallets/:id/revise', wrap((req, res) => {
-    res.status(201).json(pallets.revise(idOf(req)));
+    res.json(pallets.save(req.body, clients));
   }));
 
   app.post('/api/pallets/:id/duplicate', wrap((req, res) => {
-    res.status(201).json(pallets.duplicate(idOf(req)));
+    res.status(201).json(pallets.duplicate(idOf(req), clients));
   }));
 
   app.delete('/api/pallets/:id', wrap((req, res) => {
@@ -89,11 +120,12 @@ export function createApp(db: Db, options: AppOptions = {}): Express {
 
   app.get('/api/pallets/:id/sheet.html', wrap((req, res) => {
     const pallet = pallets.get(idOf(req));
+    fresh(res);
     res.type('html').send(renderSheet(pallet, analysePallet(pallet)));
   }));
 
-  // The primary output. Named for the design and its revision, because the
-  // sheet a pallet was built to has to be findable again.
+  // The primary output. Named for the design and the date it was last saved,
+  // because the sheet a pallet was built to has to be findable again.
   app.get('/api/pallets/:id/sheet.pdf', wrap(async (req, res) => {
     const pallet = pallets.get(idOf(req));
     const layout = analysePallet(pallet);
@@ -101,7 +133,8 @@ export function createApp(db: Db, options: AppOptions = {}): Express {
     if (errors.length > 0) throw new PalletLayoutError(errors);
 
     const pdf = await exportPdfBuffer(renderSheet(pallet, layout));
-    const name = `${pallet.palletCode || 'pallet'}-rev-${pallet.revision}.pdf`;
+    const name = `${pallet.palletCode || 'pallet'}-${pallet.updatedAt}.pdf`;
+    fresh(res);
     res.type('pdf').setHeader('Content-Disposition', `inline; filename="${name}"`);
     res.send(pdf);
   }));
@@ -117,7 +150,8 @@ export function createApp(db: Db, options: AppOptions = {}): Express {
     const errors = layout.issues.filter((issue) => issue.severity === 'error');
     if (errors.length > 0) throw new PalletLayoutError(errors);
 
-    const name = `${pallet.palletCode || 'pallet'}-rev-${pallet.revision}.dxf`;
+    const name = `${pallet.palletCode || 'pallet'}-${pallet.updatedAt}.dxf`;
+    fresh(res);
     res
       .type('application/dxf')
       .setHeader('Content-Disposition', `attachment; filename="${name}"`);
@@ -136,7 +170,11 @@ export function createApp(db: Db, options: AppOptions = {}): Express {
       res.status(404).json({ error: error.message });
       return;
     }
-    if (error instanceof FrozenPalletError) {
+    if (error instanceof ClientNotFoundError) {
+      res.status(404).json({ error: error.message });
+      return;
+    }
+    if (error instanceof DuplicateClientError) {
       res.status(409).json({ error: error.message });
       return;
     }
@@ -146,7 +184,7 @@ export function createApp(db: Db, options: AppOptions = {}): Express {
     }
     const message = error instanceof Error ? error.message : String(error);
     // A bad document is the caller's fault; anything else is worth seeing.
-    if (message.startsWith('Invalid pallet document')) {
+    if (message.startsWith('Invalid ') || message === 'A client needs a name') {
       res.status(400).json({ error: message });
       return;
     }
