@@ -310,7 +310,8 @@ export function reducer(state: EditorState, action: Action): EditorState {
     }
 
     case 'addNail':
-      pallet.nails.push({ label: '', type: 'wire nail', sizeMm: 50, count: 0 });
+      // Size and count left off: derived from the drawing until overridden.
+      pallet.nails.push({ label: '', type: 'wire nail' });
       break;
 
     case 'removeNail':

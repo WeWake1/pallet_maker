@@ -16,15 +16,11 @@
   "nails": [
     {
       "label": "top board to runner",
-      "type": "wire nail",
-      "sizeMm": 65,
-      "count": 21
+      "type": "wire nail"
     },
     {
       "label": "bottom board to runner",
-      "type": "wire nail",
-      "sizeMm": 65,
-      "count": 9
+      "type": "wire nail"
     }
   ],
   "layers": [

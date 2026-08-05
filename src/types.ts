@@ -44,13 +44,21 @@ export type LayerKind =
    */
   | 'panel';
 
+/**
+ * An override on one joint's nails. The counts and lengths are derived from the
+ * drawing — three at the corners, two elsewhere, 64mm through the outer boards
+ * and the underside, 50mm through the rest — so a spec only has to say what the
+ * rule gets wrong for this pallet. Whatever it leaves blank stays derived.
+ */
 export interface NailSpec {
-  /** e.g. "top board to centre board" */
+  /** e.g. "top board to centre board". Names the joint the override applies to. */
   label: string;
   /** e.g. "wire nail" */
   type: string;
-  sizeMm: number;
-  count: number;
+  /** Blank to derive the length from the joint. */
+  sizeMm?: number;
+  /** Blank to derive the count from the crossings. */
+  count?: number;
 }
 
 export interface Slot {

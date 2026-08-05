@@ -24,7 +24,10 @@ export const SHEET = {
   headerHeight: 15,
   headerGap: 3,
   columnGap: 5,
-  dataWidth: 92,
+  // The written side carries the components table, which is the part of the
+  // sheet the shop reads most, so it is sized for that table at a size that can
+  // be read across a bench. What is left over goes to the drawings.
+  dataWidth: 115,
   footerHeight: 5,
   rowGap: 2,
 } as const;

@@ -119,6 +119,47 @@ export function NumberInput({
   );
 }
 
+/**
+ * A number that is allowed to be absent, where absent means something rather
+ * than nothing: an override that has not been made, so the derived value stands.
+ * Emptying the field reports undefined instead of holding the old digits.
+ */
+export function OptionalNumberInput({
+  value,
+  onChange,
+  min,
+  placeholder,
+}: {
+  value: number | undefined;
+  onChange: (value: number | undefined) => void;
+  min?: number;
+  placeholder?: string;
+}) {
+  const [typed, setTyped] = useState<string | null>(null);
+
+  return (
+    <input
+      className={`${inputClass} tabular-nums`}
+      type="number"
+      value={typed ?? (value === undefined ? '' : String(value))}
+      min={min}
+      step={1}
+      placeholder={placeholder}
+      onBlur={() => setTyped(null)}
+      onChange={(event) => {
+        const text = event.target.value;
+        setTyped(text);
+        if (text.trim() === '') {
+          onChange(undefined);
+          return;
+        }
+        const next = Number.parseInt(text, 10);
+        if (Number.isFinite(next)) onChange(next);
+      }}
+    />
+  );
+}
+
 export function Select<T extends string>({
   value,
   options,

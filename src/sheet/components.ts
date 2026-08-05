@@ -18,6 +18,13 @@ import type { LayerKind, Pallet } from '../types.js';
 
 export interface ComponentRow {
   partNo: number;
+  /**
+   * What the sheet calls this row. A layer that makes one part is named for
+   * itself — "Blocks", "Bottom boards" — and a layer that makes several
+   * numbers them off — "Top board-1", "Top board-2" — so the table never has
+   * to repeat a heading over a single row beneath it.
+   */
+  name: string;
   description: string;
   variant: string;
   length: number;
@@ -60,10 +67,13 @@ export function componentTable(pallet: Pallet, layout: Layout): ComponentGroup[]
       layout.pieces.filter((p) => p.layerId === layer.id && p.partNo === partNo).length;
 
     const rows = new Map<number, ComponentRow>();
-    const add = (signature: string, row: Omit<ComponentRow, 'partNo' | 'quantity'>): void => {
+    const add = (
+      signature: string,
+      row: Omit<ComponentRow, 'partNo' | 'quantity' | 'name'>,
+    ): void => {
       const partNo = parts.get(signature) ?? 0;
       if (rows.has(partNo)) return;
-      rows.set(partNo, { ...row, partNo, quantity: quantity(partNo) });
+      rows.set(partNo, { ...row, name: '', partNo, quantity: quantity(partNo) });
     };
 
     const content = layer.content;
@@ -98,11 +108,14 @@ export function componentTable(pallet: Pallet, layout: Layout): ComponentGroup[]
       });
     }
 
-    return {
-      layerId: layer.id,
-      heading: content.type === 'sheet' ? 'Plywood sheet' : HEADING[layer.kind],
-      rows: [...rows.values()].sort((a, b) => a.partNo - b.partNo),
-    };
+    const heading = content.type === 'sheet' ? 'Plywood sheet' : HEADING[layer.kind];
+    const listed = [...rows.values()].sort((a, b) => a.partNo - b.partNo);
+    const singular = content.type === 'sheet' ? 'Plywood sheet' : DESCRIPTION[layer.kind];
+    for (const [index, row] of listed.entries()) {
+      row.name = listed.length === 1 ? heading : `${singular}-${index + 1}`;
+    }
+
+    return { layerId: layer.id, heading, rows: listed };
   });
 }
 

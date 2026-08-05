@@ -146,10 +146,23 @@ describe('the sheet', () => {
     expect(text).toContain('Top board');
     // Length, then width, then thickness: the order the shop floor says them in.
     expect(text).toContain('1200 × 100 × 18');
-    expect(text).toContain('top board to centre board');
+    expect(text).toContain('Top face');
     expect(text).toContain('wire nail');
     expect(text).toContain('Static load 3000 kg');
     expect(text).toContain('Species pine');
+  });
+
+  it('states the two tolerances on every sheet, whatever the design', () => {
+    for (const name of ['block-1000x800', 'plywood-type2', 'stringer-2way']) {
+      const other = loadFixture(name);
+      const text = textOf(renderSheet(other, computeLayout(other)));
+      expect(text).toContain('Component tolerance ± 2 mm');
+      expect(text).toContain('Total pallet tolerance ± 5 mm');
+    }
+  });
+
+  it('drops the surface row, which the components table already says', () => {
+    expect(textOf(html)).not.toContain('Surface');
   });
 
   it('does not repeat the material on every component row', () => {
@@ -157,7 +170,25 @@ describe('the sheet', () => {
     const components = /<h2>Components<\/h2>([\s\S]*?)<\/table>/.exec(html)![1]!;
     expect(components).not.toContain('Material');
     expect(components).not.toContain('pine');
-    expect([...components.matchAll(/<th>/g)]).toHaveLength(4);
+    expect([...components.matchAll(/<th[ >]/g)]).toHaveLength(4);
+  });
+
+  it('names each component once, with no heading row restating it', () => {
+    const components = /<h2>Components<\/h2>([\s\S]*?)<\/table>/.exec(html)![1]!;
+    expect(components).not.toContain('class="group"');
+    // One row per part, and the row is the name: no "Top boards" over a lone
+    // "Top board" beneath it.
+    expect([...components.matchAll(/Top board/g)]).toHaveLength(1);
+  });
+
+  it('numbers the components off only when a layer makes more than one', () => {
+    const one = loadFixture('block-1000x800');
+    const single = componentTable(one, computeLayout(one));
+    expect(single[0]!.rows.map((r) => r.name)).toEqual(['Top boards']);
+
+    const many = loadFixture('two-top-widths');
+    const split = componentTable(many, computeLayout(many));
+    expect(split[0]!.rows.map((r) => r.name)).toEqual(['Top board-1', 'Top board-2']);
   });
 
   it('reports the wing overhang in the data column as well as on the drawing', () => {

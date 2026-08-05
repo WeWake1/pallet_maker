@@ -275,10 +275,24 @@ which is what "plywood sheet replaces the top board layer" means. Type 3 is the
 one that does not replace anything, so it has a layer kind of its own: `panel`.
 That is the model being widened rather than a branch being added for one pallet.
 
-Nails follow from the same idea. A joint is any two layers that meet, and a nail
-spec names the two by their vocabulary — "plywood sheet to centre board", "top
-board to runner". Only the joints at the two faces are drawn, since an internal
-joint is under timber and cannot be seen.
+Nails follow from the same idea. A joint is any two layers that meet, and nails
+go wherever a piece of one crosses a piece of the other. How many and how long
+is a rule read off the drawing rather than a number anybody types:
+
+- three nails where the crossing sits at a corner of the pallet, two on a
+  diagonal at every other crossing;
+- 64mm through the outermost boards of the top face and through the whole
+  underside, 50mm through the rest.
+
+Only the joints at the two faces are nailed, since an internal joint is under
+timber and can be neither seen nor reached — it gets no dots and no count.
+
+A nail spec still names a joint by its vocabulary — "plywood sheet to centre
+board", "top board to runner" — but it now carries the nail *type*, which is
+what costing prices the joint by, and an optional size or count to override the
+rule where a pallet needs something else. Left blank, they stay derived. The
+schedule on the sheet is counted off the dots themselves, so what the drawing
+shows, what the table states and what costing prices cannot come apart.
 
 ## DXF
 

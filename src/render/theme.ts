@@ -105,7 +105,12 @@ export const EXTENSION_GAP = 2.5;
 /** How far an extension line runs past its dimension line. */
 export const EXTENSION_OVERSHOOT = 3;
 
-export const NAIL_RADIUS = 1.5;
+/**
+ * Big enough to count at a glance. The nailing pattern is instruction, not
+ * decoration: a fitter has to be able to see three dots at a corner and two
+ * everywhere else on a printed sheet, across a bench.
+ */
+export const NAIL_RADIUS = 2.4;
 
 /**
  * The isometric is a pictorial view, so nothing in it is faint: every piece is

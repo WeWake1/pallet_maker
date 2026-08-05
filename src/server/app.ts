@@ -141,7 +141,7 @@ export function createApp(db: Db, options: AppOptions = {}): Express {
 
   app.get('/api/pallets/:id/costing', wrap((req, res) => {
     const pallet = pallets.get(idOf(req));
-    res.json(computeCosting(analysePallet(pallet), pallet.nails, options.rates ?? loadRates()));
+    res.json(computeCosting(analysePallet(pallet), options.rates ?? loadRates()));
   }));
 
   app.get('/api/pallets/:id/drawing.dxf', wrap((req, res) => {

@@ -56,7 +56,7 @@ describe('timber volume', () => {
 describe('costing', () => {
   const pallet = loadFixture('block-1000x800');
   const layout = computeLayout(pallet);
-  const costing = computeCosting(layout, pallet.nails, rates);
+  const costing = computeCosting(layout, rates);
 
   it('prices each material at its own rate', () => {
     expect(costing.materials).toHaveLength(1);
@@ -70,7 +70,7 @@ describe('costing', () => {
     if (blocks.content.type === 'grid') {
       for (const cell of blocks.content.grid.cells.flat()) cell.material = 'hardwood';
     }
-    const split = computeCosting(computeLayout(mixed), mixed.nails, rates);
+    const split = computeCosting(computeLayout(mixed), rates);
     expect(split.materials.map((line) => line.material).sort()).toEqual(['hardwood', 'pine']);
     expect(split.materials.find((line) => line.material === 'hardwood')!.ratePerCft).toBe(2000);
     // Same timber, dearer blocks.
@@ -79,8 +79,16 @@ describe('costing', () => {
   });
 
   it('prices nails by the thousand, per type', () => {
-    expect(costing.nailCount).toBe(21 + 18 + 9);
-    expect(costing.nailCost).toBeCloseTo((48 / 1000) * 1000, 9);
+    // Counted off the drawing: 16 long and 30 short on top, 18 underneath.
+    expect(costing.nailCount).toBe(16 + 30 + 18);
+    expect(costing.nailCost).toBeCloseTo((64 / 1000) * 1000, 9);
+  });
+
+  it('prices the nails the drawing shows, not a number typed beside it', () => {
+    const pallet = loadFixture('block-1000x800');
+    const layout = computeLayout(pallet);
+    const fromLines = layout.nailLines.reduce((sum, line) => sum + line.count, 0);
+    expect(computeCosting(layout, rates).nailCount).toBe(fromLines);
   });
 
   it('adds the overhead the rates file asks for', () => {
@@ -97,7 +105,7 @@ describe('costing', () => {
   });
 
   it('costs a pallet with no nails without falling over', () => {
-    const bare = computeCosting(layout, [], rates);
+    const bare = computeCosting({ ...layout, nailLines: [] }, rates);
     expect(bare.nailCost).toBe(0);
     expect(bare.total).toBeCloseTo(bare.timberCost * 1.1 + 50, 9);
   });

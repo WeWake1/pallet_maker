@@ -166,6 +166,7 @@ export function analysePallet(pallet: Pallet): Layout {
     topOverhang: overhangOf(topDeck, base),
     bottomOverhang: overhangOf(bottomDeck, base),
     nailDots: nails.dots,
+    nailLines: nails.lines,
     issues,
   };
 }

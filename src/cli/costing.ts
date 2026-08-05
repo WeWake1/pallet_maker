@@ -22,7 +22,7 @@ function main(argv: string[]): number {
   const pallet = parsePallet(
     JSON.parse(readFileSync(resolve(process.cwd(), file), 'utf8')),
   );
-  const costing = computeCosting(computeLayout(pallet), pallet.nails, loadRates());
+  const costing = computeCosting(computeLayout(pallet), loadRates());
 
   if (argv.includes('--json')) {
     console.log(JSON.stringify(costing, null, 2));

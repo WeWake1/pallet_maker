@@ -113,7 +113,8 @@ ${page(`
       <strong>Seen from above.</strong> The top boards are solid; the centre
       boards and blocks underneath show through them as faint outlines, so you
       can see what sits where. The dots are nails, placed automatically wherever
-      a board crosses what is under it.
+      a board crosses what is under it: three at the corners of the pallet, two
+      on a diagonal everywhere else.
     </div>
   </div>
 `, 2)}
@@ -188,7 +189,7 @@ ${page(`
   <h2>If something looks wrong</h2>
   <table class="plain">
     <tr><th>A red message</th><td>Something does not fit. It names the layer. Nothing will print until it is fixed.</td></tr>
-    <tr><th>An amber message</th><td>Worth a look but not fatal, such as a nail row that names no joint the pallet has.</td></tr>
+    <tr><th>An amber message</th><td>Worth a look but not fatal, such as a layer that never crosses the one under it, so it has nothing to nail to.</td></tr>
     <tr><th>Save is greyed out</th><td>Either nothing has changed, or the pallet code and client are still empty.</td></tr>
     <tr><th>Nothing happens on PDF</th><td>The browser blocked the new tab. Allow pop-ups for this address.</td></tr>
   </table>

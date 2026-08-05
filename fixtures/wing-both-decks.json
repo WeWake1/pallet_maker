@@ -15,15 +15,11 @@
   "nails": [
     {
       "label": "top board to centre board",
-      "type": "wire nail",
-      "sizeMm": 50,
-      "count": 21
+      "type": "wire nail"
     },
     {
       "label": "bottom board to block",
-      "type": "wire nail",
-      "sizeMm": 65,
-      "count": 9
+      "type": "wire nail"
     }
   ],
   "notes": "Deck overhangs the base on all four sides, top by 50 and bottom by 25.",

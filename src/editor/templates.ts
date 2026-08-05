@@ -107,10 +107,14 @@ export function newLayer(
   };
 }
 
+/**
+ * No sizes and no counts: those come from the drawing. What these carry is the
+ * nail type, which is what costing prices the joint by.
+ */
 export const DEFAULT_NAILS: NailSpec[] = [
-  { label: 'top board to centre board', type: 'wire nail', sizeMm: 50, count: 21 },
-  { label: 'centre board to block', type: 'wire nail', sizeMm: 65, count: 18 },
-  { label: 'bottom board to block', type: 'wire nail', sizeMm: 65, count: 9 },
+  { label: 'top board to centre board', type: 'wire nail' },
+  { label: 'centre board to block', type: 'wire nail' },
+  { label: 'bottom board to block', type: 'wire nail' },
 ];
 
 /**

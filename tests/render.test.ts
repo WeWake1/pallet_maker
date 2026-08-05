@@ -101,41 +101,85 @@ describe('emphasis', () => {
 describe('nail dots', () => {
   const layout = computeLayout(loadFixture('block-1000x800'));
 
+  // 7 top boards over 3 centre boards is 21 crossings: 4 of them at a corner
+  // of the pallet take 3 nails, the other 17 take 2.
+  const TOP_NAILS = 4 * 3 + 17 * 2;
+  // 3 bottom boards under a 3 x 3 block grid is 9 crossings of 2.
+  const BOTTOM_NAILS = 9 * 2;
+
   it('appear in the top and bottom views only', () => {
-    expect(count(renderView(layout, 'top'), /<circle/g)).toBe(21);
-    expect(count(renderView(layout, 'bottom'), /<circle/g)).toBe(9);
+    expect(count(renderView(layout, 'top'), /<circle/g)).toBe(TOP_NAILS);
+    expect(count(renderView(layout, 'bottom'), /<circle/g)).toBe(BOTTOM_NAILS);
     expect(count(renderView(layout, 'side'), /<circle/g)).toBe(0);
     expect(count(renderView(layout, 'end'), /<circle/g)).toBe(0);
   });
 
   it('sit at every crossing of a deck board and the layer against it', () => {
     const top = layout.nailDots.filter((d) => d.face === 'top');
-    expect(top).toHaveLength(21);
+    expect(top).toHaveLength(TOP_NAILS);
     expect(new Set(top.map((d) => d.lowerKind))).toEqual(new Set(['bearer']));
-    expect(new Set(top.map((d) => Math.round(d.x)))).toEqual(new Set([50, 500, 950]));
     const bottom = layout.nailDots.filter((d) => d.face === 'bottom');
     // Nailed up from below, so the blocks are the upper member of that joint.
     expect(new Set(bottom.map((d) => d.upperKind))).toEqual(new Set(['block']));
   });
 
-  it('share an uneven count as evenly as whole nails allow', () => {
+  it('puts three at each corner of the pallet and two everywhere else', () => {
+    const top = layout.nailDots.filter((d) => d.face === 'top');
+    const corners = [
+      [0, 0],
+      [layout.overallLength, 0],
+      [0, layout.overallWidth],
+      [layout.overallLength, layout.overallWidth],
+    ];
+    // The corner crossing is one 100mm board over one 100mm centre board, so
+    // everything within that square of the corner belongs to it and the next
+    // board along — 117mm away — does not.
+    const near = (x: number, y: number): number =>
+      top.filter((d) => Math.abs(d.x - x) < 100 && Math.abs(d.y - y) < 100).length;
+
+    for (const [x, y] of corners) expect(near(x!, y!)).toBe(3);
+    // Twelve of the 46 are in those four clusters; the rest are in pairs.
+    expect(top.length - 4 * 3).toBe(17 * 2);
+  });
+
+  it('drives the long nail through the outer boards and the whole underside', () => {
+    const top = layout.nailDots.filter((d) => d.face === 'top');
+    // Two outer boards, three centre boards: 4 corners of 3 and 2 middles of 2.
+    expect(top.filter((d) => d.sizeMm === 64)).toHaveLength(4 * 3 + 2 * 2);
+    expect(top.filter((d) => d.sizeMm === 50)).toHaveLength(5 * 3 * 2);
+    const bottom = layout.nailDots.filter((d) => d.face === 'bottom');
+    expect(bottom.every((d) => d.sizeMm === 64)).toBe(true);
+  });
+
+  it('schedules what it drew, and nothing else', () => {
+    const total = layout.nailLines.reduce((sum, line) => sum + line.count, 0);
+    expect(total).toBe(TOP_NAILS + BOTTOM_NAILS);
+    expect(layout.nailLines.map((line) => [line.sizeMm, line.count])).toEqual([
+      [64, 16],
+      [50, 30],
+      [64, 18],
+    ]);
+    expect(layout.nailLines.every((line) => line.derived)).toBe(true);
+  });
+
+  it('shares a hand-typed count evenly across the crossings it overrides', () => {
     const pallet = loadFixture('block-1000x800');
     pallet.nails[0]!.count = 25;
     const uneven = computeLayout(pallet).nailDots.filter((d) => d.face === 'top');
     expect(uneven).toHaveLength(25);
-    const perCrossing = new Map<string, number>();
-    for (const dot of uneven) {
-      const key = `${Math.round(dot.x)}`;
-      perCrossing.set(key, (perCrossing.get(key) ?? 0) + 1);
-    }
-    expect([...perCrossing.values()].reduce((a, b) => a + b, 0)).toBe(25);
+    // The bottom face was not named by that spec, so the rule still has it.
+    const layout = computeLayout(pallet);
+    expect(layout.nailDots.filter((d) => d.face === 'bottom')).toHaveLength(BOTTOM_NAILS);
+    expect(layout.nailLines.find((line) => line.face === 'top')!.derived).toBe(false);
   });
 
-  it('warns rather than guessing when no nail spec names the pair', () => {
+  it('needs no nail spec at all: the drawing is what says where the nails go', () => {
     const pallet = loadFixture('block-1000x800');
     pallet.nails = [];
-    const issues = computeLayout(pallet).issues;
-    expect(issues.map((i) => i.code)).toEqual(['no_nail_spec', 'no_nail_spec']);
+    const bare = computeLayout(pallet);
+    expect(bare.issues).toEqual([]);
+    expect(bare.nailDots.filter((d) => d.face === 'top')).toHaveLength(TOP_NAILS);
+    expect(bare.nailLines.every((line) => line.type === 'wire nail')).toBe(true);
   });
 });
 

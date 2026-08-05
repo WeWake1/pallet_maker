@@ -10,7 +10,7 @@
  */
 
 import type { Direction, LayerKind } from '../types.js';
-import type { NailDot } from './nails.js';
+import type { NailDot, NailLine } from './nails.js';
 
 /**
  * Where a piece came from in the document. The editor needs it to take a click
@@ -131,6 +131,8 @@ export interface Layout {
   bottomOverhang: Overhang | null;
   /** Nail positions in plan. Drawn in the top and bottom views only. */
   nailDots: NailDot[];
+  /** The nail schedule, counted off the dots. What the sheet prints. */
+  nailLines: NailLine[];
   issues: LayoutIssue[];
 }
 

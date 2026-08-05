@@ -5,9 +5,17 @@ import type { LayerLayout, LayoutIssue, PlacedPiece } from './types.js';
 /**
  * One nail, positioned in plan.
  *
- * A joint is any two layers that meet, and a nail dot goes wherever a piece of
- * one crosses a piece of the other. The count from the matching NailSpec is
- * shared evenly across those crossings.
+ * A joint is any two layers that meet, and nails go wherever a piece of one
+ * crosses a piece of the other. How many, and how long, is a rule rather than a
+ * number somebody typed:
+ *
+ *   - three nails where the crossing sits at a corner of the pallet,
+ *   - two nails, on a diagonal, at every other crossing,
+ *   - 64mm through the outermost boards of a face and everywhere on the
+ *     underside, 50mm through the rest.
+ *
+ * A NailSpec whose label names the pair of layers may override the size, the
+ * count, or both; anything it leaves blank stays derived.
  *
  * Computed here rather than in a renderer so that the sheet and the DXF place
  * their dots in exactly the same spot.
@@ -26,9 +34,39 @@ export interface NailDot {
    * and cannot be seen.
    */
   face: 'top' | 'bottom' | null;
-  /** The NailSpec label the count came from. */
+  /** Nail length, in mm. */
+  sizeMm: number;
+  /** True when this dot is in one of the outermost boards of its face. */
+  extreme: boolean;
+  /** The NailSpec label the joint matched, or the derived description. */
   label: string;
 }
+
+/**
+ * A line of the nail schedule: every nail of one length, in one face, of one
+ * type, counted together. The sheet prints these and costing prices them, so
+ * neither can disagree with the dots on the drawing.
+ */
+export interface NailLine {
+  label: string;
+  type: string;
+  sizeMm: number;
+  count: number;
+  face: 'top' | 'bottom';
+  /** False when a NailSpec supplied the size or the count. */
+  derived: boolean;
+}
+
+/** The long nail: corners, the outermost boards, and the whole underside. */
+export const EXTREME_NAIL_MM = 64;
+/** The short nail: everywhere the timber is not doubled up at an edge. */
+export const FIELD_NAIL_MM = 50;
+
+const CORNER_COUNT = 3;
+const FIELD_COUNT = 2;
+
+/** When no spec names the joint, the nails are still nails. */
+const DEFAULT_NAIL_TYPE = 'wire nail';
 
 /** Words a user is likely to write in a NailSpec label, per layer kind. */
 const LABEL_TERMS: Array<{ kind: LayerKind; terms: string[] }> = [
@@ -102,12 +140,47 @@ interface Crossing {
   y0: number;
   x1: number;
   y1: number;
+  /** True when the upper piece is one of the outermost boards of its layer. */
+  upperExtreme: boolean;
 }
 
-/** Dots inside one crossing, spread along its longer side. */
+/**
+ * Where the nails go inside one crossing.
+ *
+ * Two nails sit on a diagonal, which is how a board is pinned against turning
+ * on its fixing. Three — the corners of the pallet — add a second nail on the
+ * top edge, so the cluster reads as a triangle. Any other count is a manual
+ * override, and those are spread along the longer side of the crossing.
+ */
+const DIAGONAL_PAIR = [
+  { u: 0.3, v: 0.28 },
+  { u: 0.7, v: 0.72 },
+];
+
+const CORNER_TRIANGLE = [
+  { u: 0.28, v: 0.26 },
+  { u: 0.72, v: 0.26 },
+  { u: 0.32, v: 0.72 },
+];
+
 function dotsIn(crossing: Crossing, count: number): Array<{ x: number; y: number }> {
   const w = crossing.x1 - crossing.x0;
   const h = crossing.y1 - crossing.y0;
+
+  const pattern =
+    count === FIELD_COUNT ? DIAGONAL_PAIR : count === CORNER_COUNT ? CORNER_TRIANGLE : null;
+  if (pattern) {
+    // The pattern is written for a crossing taller than it is wide, which is
+    // how a board crosses a bearer on the pallets these rules came from. A wide
+    // crossing turns it a quarter so the nails still straddle the long side.
+    const upright = h >= w;
+    return pattern.map(({ u, v }) =>
+      upright
+        ? { x: crossing.x0 + u * w, y: crossing.y0 + v * h }
+        : { x: crossing.x0 + v * w, y: crossing.y0 + u * h },
+    );
+  }
+
   const alongX = w >= h;
   const span = alongX ? w : h;
   const dots: Array<{ x: number; y: number }> = [];
@@ -127,13 +200,55 @@ function describe(layer: LayerLayout): string {
 }
 
 /**
+ * The outermost pieces of a layer, across the direction they are arrayed in.
+ *
+ * Boards are laid out in a run, so the run has two ends and the boards at those
+ * ends are the ones that carry the long nails. A layer of one piece — a plywood
+ * sheet — is its own outermost piece, and gets them throughout.
+ */
+function extremePieces(pieces: PlacedPiece[]): Set<PlacedPiece> {
+  const extremes = new Set<PlacedPiece>();
+  if (pieces.length === 0) return extremes;
+
+  const centreX = (p: PlacedPiece): number => p.x + p.dx / 2;
+  const centreY = (p: PlacedPiece): number => p.y + p.dy / 2;
+  const spread = (at: (p: PlacedPiece) => number): number =>
+    Math.max(...pieces.map(at)) - Math.min(...pieces.map(at));
+
+  // Which way the run goes is not stored, so read it off the pieces: they are
+  // spread out along the axis they are arrayed in and lined up on the other.
+  const at = spread(centreX) >= spread(centreY) ? centreX : centreY;
+  const lo = Math.min(...pieces.map(at));
+  const hi = Math.max(...pieces.map(at));
+  for (const piece of pieces) {
+    if (Math.abs(at(piece) - lo) < EPSILON || Math.abs(at(piece) - hi) < EPSILON) {
+      extremes.add(piece);
+    }
+  }
+  return extremes;
+}
+
+/**
+ * Which crossings sit at a corner of the pallet: outermost in both directions
+ * in plan, which is the four of them on a rectangular pallet.
+ */
+function cornerCrossings(crossings: Crossing[]): boolean[] {
+  const cx = crossings.map((c) => (c.x0 + c.x1) / 2);
+  const cy = crossings.map((c) => (c.y0 + c.y1) / 2);
+  const atEdge = (value: number, all: number[]): boolean =>
+    Math.abs(value - Math.min(...all)) < EPSILON || Math.abs(value - Math.max(...all)) < EPSILON;
+
+  return crossings.map((_, i) => atEdge(cx[i]!, cx) && atEdge(cy[i]!, cy));
+}
+
+/**
  * @param layers ordered top to bottom, as the document lists them.
  */
 export function computeNailDots(
   nails: NailSpec[],
   layers: LayerLayout[],
   pieces: PlacedPiece[],
-): { dots: NailDot[]; issues: LayoutIssue[] } {
+): { dots: NailDot[]; lines: NailLine[]; issues: LayoutIssue[] } {
   const dots: NailDot[] = [];
   const issues: LayoutIssue[] = [];
 
@@ -144,14 +259,20 @@ export function computeNailDots(
     // two layer pallet the one joint is both, and above is what you see.
     const face = i === 0 ? 'top' : i + 1 === layers.length - 1 ? 'bottom' : null;
 
+    const uppers = pieces.filter((piece) => piece.layerId === upper.layerId);
+    const lowers = pieces.filter((piece) => piece.layerId === lower.layerId);
+    const outermost = extremePieces(uppers);
+
     const crossings: Crossing[] = [];
-    for (const a of pieces.filter((piece) => piece.layerId === upper.layerId)) {
-      for (const b of pieces.filter((piece) => piece.layerId === lower.layerId)) {
+    for (const a of uppers) {
+      for (const b of lowers) {
         const x0 = Math.max(a.x, b.x);
         const x1 = Math.min(a.x + a.dx, b.x + b.dx);
         const y0 = Math.max(a.y, b.y);
         const y1 = Math.min(a.y + a.dy, b.y + b.dy);
-        if (x1 - x0 > EPSILON && y1 - y0 > EPSILON) crossings.push({ x0, y0, x1, y1 });
+        if (x1 - x0 > EPSILON && y1 - y0 > EPSILON) {
+          crossings.push({ x0, y0, x1, y1, upperExtreme: outermost.has(a) });
+        }
       }
     }
 
@@ -168,26 +289,30 @@ export function computeNailDots(
       continue;
     }
 
-    const spec = matchNailSpec(nails, aliasesOf(upper), aliasesOf(lower));
-    if (!spec) {
-      // Only worth saying for a joint that would have been drawn.
-      if (face) {
-        issues.push({
-          severity: 'warning',
-          code: 'no_nail_spec',
-          layerId: upper.layerId,
-          layerKind: upper.kind,
-          message:
-            `No nail spec names ${upper.kind.replace('_', ' ')} to ${lower.kind.replace('_', ' ')}, ` +
-            `so the ${face} face gets no nail dots`,
-        });
-      }
-      continue;
-    }
+    // An internal joint is under timber: it is neither drawn nor scheduled.
+    if (!face) continue;
 
-    const shares = shareEvenly(spec.count, crossings.length);
+    const spec = matchNailSpec(nails, aliasesOf(upper), aliasesOf(lower));
+    const label = spec?.label ?? `${upper.kind.replace('_', ' ')} to ${lower.kind.replace('_', ' ')}`;
+
+    // A spec may say how many nails the joint takes in total, in which case the
+    // rule steps aside and the count is shared across the crossings as before.
+    const override = spec?.count !== undefined && spec.count >= 0;
+    const shares = override ? shareEvenly(spec!.count!, crossings.length) : null;
+    const corners = cornerCrossings(crossings);
+
     crossings.forEach((crossing, index) => {
-      for (const dot of dotsIn(crossing, shares[index]!)) {
+      // The underside is nailed up into the blocks through a single thickness
+      // of board, so it takes the long nail throughout and has no corner extra.
+      const extreme = face === 'bottom' ? true : crossing.upperExtreme;
+      const count = shares
+        ? shares[index]!
+        : face === 'top' && corners[index]
+          ? CORNER_COUNT
+          : FIELD_COUNT;
+      const sizeMm = spec?.sizeMm ?? (extreme ? EXTREME_NAIL_MM : FIELD_NAIL_MM);
+
+      for (const dot of dotsIn(crossing, count)) {
         dots.push({
           x: dot.x,
           y: dot.y,
@@ -196,11 +321,75 @@ export function computeNailDots(
           lowerLayerId: lower.layerId,
           lowerKind: lower.kind,
           face,
-          label: spec.label,
+          sizeMm,
+          extreme,
+          label,
         });
       }
     });
   }
 
-  return { dots, issues };
+  return { dots, lines: nailLines(dots, nails, layers), issues };
+}
+
+const FACE_NAME: Record<'top' | 'bottom', string> = { top: 'Top face', bottom: 'Bottom face' };
+
+/**
+ * The nail schedule, counted off the dots themselves. Nails of one length in
+ * one face are one line, which is how the shop buys and drives them.
+ */
+function nailLines(
+  dots: NailDot[],
+  nails: NailSpec[],
+  layers: LayerLayout[],
+): NailLine[] {
+  const typeFor = (dot: NailDot): string => {
+    const upper = layers.find((l) => l.layerId === dot.upperLayerId);
+    const lower = layers.find((l) => l.layerId === dot.lowerLayerId);
+    if (!upper || !lower) return DEFAULT_NAIL_TYPE;
+    const spec = matchNailSpec(nails, aliasesOf(upper), aliasesOf(lower));
+    return spec?.type ?? DEFAULT_NAIL_TYPE;
+  };
+  const overridden = (dot: NailDot): boolean => {
+    const upper = layers.find((l) => l.layerId === dot.upperLayerId);
+    const lower = layers.find((l) => l.layerId === dot.lowerLayerId);
+    if (!upper || !lower) return false;
+    const spec = matchNailSpec(nails, aliasesOf(upper), aliasesOf(lower));
+    return spec?.sizeMm !== undefined || spec?.count !== undefined;
+  };
+
+  const groups = new Map<string, NailLine & { extreme: boolean }>();
+  for (const dot of dots) {
+    if (dot.face === null) continue;
+    const type = typeFor(dot);
+    const key = `${dot.face}|${dot.sizeMm}|${type}|${dot.extreme}`;
+    const found = groups.get(key);
+    if (found) {
+      found.count += 1;
+      continue;
+    }
+    groups.set(key, {
+      label: FACE_NAME[dot.face],
+      type,
+      sizeMm: dot.sizeMm,
+      count: 1,
+      face: dot.face,
+      extreme: dot.extreme,
+      derived: !overridden(dot),
+    });
+  }
+
+  const lines = [...groups.values()];
+  // Only say which boards a line is for when a face has more than one kind of
+  // nail in it; on the underside there is nothing to tell apart.
+  for (const line of lines) {
+    const others = lines.filter((other) => other.face === line.face).length;
+    if (others > 1) {
+      line.label = `${FACE_NAME[line.face]}, ${line.extreme ? 'outer boards' : 'inner boards'}`;
+    }
+  }
+
+  return lines
+    .sort((a, b) => (a.face === b.face ? b.sizeMm - a.sizeMm : a.face === 'top' ? -1 : 1))
+    .map(({ extreme: _extreme, ...line }) => line);
 }

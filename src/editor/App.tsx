@@ -17,7 +17,15 @@ import { Preview } from './Preview.jsx';
 import { reducer, selectedSlot } from './state.js';
 import type { Action } from './state.js';
 import { newPallet } from './templates.js';
-import { Button, Field, NumberInput, Panel, Select, TextInput } from './ui.jsx';
+import {
+  Button,
+  Field,
+  NumberInput,
+  OptionalNumberInput,
+  Panel,
+  Select,
+  TextInput,
+} from './ui.jsx';
 
 const fixtureModules = import.meta.glob('../../fixtures/*.json', { eager: true }) as Record<
   string,
@@ -377,8 +385,8 @@ function Editor({
 
   // Costed as it is edited, not only once it has been saved.
   const costing = useMemo(
-    () => (rates ? computeCosting(layout, pallet.nails, rates) : null),
-    [layout, pallet.nails, rates],
+    () => (rates ? computeCosting(layout, rates) : null),
+    [layout, rates],
   );
 
   const store = () => (stored ? api.save(pallet) : api.create(pallet));
@@ -856,16 +864,18 @@ function Nails({ pallet, dispatch }: { pallet: Pallet; dispatch: (action: Action
                 />
               </td>
               <td className="pr-1">
-                <NumberInput
+                <OptionalNumberInput
                   value={nail.sizeMm}
                   min={1}
+                  placeholder="auto"
                   onChange={(sizeMm) => dispatch({ type: 'patchNail', index, patch: { sizeMm } })}
                 />
               </td>
               <td className="pr-1">
-                <NumberInput
+                <OptionalNumberInput
                   value={nail.count}
                   min={0}
+                  placeholder="auto"
                   onChange={(count) => dispatch({ type: 'patchNail', index, patch: { count } })}
                 />
               </td>
@@ -879,8 +889,11 @@ function Nails({ pallet, dispatch }: { pallet: Pallet; dispatch: (action: Action
         </tbody>
       </table>
       <p className="mt-2 text-xs text-slate-500">
-        Dots are placed automatically where a deck board crosses the layer against it. The label
-        names the two layers, which is how the count finds its crossings.
+        Nails are worked out from the drawing: three where a crossing sits at a corner of the
+        pallet, two on a diagonal everywhere else, 64mm through the outermost boards and the whole
+        underside and 50mm through the rest. Leave size and qty on <em>auto</em> to take that. A
+        number typed here overrides it for the joint the label names, and a qty is shared evenly
+        across that joint&rsquo;s crossings.
       </p>
     </Panel>
   );

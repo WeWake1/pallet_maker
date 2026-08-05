@@ -1,5 +1,4 @@
 import type { Layout } from '../geometry/types.js';
-import type { NailSpec } from '../types.js';
 import { rateFor } from './rates.js';
 import type { Rates } from './rates.js';
 
@@ -27,9 +26,10 @@ export interface MaterialLine {
   cost: number;
 }
 
-export interface NailLine {
+export interface NailCostLine {
   label: string;
   type: string;
+  sizeMm: number;
   count: number;
   ratePerThousand: number;
   cost: number;
@@ -41,7 +41,7 @@ export interface Costing {
   cft: number;
   materials: MaterialLine[];
   timberCost: number;
-  nails: NailLine[];
+  nails: NailCostLine[];
   nailCount: number;
   nailCost: number;
   materialCost: number;
@@ -54,7 +54,11 @@ export function timberVolumeMm3(layout: Layout): number {
   return layout.pieces.reduce((sum, piece) => sum + piece.dx * piece.dy * piece.dz, 0);
 }
 
-export function computeCosting(layout: Layout, nails: NailSpec[], rates: Rates): Costing {
+/**
+ * Nails are counted off the layout rather than passed in, so the price is for
+ * the nails the drawing actually shows.
+ */
+export function computeCosting(layout: Layout, rates: Rates): Costing {
   const volumes = new Map<string, { volumeMm3: number; pieces: number }>();
   for (const piece of layout.pieces) {
     const found = volumes.get(piece.material) ?? { volumeMm3: 0, pieces: 0 };
@@ -78,11 +82,12 @@ export function computeCosting(layout: Layout, nails: NailSpec[], rates: Rates):
     })
     .sort((a, b) => b.cost - a.cost);
 
-  const nailLines: NailLine[] = nails.map((nail) => {
+  const nailLines: NailCostLine[] = layout.nailLines.map((nail) => {
     const ratePerThousand = rateFor(rates.nailsPerThousand, nail.type);
     return {
       label: nail.label,
       type: nail.type,
+      sizeMm: nail.sizeMm,
       count: nail.count,
       ratePerThousand,
       cost: (nail.count / 1000) * ratePerThousand,

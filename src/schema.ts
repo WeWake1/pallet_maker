@@ -24,8 +24,10 @@ export const LayerKindSchema = z.enum([
 export const NailSpecSchema = z.object({
   label: z.string().min(1),
   type: z.string().min(1),
-  sizeMm: positiveMm,
-  count: z.number().int().nonnegative(),
+  // Both blank by default: the rule in nails.ts derives them from the drawing,
+  // and a spec is only there to override what it gets wrong.
+  sizeMm: positiveMm.optional(),
+  count: z.number().int().nonnegative().optional(),
 });
 
 export const SlotSchema = z.object({
