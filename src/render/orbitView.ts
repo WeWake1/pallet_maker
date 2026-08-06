@@ -1,8 +1,17 @@
 import type { Layout } from '../geometry/types.js';
 import { modelExtent, orderForOrbit, project, viewFor, visibleFaces } from './orbit.js';
 import type { Face, Orientation, View } from './orbit.js';
-import { el, fmt, group, svgDocument } from './svg.js';
-import { ISO_FACE_SHADE, ISO_STROKE, LAYER_STYLE, SELECTION_INK, shade } from './theme.js';
+import { circle, el, fmt, group, svgDocument } from './svg.js';
+import {
+  ISO_FACE_SHADE,
+  ISO_STROKE,
+  LAYER_STYLE,
+  NAIL_HALO,
+  NAIL_INK,
+  NAIL_RADIUS,
+  SELECTION_INK,
+  shade,
+} from './theme.js';
 
 /**
  * The editor's 3D view: the pallet as a solid, drawn from wherever the eye has
@@ -90,9 +99,39 @@ export function renderOrbit(layout: Layout, options: OrbitOptions): string {
 
   const body =
     group({ 'shape-rendering': 'geometricPrecision' }, solid) +
+    drawNails(layout, view, px, py) +
     drawSelection(layout, options.selectedPiece, view, points);
 
   return svgDocument({ ...blank, body });
+}
+
+/**
+ * The nails of whichever face the eye is on. Turning the pallet over is the
+ * point of this view, so raising the eye above the deck shows what is nailed
+ * down from above and dropping it below shows what is nailed up from beneath.
+ * Nothing sits outside either face, so a dot on the one being looked at is
+ * never covered and is simply painted last.
+ */
+function drawNails(
+  layout: Layout,
+  view: View,
+  px: (sx: number) => number,
+  py: (sy: number) => number,
+): string {
+  const facing = view.eye.z >= 0 ? 'top' : 'bottom';
+  return group(
+    { 'pointer-events': 'none' },
+    layout.nailDots
+      .filter((dot) => dot.face === facing)
+      .map((dot) => {
+        const at = project(view, dot.x, dot.y, dot.z);
+        return circle(px(at.sx), py(at.sy), NAIL_RADIUS, {
+          fill: NAIL_INK,
+          stroke: '#ffffff',
+          'stroke-width': NAIL_HALO,
+        });
+      }),
+  );
 }
 
 /**

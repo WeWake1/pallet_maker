@@ -9,18 +9,11 @@
  *   z runs up from the underside of the bottom-most layer
  */
 
-import type { Direction, LayerKind } from '../types.js';
-import type { NailDot, NailLine } from './nails.js';
+import type { Direction, LayerKind, PieceSource } from '../types.js';
+import type { NailCrossing, NailDot } from './nails.js';
 
-/**
- * Where a piece came from in the document. The editor needs it to take a click
- * on a board back to the row that produced it, which is the only way a nudge
- * can be a number on a component rather than an edit to the drawing.
- */
-export type PieceSource =
-  | { kind: 'slot'; index: number }
-  | { kind: 'cell'; row: number; col: number }
-  | { kind: 'sheet' };
+/** Defined with the document types, since a nail placement is stored against one. */
+export type { PieceSource };
 
 export interface PlacedPiece {
   /**
@@ -131,8 +124,12 @@ export interface Layout {
   bottomOverhang: Overhang | null;
   /** Nail positions in plan. Drawn in the top and bottom views only. */
   nailDots: NailDot[];
-  /** The nail schedule, counted off the dots. What the sheet prints. */
-  nailLines: NailLine[];
+  /**
+   * Every place a board of one layer crosses a board of the next, with the nail
+   * count it currently carries. The editor draws these as click targets; the
+   * dots above are what those counts come out as.
+   */
+  nailCrossings: NailCrossing[];
   issues: LayoutIssue[];
 }
 

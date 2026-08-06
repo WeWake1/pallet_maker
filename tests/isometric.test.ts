@@ -90,11 +90,25 @@ describe('the isometric view', () => {
     expect(deck.maxSy).toBeGreaterThan(base.maxSy - layout.overallHeight);
   });
 
-  it('draws three faces for every piece and no nail dots', () => {
+  it('draws three faces for every piece', () => {
     const svg = renderIsometric(layout);
     expect((svg.match(/<polygon/g) ?? []).length).toBe(layout.pieces.length * 3);
-    expect(svg).not.toContain('<circle');
     expect(svg).toContain('ISOMETRIC');
+  });
+
+  /**
+   * The eye is above the deck, so the top face's nails show and the underside's
+   * do not. A dot goes on the timber it was driven into rather than at the
+   * pallet's floor, which is what the height on a NailDot is for.
+   */
+  it('shows the nails of the face the eye can see, on the timber they are in', () => {
+    const svg = renderIsometric(layout);
+    const top = layout.nailDots.filter((dot) => dot.face === 'top');
+    expect((svg.match(/<circle/g) ?? []).length).toBe(top.length);
+    expect(top.every((dot) => dot.z === layout.derivedHeight)).toBe(true);
+    expect(layout.nailDots.filter((dot) => dot.face === 'bottom').every((dot) => dot.z === 0)).toBe(
+      true,
+    );
   });
 
   it('steps the three faces in tone so the form survives greyscale', () => {

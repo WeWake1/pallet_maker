@@ -8,7 +8,7 @@ import type {
 } from '../types.js';
 import { EPSILON, distribute, distributeEvenly } from './distribute.js';
 import { boundingBox, overhangOf } from './footprint.js';
-import { computeNailDots } from './nails.js';
+import { computeNails } from './nails.js';
 import { cellSignature, partNumbers, sheetSignature, slotSignature } from './parts.js';
 import type {
   Layout,
@@ -144,7 +144,7 @@ export function analysePallet(pallet: Pallet): Layout {
     });
   }
 
-  const nails = computeNailDots(pallet.nails, layerLayouts, pieces);
+  const nails = computeNails(pallet.nailPlacements, layerLayouts, pieces);
   issues.push(...nails.issues);
 
   const base = boundingBox(
@@ -166,7 +166,7 @@ export function analysePallet(pallet: Pallet): Layout {
     topOverhang: overhangOf(topDeck, base),
     bottomOverhang: overhangOf(bottomDeck, base),
     nailDots: nails.dots,
-    nailLines: nails.lines,
+    nailCrossings: nails.crossings,
     issues,
   };
 }

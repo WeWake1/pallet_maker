@@ -4,23 +4,28 @@ import type { Costing } from '../costing/costing.js';
 import type { Rates } from '../costing/rates.js';
 import { duplicatePallet } from '../duplicate.js';
 import { analysePallet } from '../geometry/layout.js';
+import { LAYER_STYLE } from '../render/theme.js';
 import { PalletSchema, parsePallet } from '../schema.js';
 import { renderSheet } from '../sheet/sheet.js';
-import type { Client, LayerKind, Pallet } from '../types.js';
+import { NOT_APPLICABLE } from '../types.js';
+import type { Client, LayerKind, Pallet, Unstated } from '../types.js';
 import { api } from './api.js';
 import type { ClientDesigns } from './api.js';
 import { Dashboard } from './Dashboard.jsx';
 import { clearDraft, clearDrafts, draftAge, listDrafts, readDraft, writeDraft } from './drafts.js';
 import type { Draft } from './drafts.js';
+import { canRedo, canUndo, historyReducer, initialHistory } from './history.js';
 import { LayerEditor } from './LayerEditor.jsx';
 import { Preview } from './Preview.jsx';
-import { reducer, selectedSlot } from './state.js';
+import { shortcutLabel, useShortcuts } from './shortcuts.js';
+import { selectedSlot } from './state.js';
 import type { Action } from './state.js';
 import { newPallet } from './templates.js';
 import {
   Button,
   Field,
   NumberInput,
+  NumberOrNaInput,
   OptionalNumberInput,
   Panel,
   Select,
@@ -39,6 +44,14 @@ const FIXTURES = Object.entries(fixtureModules)
   }))
   .sort((a, b) => a.name.localeCompare(b.name));
 
+/**
+ * The two choices every stated attribute carries besides its own, and what each
+ * of them does to the printed sheet. Both are offered on every list so that a
+ * dropdown answers the same way a typed field does.
+ */
+const BLANK: [Unstated, string] = ['', '— not stated'];
+const NOT_ON_SHEET: [Unstated, string] = [NOT_APPLICABLE, 'n/a — leave off the sheet'];
+
 const LAYER_KINDS: Array<[LayerKind, string]> = [
   ['panel', 'Plywood sheet over the deck'],
   ['top_deck', 'Top boards'],
@@ -46,6 +59,17 @@ const LAYER_KINDS: Array<[LayerKind, string]> = [
   ['block', 'Blocks'],
   ['runner', 'Runners'],
   ['bottom_deck', 'Bottom boards'],
+];
+
+/**
+ * Which way each arrow key moves the selected board: along the run, the same
+ * sense as the arrows in the nudge field.
+ */
+const NUDGE_KEYS: Array<[string, number]> = [
+  ['arrowright', 1],
+  ['arrowup', 1],
+  ['arrowleft', -1],
+  ['arrowdown', -1],
 ];
 
 /** A design open in the editor: what is being edited, and what the store has. */
@@ -247,11 +271,10 @@ function Editor({
   onProblem: (message: string | null) => void;
   onRefresh: () => Promise<void>;
 }) {
-  const [state, dispatch] = useReducer(reducer, undefined, () => ({
-    pallet: initial,
-    selection: null,
-  }));
-  const { pallet, selection } = state;
+  const [history, dispatch] = useReducer(historyReducer, undefined, () =>
+    initialHistory({ pallet: initial, selection: null }),
+  );
+  const { pallet, selection } = history.present;
   const fileInput = useRef<HTMLInputElement>(null);
 
   const [stored, setStored] = useState(saved !== null);
@@ -365,7 +388,9 @@ function Editor({
       try {
         const result = await work();
         if (result) {
-          dispatch({ type: 'replace', pallet: result });
+          // Saved: the steps that led here are all in the store, so there is
+          // nothing left to undo past this point.
+          dispatch({ type: 'replace', pallet: result, reset: true });
           setSavedDoc(JSON.stringify(result));
           setStored(true);
           // The store now holds this, so the browser's copy has nothing left to
@@ -385,8 +410,8 @@ function Editor({
 
   // Costed as it is edited, not only once it has been saved.
   const costing = useMemo(
-    () => (rates ? computeCosting(layout, rates) : null),
-    [layout, rates],
+    () => (rates ? computeCosting(pallet, layout, rates) : null),
+    [pallet, layout, rates],
   );
 
   const store = () => (stored ? api.save(pallet) : api.create(pallet));
@@ -466,6 +491,60 @@ function Editor({
     }
   };
 
+  /**
+   * The keyboard.
+   *
+   * Undo and Save are the two that have to work from wherever the cursor is,
+   * including mid-field: the document is what they act on, and a field being
+   * open does not change what either of them means. The browser's own Undo
+   * inside a field is given up for the document's, which is the only one that
+   * knows about the board that was deleted a moment ago.
+   *
+   * The rest act on the selected board, so they wait until nothing is being
+   * typed into — Delete belongs to the digits under the cursor first.
+   */
+  useShortcuts([
+    { keys: 'mod+z', whileTyping: true, run: () => dispatch({ type: 'undo' }) },
+    { keys: 'mod+shift+z', whileTyping: true, run: () => dispatch({ type: 'redo' }) },
+    // What Windows has always used for Redo, and what a hand used to it reaches for.
+    { keys: 'mod+y', whileTyping: true, run: () => dispatch({ type: 'redo' }) },
+    {
+      keys: 'mod+s',
+      whileTyping: true,
+      // Always caught, even when there is nothing to save: the alternative is
+      // the browser offering to save the page to disk, which is never meant.
+      run: () => {
+        if (!busy && canStore && dirty) void save();
+      },
+    },
+    {
+      keys: 'escape',
+      whileTyping: true,
+      run: () => {
+        // Out of the field first, then out of the selection: one press to stop
+        // typing, a second to let the board go.
+        const focused = document.activeElement;
+        if (focused instanceof HTMLElement && focused !== document.body) focused.blur();
+        else dispatch({ type: 'select', selection: null });
+      },
+    },
+    ...NUDGE_KEYS.flatMap(([key, direction]) =>
+      [1, 10].map((step) => ({
+        // Shift for the coarse step, matching the nudge field's own arrows.
+        keys: step === 1 ? key : `shift+${key}`,
+        disabled: !chosen,
+        run: () => dispatch({ type: 'nudge', delta: direction * step }),
+      })),
+    ),
+    ...['delete', 'backspace'].map((key) => ({
+      keys: key,
+      disabled: !chosen,
+      run: () => {
+        if (chosen) dispatch({ type: 'removeSlot', layerId: chosen.layer.id, index: chosen.index });
+      },
+    })),
+  ]);
+
   return (
     <>
       {recovered && (
@@ -502,6 +581,23 @@ function Editor({
           {pallet.palletName || 'Untitled'}
           <span className="ml-2 font-normal text-slate-400">{pallet.clientName}</span>
         </h1>
+
+        {/* The keyboard is how these are actually used; the buttons are here so
+            that the shortcut is written down somewhere the hand can find it. */}
+        <Button
+          onClick={() => dispatch({ type: 'undo' })}
+          disabled={!canUndo(history)}
+          title={`Undo (${shortcutLabel('mod+z')})`}
+        >
+          ↶
+        </Button>
+        <Button
+          onClick={() => dispatch({ type: 'redo' })}
+          disabled={!canRedo(history)}
+          title={`Redo (${shortcutLabel('mod+shift+z')})`}
+        >
+          ↷
+        </Button>
 
         <Button onClick={() => fileInput.current?.click()}>Import</Button>
         <Button onClick={exportJson}>Export</Button>
@@ -574,7 +670,12 @@ function Editor({
           <Button onClick={() => void openPdf()} disabled={busy || !canStore}>
             PDF
           </Button>
-          <Button tone="primary" onClick={() => void save()} disabled={busy || !canStore || !dirty}>
+          <Button
+            tone="primary"
+            onClick={() => void save()}
+            disabled={busy || !canStore || !dirty}
+            title={`Save (${shortcutLabel('mod+s')})`}
+          >
             Save
           </Button>
         </div>
@@ -627,11 +728,15 @@ function Editor({
               </div>
             </div>
 
+            {/* Every attribute below is allowed not to have an answer, and the
+                two ways of not having one mean different things on the sheet.
+                See NOT_APPLICABLE in types.ts. */}
             <div className="mt-2 grid grid-cols-4 gap-2">
               <Field label="Type">
                 <Select
                   value={pallet.palletType}
                   options={[
+                    BLANK,
                     ['block_4way', 'Block, 4-way'],
                     ['stringer_2way', 'Stringer, 2-way'],
                     ['plywood_type1', 'Plywood type 1, sheet on blocks'],
@@ -639,6 +744,7 @@ function Editor({
                     ['plywood_type3', 'Plywood type 3, sheet over a boarded deck'],
                     ['wing', 'Wing'],
                     ['other', 'Other'],
+                    NOT_ON_SHEET,
                   ]}
                   onChange={(palletType) => patch({ palletType })}
                 />
@@ -647,9 +753,11 @@ function Editor({
                 <Select
                   value={pallet.deckType}
                   options={[
+                    BLANK,
                     ['single_face', 'Single face'],
                     ['double_face_reversible', 'Double face, reversible'],
                     ['double_face_non_reversible', 'Double face, non-reversible'],
+                    NOT_ON_SHEET,
                   ]}
                   onChange={(deckType) => patch({ deckType })}
                 />
@@ -658,15 +766,21 @@ function Editor({
                 <Select
                   value={pallet.entry}
                   options={[
+                    BLANK,
                     ['2_way', '2-way'],
                     ['4_way', '4-way'],
                     ['partial_4way', 'Partial 4-way'],
+                    NOT_ON_SHEET,
                   ]}
                   onChange={(entry) => patch({ entry })}
                 />
               </Field>
               <Field label="Species">
-                <TextInput value={pallet.species} onChange={(species) => patch({ species })} />
+                <TextInput
+                  value={pallet.species}
+                  placeholder="pine"
+                  onChange={(species) => patch({ species })}
+                />
               </Field>
             </div>
 
@@ -675,26 +789,28 @@ function Editor({
                 <Select
                   value={pallet.planing}
                   options={[
+                    BLANK,
                     ['none', 'None'],
                     ['1_side', '1 side'],
                     ['2_side', '2 sides'],
                     ['4_side', '4 sides'],
+                    NOT_ON_SHEET,
                   ]}
                   onChange={(planing) => patch({ planing })}
                 />
               </Field>
               <Field label="Static load (kg)">
-                <NumberInput
-                  value={pallet.staticLoadKg ?? 0}
-                  min={0}
-                  onChange={(value) => patch({ staticLoadKg: value > 0 ? value : undefined })}
+                <NumberOrNaInput
+                  value={pallet.staticLoadKg}
+                  placeholder="kg"
+                  onChange={(staticLoadKg) => patch({ staticLoadKg })}
                 />
               </Field>
               <Field label="Dynamic load (kg)">
-                <NumberInput
-                  value={pallet.dynamicLoadKg ?? 0}
-                  min={0}
-                  onChange={(value) => patch({ dynamicLoadKg: value > 0 ? value : undefined })}
+                <NumberOrNaInput
+                  value={pallet.dynamicLoadKg}
+                  placeholder="kg"
+                  onChange={(dynamicLoadKg) => patch({ dynamicLoadKg })}
                 />
               </Field>
               {/* Printed in the title block under the date. Free text: a client
@@ -713,6 +829,12 @@ function Editor({
                 <TextInput value={pallet.notes ?? ''} onChange={(value) => patch({ notes: value === '' ? undefined : value })} />
               </Field>
             </div>
+
+            <p className="mt-2 text-[11px] text-slate-500">
+              Left blank, an attribute prints as “—” on the sheet — still asked, not yet answered.
+              Typed as <code className="rounded bg-slate-100 px-1">na</code>, or picked as{' '}
+              <em>not applicable</em> from a list, the whole line comes off the sheet.
+            </p>
           </Panel>
 
           {pallet.layers.map((layer) => (
@@ -729,9 +851,18 @@ function Editor({
             title="Add layer"
             actions={
               <div className="flex flex-wrap gap-1">
+                {/* The swatch is the colour the layer will be drawn in, and the
+                    colour its card will wear once it is there. */}
                 {LAYER_KINDS.map(([kind, label]) => (
                   <Button key={kind} onClick={() => dispatch({ type: 'addLayer', kind })}>
-                    + {label}
+                    <span
+                      className="mr-1.5 inline-block h-2.5 w-2.5 rounded-sm align-middle"
+                      style={{
+                        background: LAYER_STYLE[kind].fill,
+                        boxShadow: `inset 0 0 0 1px ${LAYER_STYLE[kind].stroke}`,
+                      }}
+                    />
+                    {label}
                   </Button>
                 ))}
               </div>
@@ -758,7 +889,8 @@ function Editor({
               />
             ) : (
               <p className="text-xs text-slate-500">
-                Click a board to select it. Selection only — boards are never dragged.
+                Click a board to select it. Selection only — boards are never dragged; the arrow
+                keys nudge the selected one, Shift by ten, Delete removes it, Esc lets it go.
               </p>
             )}
           </div>
@@ -867,7 +999,7 @@ function Nails({ pallet, dispatch }: { pallet: Pallet; dispatch: (action: Action
                 <OptionalNumberInput
                   value={nail.sizeMm}
                   min={1}
-                  placeholder="auto"
+                  placeholder="mm"
                   onChange={(sizeMm) => dispatch({ type: 'patchNail', index, patch: { sizeMm } })}
                 />
               </td>
@@ -875,7 +1007,7 @@ function Nails({ pallet, dispatch }: { pallet: Pallet; dispatch: (action: Action
                 <OptionalNumberInput
                   value={nail.count}
                   min={0}
-                  placeholder="auto"
+                  placeholder="qty"
                   onChange={(count) => dispatch({ type: 'patchNail', index, patch: { count } })}
                 />
               </td>
@@ -889,11 +1021,13 @@ function Nails({ pallet, dispatch }: { pallet: Pallet; dispatch: (action: Action
         </tbody>
       </table>
       <p className="mt-2 text-xs text-slate-500">
-        Nails are worked out from the drawing: three where a crossing sits at a corner of the
-        pallet, two on a diagonal everywhere else, 64mm through the outermost boards and the whole
-        underside and 50mm through the rest. Leave size and qty on <em>auto</em> to take that. A
-        number typed here overrides it for the joint the label names, and a qty is shared evenly
-        across that joint&rsquo;s crossings.
+        The schedule printed on the sheet and priced by costing. Typed as you work it out; nothing
+        here is derived, and nothing here moves a dot on the drawing.
+      </p>
+      <p className="mt-1 text-xs text-slate-500">
+        Where the nails <em>go</em> is set on the drawing instead. Every crossing gets two on a
+        diagonal, and the four corners of the top face get three. To change one, open the top or
+        bottom view, turn on <em>Place nails</em> and click the crossing.
       </p>
     </Panel>
   );

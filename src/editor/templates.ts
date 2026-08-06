@@ -108,8 +108,9 @@ export function newLayer(
 }
 
 /**
- * No sizes and no counts: those come from the drawing. What these carry is the
- * nail type, which is what costing prices the joint by.
+ * The three joints a block pallet is nailed at, as the rows of a schedule
+ * waiting to be filled in. Sizes and counts are left blank because they are the
+ * estimator's to work out — nothing can read them off the drawing.
  */
 export const DEFAULT_NAILS: NailSpec[] = [
   { label: 'top board to centre board', type: 'wire nail' },
@@ -143,6 +144,8 @@ export function newPallet(client: { id: string; name: string }): Pallet {
     species,
     planing: 'none',
     nails: DEFAULT_NAILS.map((nail) => ({ ...nail })),
+    // Empty: every crossing takes the default until one is clicked.
+    nailPlacements: [],
     updatedAt: today(),
     layers: [
       newLayer('top_deck', 1, species, extent, 7),

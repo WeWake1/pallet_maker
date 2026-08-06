@@ -267,6 +267,23 @@ describe('the 3D view', () => {
       expect(svg.endsWith('</svg>')).toBe(true);
     }
   });
+
+  /**
+   * Turning the pallet over is what this view is for, so the nails follow the
+   * eye: raised above the deck it shows what is nailed down from above, dropped
+   * below it shows what is nailed up from beneath.
+   */
+  it('shows the nails of whichever face the eye has been dragged round to', () => {
+    const dots = (svg: string): number => (svg.match(/<circle/g) ?? []).length;
+    const top = layout.nailDots.filter((dot) => dot.face === 'top').length;
+    const bottom = layout.nailDots.filter((dot) => dot.face === 'bottom').length;
+    expect(top).not.toBe(bottom);
+
+    const above = renderOrbit(layout, { orientation: { yaw: 0.7, pitch: 0.6 }, ...size });
+    const below = renderOrbit(layout, { orientation: { yaw: 0.7, pitch: -0.6 }, ...size });
+    expect(dots(above)).toBe(top);
+    expect(dots(below)).toBe(bottom);
+  });
 });
 
 describe('screen emphasis', () => {

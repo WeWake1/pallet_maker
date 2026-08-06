@@ -55,8 +55,13 @@ describe('timber volume', () => {
 
 describe('costing', () => {
   const pallet = loadFixture('block-1000x800');
+  // The schedule is typed, so a test that prices nails has to type one.
+  pallet.nails = [
+    { label: 'top board to centre board', type: 'wire nail', sizeMm: 50, count: 46 },
+    { label: 'bottom board to block', type: 'wire nail', sizeMm: 64, count: 18 },
+  ];
   const layout = computeLayout(pallet);
-  const costing = computeCosting(layout, rates);
+  const costing = computeCosting(pallet, layout, rates);
 
   it('prices each material at its own rate', () => {
     expect(costing.materials).toHaveLength(1);
@@ -70,7 +75,7 @@ describe('costing', () => {
     if (blocks.content.type === 'grid') {
       for (const cell of blocks.content.grid.cells.flat()) cell.material = 'hardwood';
     }
-    const split = computeCosting(computeLayout(mixed), rates);
+    const split = computeCosting(mixed, computeLayout(mixed), rates);
     expect(split.materials.map((line) => line.material).sort()).toEqual(['hardwood', 'pine']);
     expect(split.materials.find((line) => line.material === 'hardwood')!.ratePerCft).toBe(2000);
     // Same timber, dearer blocks.
@@ -79,16 +84,26 @@ describe('costing', () => {
   });
 
   it('prices nails by the thousand, per type', () => {
-    // Counted off the drawing: 16 long and 30 short on top, 18 underneath.
-    expect(costing.nailCount).toBe(16 + 30 + 18);
+    expect(costing.nailCount).toBe(46 + 18);
     expect(costing.nailCost).toBeCloseTo((64 / 1000) * 1000, 9);
   });
 
-  it('prices the nails the drawing shows, not a number typed beside it', () => {
-    const pallet = loadFixture('block-1000x800');
-    const layout = computeLayout(pallet);
-    const fromLines = layout.nailLines.reduce((sum, line) => sum + line.count, 0);
-    expect(computeCosting(layout, rates).nailCount).toBe(fromLines);
+  /**
+   * How many nails a pallet takes is the estimator's figure, not the drawing's.
+   * Costing prices the schedule as typed and does not go looking at the dots.
+   */
+  it('prices the schedule as typed, whatever the drawing shows', () => {
+    const clicked = loadFixture('block-1000x800');
+    clicked.nails = [{ label: 'the lot', type: 'wire nail', sizeMm: 50, count: 200 }];
+    expect(computeCosting(clicked, computeLayout(clicked), rates).nailCount).toBe(200);
+  });
+
+  it('leaves a schedule row with no qty out of the price rather than guessing', () => {
+    const blank = loadFixture('block-1000x800');
+    blank.nails = [{ label: 'not worked out yet', type: 'wire nail' }];
+    const partial = computeCosting(blank, computeLayout(blank), rates);
+    expect(partial.nailCount).toBe(0);
+    expect(partial.nailCost).toBe(0);
   });
 
   it('adds the overhead the rates file asks for', () => {
@@ -105,7 +120,7 @@ describe('costing', () => {
   });
 
   it('costs a pallet with no nails without falling over', () => {
-    const bare = computeCosting({ ...layout, nailLines: [] }, rates);
+    const bare = computeCosting({ ...pallet, nails: [] }, layout, rates);
     expect(bare.nailCost).toBe(0);
     expect(bare.total).toBeCloseTo(bare.timberCost * 1.1 + 50, 9);
   });

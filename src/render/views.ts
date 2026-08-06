@@ -8,8 +8,12 @@ import type { DimSpec, Side } from './scene.js';
 import { circle, el, group, rect, svgDocument } from './svg.js';
 import {
   LAYER_STYLE,
+  NAIL_HALO,
   NAIL_INK,
   NAIL_RADIUS,
+  NAIL_TARGET_INK,
+  NAIL_TARGET_MANUAL_INK,
+  NAIL_TARGET_STROKE,
   PRINT_EMPHASIS,
   SCREEN_EMPHASIS,
   SELECTION_INK,
@@ -42,6 +46,12 @@ export interface ViewOptions {
   /** Outline this piece as the selected one. An index into `layout.pieces`. */
   selectedPiece?: number;
   /**
+   * Draw a click target over every crossing, tagged with its index in
+   * `layout.nailCrossings`. The editor turns these on while nails are being
+   * placed; nothing printed ever asks for them.
+   */
+  nailTargets?: boolean;
+  /**
    * How hard the layers behind the near one are held back. Default `print`,
    * which is what the sheet and the PDF want; the editor asks for `screen`,
    * where those layers are being worked on rather than merely referred to.
@@ -62,6 +72,7 @@ export function renderView(layout: Layout, view: ViewKind, options: ViewOptions 
   const body = [
     drawPieces(scene, projected, view, `${idPrefix}-near`, emphasis, options.interactive === true),
     drawNails(scene, layout, view),
+    options.nailTargets === true ? drawNailTargets(scene, layout, view) : '',
     group({ 'pointer-events': 'none' }, dims.map((dim) => renderDimension(scene, dim))),
     drawSelection(scene, projected, layout, options.selectedPiece),
     options.title === false ? '' : drawTitle(scene, view),
@@ -219,8 +230,44 @@ function drawNails(scene: Scene, layout: Layout, view: ViewKind): string {
       return circle(scene.px(u), scene.py(v), NAIL_RADIUS, {
         fill: NAIL_INK,
         stroke: '#ffffff',
-        'stroke-width': 0.4,
+        'stroke-width': NAIL_HALO,
       });
+    }),
+  );
+}
+
+/**
+ * A click target over every crossing, drawn only while the editor is placing
+ * nails. Tagged with its index in `layout.nailCrossings`, the same way a piece
+ * carries its index, so a click can be taken back to the crossing it landed on.
+ *
+ * `pointer-events: all` because the fill is invisible: an unpainted rectangle
+ * would let the click fall through to the board underneath and merely select it.
+ */
+function drawNailTargets(scene: Scene, layout: Layout, view: ViewKind): string {
+  if (view !== 'top' && view !== 'bottom') return '';
+  return group(
+    {},
+    layout.nailCrossings.map((crossing, index) => {
+      if (crossing.face !== view) return '';
+      const a = projectPlanPoint({ x: crossing.x0, y: crossing.y0 }, layout, view);
+      const b = projectPlanPoint({ x: crossing.x1, y: crossing.y1 }, layout, view);
+      const u = Math.min(a.u, b.u);
+      const v = Math.min(a.v, b.v);
+      return rect(
+        scene.px(u),
+        scene.py(v),
+        scene.len(Math.abs(b.u - a.u)),
+        scene.len(Math.abs(b.v - a.v)),
+        {
+          fill: 'none',
+          stroke: crossing.manual ? NAIL_TARGET_MANUAL_INK : NAIL_TARGET_INK,
+          'stroke-width': NAIL_TARGET_STROKE,
+          'stroke-dasharray': crossing.manual ? undefined : '1.5 1.5',
+          'pointer-events': 'all',
+          'data-crossing': index,
+        },
+      );
     }),
   );
 }

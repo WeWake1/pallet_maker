@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
+import { shade } from '../render/theme.js';
+import type { LayerStyle } from '../render/theme.js';
+import { NOT_APPLICABLE } from '../types.js';
+import type { LoadKg } from '../types.js';
 
 /** Small form controls. Tailwind styles the editor chrome only. */
 
@@ -160,6 +164,48 @@ export function OptionalNumberInput({
   );
 }
 
+/**
+ * A figure that is also allowed to be left blank or marked `na`.
+ *
+ * The three states mean different things on the sheet — a figure prints, blank
+ * prints as a dash, `na` takes the whole row off — and all three have to be
+ * typeable into the same field, so this reads numbers out of a text box rather
+ * than being a number box that would refuse the two letters.
+ */
+export function NumberOrNaInput({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: LoadKg | undefined;
+  onChange: (value: LoadKg | undefined) => void;
+  placeholder?: string;
+}) {
+  const [typed, setTyped] = useState<string | null>(null);
+
+  return (
+    <input
+      className={`${inputClass} tabular-nums`}
+      type="text"
+      inputMode="numeric"
+      value={typed ?? (value === undefined ? '' : String(value))}
+      placeholder={placeholder}
+      onBlur={() => setTyped(null)}
+      onChange={(event) => {
+        const text = event.target.value;
+        setTyped(text);
+        const wanted = text.trim().toLowerCase();
+        if (wanted === '') onChange(undefined);
+        else if (wanted === NOT_APPLICABLE) onChange(NOT_APPLICABLE);
+        else {
+          const next = Number.parseInt(wanted, 10);
+          if (Number.isFinite(next) && next >= 0) onChange(next);
+        }
+      }}
+    />
+  );
+}
+
 export function Select<T extends string>({
   value,
   options,
@@ -287,14 +333,97 @@ export function Disclosure({
   );
 }
 
-export function Panel({ title, children, actions }: { title: string; children: ReactNode; actions?: ReactNode }) {
+/**
+ * Text dark enough to read on a layer's own pale fill. The drawing's line
+ * colour is mixed for a hairline on white, not for a word on a tint.
+ */
+function accentInk(accent: LayerStyle): string {
+  return shade(accent.stroke, 0.75);
+}
+
+/**
+ * A card. Given a layer's colours it wears them.
+ *
+ * A stack of a dozen identical white cards makes you read the small print at
+ * the top of each one to find out which layer you are editing. Carrying the
+ * colour the layer is already drawn in — the header tinted with its fill, the
+ * left edge in its line colour — means the card is recognised on the way past
+ * rather than read, and the editor and the drawing agree about what is what.
+ */
+export function Panel({
+  title,
+  children,
+  actions,
+  accent,
+}: {
+  title: string;
+  children: ReactNode;
+  actions?: ReactNode;
+  accent?: LayerStyle;
+}) {
   return (
-    <section className="rounded border border-slate-200 bg-white">
-      <header className="flex items-center justify-between gap-2 border-b border-slate-200 px-2.5 py-1.5">
-        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{title}</h2>
+    <section
+      className="overflow-hidden rounded-md border border-slate-200 bg-white"
+      style={accent ? { borderLeftWidth: '5px', borderLeftColor: accent.stroke } : undefined}
+    >
+      <header
+        className="flex items-center justify-between gap-2 border-b border-slate-200 px-3 py-2"
+        style={accent ? { background: accent.fill, borderBottomColor: accent.stroke } : undefined}
+      >
+        <h2
+          className={
+            accent
+              ? 'text-base font-bold tracking-tight'
+              : 'text-[11px] font-semibold uppercase tracking-wider text-slate-500'
+          }
+          style={accent ? { color: accentInk(accent) } : undefined}
+        >
+          {title}
+        </h2>
         {actions}
       </header>
       <div className="p-2.5">{children}</div>
     </section>
+  );
+}
+
+/**
+ * The row a design is actually typed into.
+ *
+ * Most of a layer card is corrections and settings that are right already. One
+ * row of it — the size, the count and the material — is filled in on every
+ * design there is. Someone entering a dozen designs should not have to find
+ * that row again on every card, so it is boxed in the layer's own colour,
+ * captioned, and set larger than the settings around it. The type scale comes
+ * from `.key-fields` in styles.css rather than from a size prop threaded
+ * through every control.
+ */
+export function KeyFields({
+  caption,
+  note,
+  accent,
+  children,
+}: {
+  caption: string;
+  note?: string;
+  accent?: LayerStyle;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className="key-fields rounded-md border-2 bg-white p-2.5 shadow-sm"
+      style={{ borderColor: accent?.stroke ?? '#94a3b8' }}
+    >
+      <div className="mb-1.5 flex items-baseline gap-2">
+        <span
+          className="text-[11px] font-bold uppercase tracking-wider"
+          style={{ color: accent ? accentInk(accent) : '#475569' }}
+        >
+          {caption}
+        </span>
+        {note && <span className="text-[11px] font-normal text-slate-500">{note}</span>}
+      </div>
+      {children}
+    </div>
   );
 }

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { today } from './ids.js';
+import { MAX_NAILS_PER_CROSSING, NOT_APPLICABLE } from './types.js';
 import type { Client, Pallet } from './types.js';
 
 /**
@@ -9,6 +10,9 @@ import type { Client, Pallet } from './types.js';
 
 const mm = z.number().int();
 const positiveMm = z.number().int().positive();
+
+/** A load in kilograms, or the word that keeps it off the sheet entirely. */
+const loadKg = z.union([z.number().nonnegative(), z.literal(NOT_APPLICABLE)]);
 
 export const DirectionSchema = z.enum(['along_length', 'across_width']);
 
@@ -21,13 +25,33 @@ export const LayerKindSchema = z.enum([
   'panel',
 ]);
 
+// A line of the written nail schedule. Nothing is derived: size and qty are
+// blank only because a row is typed a field at a time and half of one has to be
+// storable. See NailSpec in types.ts.
 export const NailSpecSchema = z.object({
   label: z.string().min(1),
   type: z.string().min(1),
-  // Both blank by default: the rule in nails.ts derives them from the drawing,
-  // and a spec is only there to override what it gets wrong.
   sizeMm: positiveMm.optional(),
   count: z.number().int().nonnegative().optional(),
+});
+
+export const PieceSourceSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('slot'), index: z.number().int().nonnegative() }),
+  z.object({
+    kind: z.literal('cell'),
+    row: z.number().int().nonnegative(),
+    col: z.number().int().nonnegative(),
+  }),
+  z.object({ kind: z.literal('sheet') }),
+]);
+
+// One crossing whose nail count was clicked. Anything absent takes the default.
+export const NailPlacementSchema = z.object({
+  upperLayerId: z.string().min(1),
+  upperSource: PieceSourceSchema,
+  lowerLayerId: z.string().min(1),
+  lowerSource: PieceSourceSchema,
+  count: z.number().int().min(0).max(MAX_NAILS_PER_CROSSING),
 });
 
 export const SlotSchema = z.object({
@@ -99,7 +123,12 @@ export const PalletSchema = z.object({
   /** Derived from the layer stack when left at 0. */
   overallHeight: z.number().int().nonnegative().default(0),
 
+  // Every stated attribute below also takes '' and 'na'. Neither is a value:
+  // blank is not settled yet and prints as a dash, 'na' does not apply to this
+  // design and takes its row off the sheet. See NOT_APPLICABLE in types.ts.
   palletType: z.enum([
+    '',
+    'na',
     'block_4way',
     'stringer_2way',
     'plywood_type1',
@@ -109,18 +138,23 @@ export const PalletSchema = z.object({
     'other',
   ]),
   deckType: z.enum([
+    '',
+    'na',
     'single_face',
     'double_face_reversible',
     'double_face_non_reversible',
   ]),
-  entry: z.enum(['2_way', '4_way', 'partial_4way']),
+  entry: z.enum(['', 'na', '2_way', '4_way', 'partial_4way']),
 
-  species: z.string().min(1),
-  planing: z.enum(['none', '1_side', '2_side', '4_side']),
-  staticLoadKg: z.number().nonnegative().optional(),
-  dynamicLoadKg: z.number().nonnegative().optional(),
+  species: z.string().default(''),
+  planing: z.enum(['', 'na', 'none', '1_side', '2_side', '4_side']),
+  staticLoadKg: loadKg.optional(),
+  dynamicLoadKg: loadKg.optional(),
 
   nails: z.array(NailSpecSchema).default([]),
+  // Absent on a document written before nails were placed by hand: every
+  // crossing then simply takes its default.
+  nailPlacements: z.array(NailPlacementSchema).default([]),
   notes: z.string().optional(),
 
   // The store stamps this on every write. A document arriving from an older

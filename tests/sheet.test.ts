@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { computeLayout } from '../src/geometry/layout.js';
+import { parsePallet } from '../src/schema.js';
 import { packLanes, Scene, TIER } from '../src/render/scene.js';
 import type { DimSpec, DimTier } from '../src/render/scene.js';
 import { renderView } from '../src/render/views.js';
@@ -146,7 +147,8 @@ describe('the sheet', () => {
     expect(text).toContain('Top board');
     // Length, then width, then thickness: the order the shop floor says them in.
     expect(text).toContain('1200 × 100 × 18');
-    expect(text).toContain('Top face');
+    // The nail schedule as typed on the document, printed as written.
+    expect(text).toContain('top board to centre board');
     expect(text).toContain('wire nail');
     expect(text).toContain('Static load 3000 kg');
     expect(text).toContain('Species pine');
@@ -225,6 +227,72 @@ describe('the sheet', () => {
       expect(sheet).toContain('</html>');
       expect([...sheet.matchAll(/<svg/g)]).toHaveLength(5);
     }
+  });
+});
+
+/**
+ * Not every design answers every question, and there are two different ways of
+ * not answering one. A blank is a question still open, and the shop has to see
+ * that it is open; `na` is closed — there is no such thing on this pallet — and
+ * a line saying so is a line of the specification wasted.
+ */
+describe('an attribute the design does not state', () => {
+  const pallet = loadFixture('block-1000x800');
+  const layout = computeLayout(pallet);
+  /**
+   * The text of one block of the data column. Scoped to the block because
+   * "Type" is also a column of the nail schedule, and a row of the specification
+   * being gone is not the same as the word being gone from the page.
+   */
+  const sheetText = (patch: Partial<typeof pallet>, heading = 'Load and material'): string => {
+    const html = renderSheet({ ...pallet, ...patch }, layout);
+    return textOf(new RegExp(`<h2>${heading}</h2>([\\s\\S]*?)</table>`).exec(html)![1]!);
+  };
+  const overall = (patch: Partial<typeof pallet>): string => sheetText(patch, 'Overall');
+
+  it('prints a dash for a blank, and keeps the line on the sheet', () => {
+    expect(sheetText({ species: '' })).toContain('Species —');
+    expect(overall({ deckType: '' })).toContain('Deck —');
+    expect(sheetText({ staticLoadKg: undefined })).toContain('Static load —');
+  });
+
+  it('takes the whole line off the sheet for na, typed or picked', () => {
+    expect(sheetText({ species: 'na' })).not.toContain('Species');
+    expect(sheetText({ planing: 'na' })).not.toContain('Planing');
+    expect(sheetText({ staticLoadKg: 'na' })).not.toContain('Static load');
+    expect(overall({ deckType: 'na' })).not.toContain('Deck');
+    expect(overall({ entry: 'na' })).not.toContain('Entry');
+    expect(overall({ palletType: 'na' })).not.toContain('Type');
+    // The size is what the sheet is for, and is never one of the droppable rows.
+    expect(overall({ palletType: 'na', entry: 'na', deckType: 'na' })).toContain('Overall size');
+  });
+
+  it('reads na however it was typed, and only when it is the whole answer', () => {
+    expect(sheetText({ species: 'NA' })).not.toContain('Species');
+    expect(sheetText({ species: ' na ' })).not.toContain('Species');
+    // A species really called this keeps its line: only the word alone means it.
+    expect(sheetText({ species: 'nagpur pine' })).toContain('Species nagpur pine');
+  });
+
+  it('closes the rows below up rather than leaving a gap', () => {
+    const text = sheetText({ species: 'na', staticLoadKg: 'na' });
+    expect(text).toContain('Dynamic load');
+    expect(text).toContain('Planing None');
+    // The two tolerances are the same on every sheet and are never dropped.
+    expect(text).toContain('Component tolerance ± 2 mm');
+  });
+
+  it('leaves the design saveable with nothing stated at all', () => {
+    const bare = {
+      ...pallet,
+      species: '',
+      palletType: '' as const,
+      deckType: '' as const,
+      entry: '' as const,
+      planing: '' as const,
+    };
+    expect(() => parsePallet(bare)).not.toThrow();
+    expect(renderSheet(bare, layout)).toContain('</html>');
   });
 });
 

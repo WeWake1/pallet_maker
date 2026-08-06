@@ -1,10 +1,22 @@
 import { useEffect, useRef } from 'react';
 import type { LayerLayout } from '../geometry/types.js';
 import { mmLabel } from '../render/scene.js';
+import { LAYER_STYLE } from '../render/theme.js';
+import type { LayerStyle } from '../render/theme.js';
 import type { BlockCell, Direction, Layer, LayerContent, SheetSpec, Slot } from '../types.js';
 import type { Action, Selection } from './state.js';
 import { MAX_GRID_SIDE, MAX_SLOTS, sameSource } from './state.js';
-import { Button, Check, Disclosure, Field, NumberInput, Panel, Select, TextInput } from './ui.jsx';
+import {
+  Button,
+  Check,
+  Disclosure,
+  Field,
+  KeyFields,
+  NumberInput,
+  Panel,
+  Select,
+  TextInput,
+} from './ui.jsx';
 
 /**
  * The form is layer based: say how many components the layer has and what size
@@ -83,10 +95,14 @@ export function LayerEditor({
   dispatch: (action: Action) => void;
 }) {
   const spread = computed?.spread;
+  // The colour this layer is drawn in, worn by its card and by the boxed row
+  // inside it, so the two agree about what is what.
+  const accent = LAYER_STYLE[layer.kind];
 
   return (
     <Panel
       title={KIND_LABEL.find(([kind]) => kind === layer.kind)?.[1] ?? layer.kind}
+      accent={accent}
       actions={
         <div className="flex gap-1">
           <Button onClick={() => dispatch({ type: 'moveLayer', layerId: layer.id, by: -1 })} title="Move up">
@@ -173,10 +189,16 @@ export function LayerEditor({
       )}
 
       {layer.content.type === 'sequence' && (
-        <Slots layer={layer} slots={layer.content.slots} selection={selection} dispatch={dispatch} />
+        <Slots
+          layer={layer}
+          slots={layer.content.slots}
+          selection={selection}
+          dispatch={dispatch}
+          accent={accent}
+        />
       )}
-      {layer.content.type === 'grid' && <Grid layer={layer} dispatch={dispatch} />}
-      {layer.content.type === 'sheet' && <Sheet layer={layer} dispatch={dispatch} />}
+      {layer.content.type === 'grid' && <Grid layer={layer} dispatch={dispatch} accent={accent} />}
+      {layer.content.type === 'sheet' && <Sheet layer={layer} dispatch={dispatch} accent={accent} />}
     </Panel>
   );
 }
@@ -194,16 +216,22 @@ function AllBoards({
   layer,
   slots,
   dispatch,
+  accent,
 }: {
   layer: Layer;
   slots: Slot[];
   dispatch: (action: Action) => void;
+  accent?: LayerStyle;
 }) {
   const all = (patch: Partial<Slot>) =>
     dispatch({ type: 'patchAllSlots', layerId: layer.id, patch });
 
   return (
-    <div className="rounded border border-slate-200 bg-slate-50 p-2">
+    <KeyFields
+      caption="Every board"
+      note="sets the whole layer — nudges and joins are left alone"
+      accent={accent}
+    >
       <div className="grid grid-cols-5 gap-2">
         <Field label="Length">
           <NumberInput
@@ -245,10 +273,7 @@ function AllBoards({
           />
         </Field>
       </div>
-      <p className="mt-1.5 text-[11px] text-slate-500">
-        Sets every board in this layer at once. Nudges and joins are left alone.
-      </p>
-    </div>
+    </KeyFields>
   );
 }
 
@@ -257,11 +282,13 @@ function Slots({
   slots,
   selection,
   dispatch,
+  accent,
 }: {
   layer: Layer;
   slots: Slot[];
   selection: Selection | null;
   dispatch: (action: Action) => void;
+  accent?: LayerStyle;
 }) {
   const sizes = slots.map((slot) => `${slot.length}x${slot.width}x${slot.thickness}`);
   // A board picked on the drawing has to be reachable, so a selection inside
@@ -270,7 +297,7 @@ function Slots({
 
   return (
     <div className="mt-3 space-y-2">
-      <AllBoards layer={layer} slots={slots} dispatch={dispatch} />
+      <AllBoards layer={layer} slots={slots} dispatch={dispatch} accent={accent} />
       <Disclosure
         summary={componentSummary('board', sizes)}
         defaultOpen={sizeCount(sizes) > 1}
@@ -385,9 +412,11 @@ function SlotRow({
 function Grid({
   layer,
   dispatch,
+  accent,
 }: {
   layer: Layer;
   dispatch: (action: Action) => void;
+  accent?: LayerStyle;
 }) {
   if (layer.content.type !== 'grid') return null;
   const grid = layer.content.grid;
@@ -400,7 +429,11 @@ function Grid({
     <div className="mt-3">
       {/* The nine blocks under a pallet are nearly always one size, so they are
           set once here. The table below is for the design where they are not. */}
-      <div className="rounded border border-slate-200 bg-slate-50 p-2">
+      <KeyFields
+        caption="Every block"
+        note={`sets all ${cells.length} at once`}
+        accent={accent}
+      >
         <div className="grid grid-cols-4 gap-2">
           <Field label="Length">
             <NumberInput
@@ -434,10 +467,7 @@ function Grid({
             />
           </Field>
         </div>
-        <p className="mt-1.5 text-[11px] text-slate-500">
-          Sets all {cells.length} blocks at once.
-        </p>
-      </div>
+      </KeyFields>
 
       <div className="mt-3 grid grid-cols-6 gap-2">
         <Field label="Rows">
@@ -549,9 +579,11 @@ function Grid({
 function Sheet({
   layer,
   dispatch,
+  accent,
 }: {
   layer: Layer;
   dispatch: (action: Action) => void;
+  accent?: LayerStyle;
 }) {
   if (layer.content.type !== 'sheet') return null;
   const sheet = layer.content.sheet;
@@ -559,19 +591,27 @@ function Sheet({
     dispatch({ type: 'patchSheet', layerId: layer.id, patch });
 
   return (
-    <div className="mt-3 grid grid-cols-4 gap-2">
-      <Field label="Length">
-        <NumberInput value={sheet.length} min={1} onChange={(length) => patch({ length })} />
-      </Field>
-      <Field label="Width">
-        <NumberInput value={sheet.width} min={1} onChange={(width) => patch({ width })} />
-      </Field>
-      <Field label="Thickness">
-        <NumberInput value={sheet.thickness} min={1} onChange={(thickness) => patch({ thickness })} />
-      </Field>
-      <Field label="Material">
-        <TextInput value={sheet.material} onChange={(material) => patch({ material })} />
-      </Field>
+    <div className="mt-3">
+      <KeyFields caption="The sheet" accent={accent}>
+        <div className="grid grid-cols-4 gap-2">
+          <Field label="Length">
+            <NumberInput value={sheet.length} min={1} onChange={(length) => patch({ length })} />
+          </Field>
+          <Field label="Width">
+            <NumberInput value={sheet.width} min={1} onChange={(width) => patch({ width })} />
+          </Field>
+          <Field label="Thickness">
+            <NumberInput
+              value={sheet.thickness}
+              min={1}
+              onChange={(thickness) => patch({ thickness })}
+            />
+          </Field>
+          <Field label="Material">
+            <TextInput value={sheet.material} onChange={(material) => patch({ material })} />
+          </Field>
+        </div>
+      </KeyFields>
     </div>
   );
 }

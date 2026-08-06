@@ -1,8 +1,16 @@
 import type { Layout } from '../geometry/types.js';
-import { isoBounds, isoFaces, orderForPainter } from './isometric.js';
+import { isoBounds, isoFaces, orderForPainter, projectIso } from './isometric.js';
 import { renderTitle, TITLE_SPACE } from './scene.js';
-import { el, fmt, group, svgDocument } from './svg.js';
-import { ISO_FACE_SHADE, ISO_STROKE, LAYER_STYLE, shade } from './theme.js';
+import { circle, el, fmt, group, svgDocument } from './svg.js';
+import {
+  ISO_FACE_SHADE,
+  ISO_STROKE,
+  LAYER_STYLE,
+  NAIL_HALO,
+  NAIL_INK,
+  NAIL_RADIUS,
+  shade,
+} from './theme.js';
 
 export const ISO_TITLE = 'ISOMETRIC';
 
@@ -24,8 +32,12 @@ const MARGIN = 10;
 
 /**
  * The isometric, generated geometrically from PlacedPiece[] like every other
- * view. Three visible faces per piece, painted back to front, no nail dots and
- * no dimensions: it is the pictorial view, and the flat views carry the numbers.
+ * view. Three visible faces per piece, painted back to front, and no dimensions:
+ * it is the pictorial view, and the flat views carry the numbers.
+ *
+ * The nails of the top face are drawn on it, because a fitter reading the sheet
+ * wants to see the nailing pattern on the pallet rather than only in plan. The
+ * underside's are not: the eye is above the deck and cannot see them.
  */
 export function renderIsometric(layout: Layout, options: IsoOptions = {}): string {
   const idPrefix = `${options.idPrefix ?? 'view'}-iso`;
@@ -78,8 +90,25 @@ export function renderIsometric(layout: Layout, options: IsoOptions = {}): strin
     );
   });
 
+  // Painted after every piece. Nothing sits above the top face, so a dot on it
+  // is never covered and needs no place in the painter's order.
+  const nails = group(
+    { 'pointer-events': 'none' },
+    layout.nailDots
+      .filter((dot) => dot.face === 'top')
+      .map((dot) => {
+        const at = projectIso(dot.x, dot.y, dot.z);
+        return circle(px(at.sx), py(at.sy), NAIL_RADIUS, {
+          fill: NAIL_INK,
+          stroke: '#ffffff',
+          'stroke-width': NAIL_HALO,
+        });
+      }),
+  );
+
   const body =
     group({ 'shape-rendering': 'geometricPrecision' }, pieces) +
+    nails +
     (showTitle ? renderTitle(width, height, ISO_TITLE) : '');
 
   return svgDocument({

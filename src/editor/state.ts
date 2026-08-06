@@ -1,4 +1,7 @@
+import { nextNailCount, sameNailCrossing } from '../geometry/nails.js';
+import type { NailCrossing } from '../geometry/nails.js';
 import type { PieceSource } from '../geometry/types.js';
+import { notApplicable } from '../types.js';
 import type {
   BlockCell,
   BlockGrid,
@@ -30,7 +33,10 @@ export interface EditorState {
 }
 
 export type Action =
-  | { type: 'replace'; pallet: Pallet }
+  // `reset` marks a document that came from the store rather than from an edit.
+  // It means nothing here; the history around this reducer reads it as a point
+  // there is no going back past. See ./history.ts.
+  | { type: 'replace'; pallet: Pallet; reset?: boolean }
   | { type: 'patchPallet'; patch: Partial<Pallet> }
   | { type: 'addLayer'; kind: LayerKind }
   | { type: 'removeLayer'; layerId: string }
@@ -50,6 +56,8 @@ export type Action =
   | { type: 'addNail' }
   | { type: 'removeNail'; index: number }
   | { type: 'patchNail'; index: number; patch: Partial<NailSpec> }
+  | { type: 'cycleNailCrossing'; crossing: NailCrossing }
+  | { type: 'clearNailPlacements' }
   | { type: 'select'; selection: Selection | null }
   | { type: 'nudge'; delta: number }
   | { type: 'setNudge'; value: number };
@@ -72,6 +80,18 @@ export const MAX_SLOTS = 200;
 export const MAX_GRID_SIDE = 20;
 
 /**
+ * What a new board is made of.
+ *
+ * The design's species where it states one. A design that leaves it blank, or
+ * says the sheet should not carry a species at all, still has to make boards
+ * out of something, so those both fall back to pine rather than to a board
+ * labelled with the word that meant "do not print this".
+ */
+function defaultMaterial(pallet: Pallet): string {
+  return notApplicable(pallet.species) ? 'pine' : pallet.species || 'pine';
+}
+
+/**
  * Another board for a layer, matching the last one it has.
  *
  * A deck is nearly always one size repeated, so the size carries over. Where
@@ -82,7 +102,7 @@ function anotherSlot(pallet: Pallet, layer: Layer, slots: Slot[]): Slot {
   const previous = slots.at(-1);
   return previous
     ? { ...previous, nudgeMm: 0, joinedToPrev: false }
-    : newSlot(pallet.species || 'pine', runLength(pallet, layer.direction));
+    : newSlot(defaultMaterial(pallet), runLength(pallet, layer.direction));
 }
 
 /** Layers are ordered top to bottom, and `order` just follows the list. */
@@ -126,7 +146,7 @@ export function reducer(state: EditorState, action: Action): EditorState {
       break;
 
     case 'addLayer': {
-      const material = pallet.species || 'pine';
+      const material = defaultMaterial(pallet);
       pallet.layers.push(newLayer(action.kind, pallet.layers.length + 1, material, pallet));
       renumber(pallet);
       break;
@@ -158,7 +178,7 @@ export function reducer(state: EditorState, action: Action): EditorState {
     case 'setContent': {
       const layer = findLayer(pallet, action.layerId);
       if (layer && layer.content.type !== action.contentType) {
-        const material = pallet.species || 'pine';
+        const material = defaultMaterial(pallet);
         layer.content =
           action.contentType === 'grid'
             ? { type: 'grid', grid: newGrid(3, 3, material) }
@@ -265,7 +285,7 @@ export function reducer(state: EditorState, action: Action): EditorState {
             { length: grid.cols },
             (_, c) =>
               grid.cells[r]?.[c] ??
-              (template ? { ...template } : newCell(pallet.species || 'pine')),
+              (template ? { ...template } : newCell(defaultMaterial(pallet))),
           ),
         );
       }
@@ -310,7 +330,6 @@ export function reducer(state: EditorState, action: Action): EditorState {
     }
 
     case 'addNail':
-      // Size and count left off: derived from the drawing until overridden.
       pallet.nails.push({ label: '', type: 'wire nail' });
       break;
 
@@ -323,6 +342,42 @@ export function reducer(state: EditorState, action: Action): EditorState {
       if (nail) Object.assign(nail, action.patch);
       break;
     }
+
+    /**
+     * A click on a crossing in the top or bottom view. The count steps on by
+     * one and round, so clicking keeps working and never has to be undone.
+     *
+     * A crossing put back to what it would have been anyway drops its placement
+     * rather than storing one: the document then says only what was changed,
+     * and a crossing on the default follows the default if the pallet is
+     * rearranged later.
+     */
+    case 'cycleNailCrossing': {
+      const { crossing } = action;
+      const at = pallet.nailPlacements.findIndex((placement) =>
+        sameNailCrossing(placement, crossing),
+      );
+      const next = nextNailCount(crossing.count);
+
+      if (next === crossing.defaultCount) {
+        if (at >= 0) pallet.nailPlacements.splice(at, 1);
+      } else if (at >= 0) {
+        pallet.nailPlacements[at]!.count = next;
+      } else {
+        pallet.nailPlacements.push({
+          upperLayerId: crossing.upperLayerId,
+          upperSource: crossing.upperSource,
+          lowerLayerId: crossing.lowerLayerId,
+          lowerSource: crossing.lowerSource,
+          count: next,
+        });
+      }
+      break;
+    }
+
+    case 'clearNailPlacements':
+      pallet.nailPlacements = [];
+      break;
 
     // A nudge is a number on a component, never a change to the drawing.
     case 'nudge':

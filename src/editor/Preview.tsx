@@ -16,6 +16,11 @@ import { sameSource } from './state.js';
  * one of them. Selection only: there is no dragging, because a position that
  * came from dragging would live on the drawing rather than on the component,
  * and the two would drift apart.
+ *
+ * The top and bottom views have a second mode, for placing nails. A nail is not
+ * a position on the drawing in the way a board is — it is a count on a crossing,
+ * and the crossing is found from the boards — so clicking one is an edit to the
+ * document like any other, and the drawing stays a thing that is generated.
  */
 
 type Mode = ViewKind | 'orbit';
@@ -48,6 +53,12 @@ export function Preview({
   const [mode, setMode] = useState<Mode>('top');
   const [orientation, setOrientation] = useState<Orientation>(ISO_ORIENTATION);
   const [zoom, setZoom] = useState(1);
+  const [placingNails, setPlacingNails] = useState(false);
+
+  // Only the two plan views show nails, so the mode has nothing to offer in the
+  // others and turns itself off rather than sitting there armed and invisible.
+  const plan = mode === 'top' || mode === 'bottom';
+  const nailMode = placingNails && plan;
 
   const selectedIndex = useMemo(() => {
     if (!selection) return undefined;
@@ -71,6 +82,20 @@ export function Preview({
           selection: { layerId: piece.layerId, source: piece.source },
         });
       }
+    },
+    [layout, dispatch],
+  );
+
+  /**
+   * A click while nails are being placed. It steps the crossing on rather than
+   * selecting a board, so the two modes never fight over the same click.
+   */
+  const clickCrossing = useCallback(
+    (target: EventTarget) => {
+      const hit = (target as Element).closest('[data-crossing]');
+      if (!hit) return;
+      const crossing = layout.nailCrossings[Number(hit.getAttribute('data-crossing'))];
+      if (crossing) dispatch({ type: 'cycleNailCrossing', crossing });
     },
     [layout, dispatch],
   );
@@ -105,7 +130,18 @@ export function Preview({
           layout={layout}
           view={mode}
           selectedIndex={selectedIndex}
-          onSelect={select}
+          nailMode={nailMode}
+          onSelect={nailMode ? clickCrossing : select}
+        />
+      )}
+
+      {plan && (
+        <NailControls
+          layout={layout}
+          on={placingNails}
+          view={mode as ViewKind}
+          onToggle={() => setPlacingNails((current) => !current)}
+          dispatch={dispatch}
         />
       )}
 
@@ -146,11 +182,13 @@ function FlatStage({
   layout,
   view,
   selectedIndex,
+  nailMode,
   onSelect,
 }: {
   layout: Layout;
   view: ViewKind;
   selectedIndex: number | undefined;
+  nailMode: boolean;
   onSelect: (target: EventTarget) => void;
 }) {
   const svg = useMemo(
@@ -160,22 +198,86 @@ function FlatStage({
         targetHeight: 420,
         interactive: true,
         selectedPiece: selectedIndex,
+        nailTargets: nailMode,
         title: false,
         // On screen the layers under the top one are what is being positioned,
         // so they are drawn to be read rather than held back for the print.
         emphasis: 'screen',
       }),
-    [layout, view, selectedIndex],
+    [layout, view, selectedIndex, nailMode],
   );
 
   return (
     <div
-      className="flex flex-1 items-center justify-center overflow-auto bg-slate-50 p-3"
+      className={
+        'flex flex-1 items-center justify-center overflow-auto bg-slate-50 p-3 ' +
+        (nailMode ? 'cursor-pointer' : '')
+      }
       onClick={(event) => onSelect(event.target)}
       // The SVG comes from the same renderer the sheet and the PDF use, so what
       // is on screen is what will print.
       dangerouslySetInnerHTML={{ __html: svg }}
     />
+  );
+}
+
+/**
+ * The nail mode switch, and what it does while it is on.
+ *
+ * Reset is here rather than in the form because this is where nails are placed:
+ * it puts every crossing in the pallet back to two on a diagonal and three at
+ * the corners, which is where a design that has not been fiddled with starts.
+ */
+function NailControls({
+  layout,
+  on,
+  view,
+  onToggle,
+  dispatch,
+}: {
+  layout: Layout;
+  on: boolean;
+  view: ViewKind;
+  onToggle: () => void;
+  dispatch: (action: Action) => void;
+}) {
+  const shown = layout.nailCrossings.filter((crossing) => crossing.face === view);
+  const dots = shown.reduce((sum, crossing) => sum + crossing.count, 0);
+  const changed = layout.nailCrossings.filter((crossing) => crossing.manual).length;
+
+  return (
+    <div className="flex shrink-0 items-center gap-2 border-t border-slate-200 bg-white px-2 py-1.5">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-pressed={on}
+        className={
+          'rounded border px-2 py-0.5 text-xs ' +
+          (on
+            ? 'border-blue-600 bg-blue-600 text-white'
+            : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-100')
+        }
+      >
+        Place nails
+      </button>
+
+      <span className="text-[11px] text-slate-500">
+        {on
+          ? `click a crossing to step it 0 → 4 and round · ${dots} nails in this view`
+          : `${dots} nails in this view`}
+      </span>
+
+      {changed > 0 && (
+        <button
+          type="button"
+          onClick={() => dispatch({ type: 'clearNailPlacements' })}
+          className="ml-auto rounded border border-slate-300 bg-white px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-100"
+          title="Put every crossing back to two on a diagonal, three at the corners"
+        >
+          Reset {changed}
+        </button>
+      )}
+    </div>
   );
 }
 

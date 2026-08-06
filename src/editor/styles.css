@@ -8,3 +8,17 @@ body,
 #root {
   height: 100%;
 }
+
+/* The boxed row on a layer card — see KeyFields in ui.tsx. It is the row that
+   gets typed into on every design, so its fields are a size up from the
+   settings around them. Here rather than as a prop on every control. */
+.key-fields input,
+.key-fields select {
+  font-size: 0.9375rem;
+  padding: 0.3rem 0.5rem;
+}
+
+.key-fields label > span {
+  font-size: 0.75rem;
+  color: #334155;
+}

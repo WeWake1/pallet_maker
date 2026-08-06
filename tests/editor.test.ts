@@ -112,6 +112,20 @@ describe('the form', () => {
     expect(slots.slots[7]).toMatchObject({ width: 100, length: 1000, nudgeMm: 0 });
   });
 
+  /**
+   * The species does two jobs: it is a line of the sheet, and it is what a new
+   * board is made of. Saying the sheet should not carry that line is not saying
+   * the boards are made of the word "na".
+   */
+  it('gives a new layer real timber when the species is left off the sheet', () => {
+    for (const species of ['na', '']) {
+      const state = run(start(), { type: 'patchPallet', patch: { species } });
+      const added = run(state, { type: 'addLayer', kind: 'top_deck' });
+      const layer = added.pallet.layers.at(-1)!;
+      expect(slotsOf(added, layer.id).map((slot) => slot.material)).toContain('pine');
+    }
+  });
+
   it('lays out again on every edit, so the preview follows the numbers', () => {
     const state = start();
     const layer = state.pallet.layers[0]!;
@@ -425,6 +439,83 @@ describe('selection and nudging', () => {
       index: 0,
     });
     expect(removed.selection).toBeNull();
+  });
+});
+
+/**
+ * Nails are placed by clicking a crossing in the top or bottom view. A click is
+ * an edit to the document like any other: it writes a count against the two
+ * boards that cross, and the drawing is regenerated from that.
+ */
+describe('placing nails by clicking a crossing', () => {
+  /** A click on the crossing at `index`, given the drawing as it stands now. */
+  function click(state: EditorState, index = 0): EditorState {
+    const crossing = computeLayout(state.pallet).nailCrossings[index]!;
+    return reducer(state, { type: 'cycleNailCrossing', crossing });
+  }
+
+  function countAt(state: EditorState, index = 0): number {
+    return computeLayout(state.pallet).nailCrossings[index]!.count;
+  }
+
+  it('starts with every crossing on the default and nothing stored', () => {
+    const state = start();
+    expect(state.pallet.nailPlacements).toEqual([]);
+    const crossings = computeLayout(state.pallet).nailCrossings;
+    expect(crossings.every((crossing) => !crossing.manual)).toBe(true);
+    expect(new Set(crossings.map((crossing) => crossing.count))).toEqual(new Set([2, 3]));
+  });
+
+  it('steps a crossing on by one, and round to zero past four', () => {
+    // This crossing is a corner of the top face, so it starts at three.
+    let state = start();
+    expect(countAt(state)).toBe(3);
+    state = click(state);
+    expect(countAt(state)).toBe(4);
+    state = click(state);
+    expect(countAt(state)).toBe(0);
+    state = click(state);
+    expect(countAt(state)).toBe(1);
+  });
+
+  /**
+   * Only what was changed is written down. A crossing clicked right round to
+   * where it started leaves no trace, so it goes on following the default if
+   * the pallet is rearranged later.
+   */
+  it('stores only the crossings that differ from the default', () => {
+    let state = start();
+    state = click(state);
+    expect(state.pallet.nailPlacements).toHaveLength(1);
+    expect(state.pallet.nailPlacements[0]).toMatchObject({ count: 4 });
+
+    // Round through 0, 1, 2 and back to the 3 it started on.
+    for (let i = 0; i < 4; i++) state = click(state);
+    expect(countAt(state)).toBe(3);
+    expect(state.pallet.nailPlacements).toEqual([]);
+  });
+
+  it('touches one crossing and leaves every other one alone', () => {
+    const before = computeLayout(start().pallet).nailCrossings.map((c) => c.count);
+    const after = computeLayout(click(start()).pallet).nailCrossings.map((c) => c.count);
+    expect(after.slice(1)).toEqual(before.slice(1));
+    expect(after[0]).not.toBe(before[0]);
+  });
+
+  it('puts the whole pallet back to the default when the placements are cleared', () => {
+    let state = start();
+    state = click(state, 0);
+    state = click(state, 5);
+    expect(state.pallet.nailPlacements).toHaveLength(2);
+
+    const reset = reducer(state, { type: 'clearNailPlacements' });
+    expect(reset.pallet.nailPlacements).toEqual([]);
+    expect(computeLayout(reset.pallet).nailCrossings.every((c) => !c.manual)).toBe(true);
+  });
+
+  it('writes a document the schema will take back', () => {
+    const state = click(click(start()));
+    expect(() => PalletSchema.parse(state.pallet)).not.toThrow();
   });
 });
 

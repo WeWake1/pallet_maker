@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { computeLayout } from '../src/geometry/layout.js';
 import { projectPieces, projectPlanPoint, viewFrame } from '../src/render/project.js';
+import { MAX_NAILS_PER_CROSSING } from '../src/types.js';
 import type { ViewKind } from '../src/render/project.js';
 import { renderView } from '../src/render/views.js';
 import { loadFixture } from './helpers.js';
@@ -117,10 +118,12 @@ describe('nail dots', () => {
   it('sit at every crossing of a deck board and the layer against it', () => {
     const top = layout.nailDots.filter((d) => d.face === 'top');
     expect(top).toHaveLength(TOP_NAILS);
-    expect(new Set(top.map((d) => d.lowerKind))).toEqual(new Set(['bearer']));
-    const bottom = layout.nailDots.filter((d) => d.face === 'bottom');
+    const crossings = layout.nailCrossings.filter((c) => c.face === 'top');
+    expect(crossings).toHaveLength(21);
+    expect(new Set(crossings.map((c) => c.lowerKind))).toEqual(new Set(['bearer']));
     // Nailed up from below, so the blocks are the upper member of that joint.
-    expect(new Set(bottom.map((d) => d.upperKind))).toEqual(new Set(['block']));
+    const under = layout.nailCrossings.filter((c) => c.face === 'bottom');
+    expect(new Set(under.map((c) => c.upperKind))).toEqual(new Set(['block']));
   });
 
   it('puts three at each corner of the pallet and two everywhere else', () => {
@@ -142,44 +145,95 @@ describe('nail dots', () => {
     expect(top.length - 4 * 3).toBe(17 * 2);
   });
 
-  it('drives the long nail through the outer boards and the whole underside', () => {
-    const top = layout.nailDots.filter((d) => d.face === 'top');
-    // Two outer boards, three centre boards: 4 corners of 3 and 2 middles of 2.
-    expect(top.filter((d) => d.sizeMm === 64)).toHaveLength(4 * 3 + 2 * 2);
-    expect(top.filter((d) => d.sizeMm === 50)).toHaveLength(5 * 3 * 2);
-    const bottom = layout.nailDots.filter((d) => d.face === 'bottom');
-    expect(bottom.every((d) => d.sizeMm === 64)).toBe(true);
+  /**
+   * The targets are what makes a crossing clickable, and they exist only while
+   * the editor is placing nails. Nothing printed ever asks for them.
+   */
+  it('offers a click target per crossing, only when asked for one', () => {
+    const printed = renderView(layout, 'top');
+    expect(count(printed, /data-crossing/g)).toBe(0);
+
+    const editing = renderView(layout, 'top', { nailTargets: true });
+    expect(count(editing, /data-crossing/g)).toBe(21);
+    // Unpainted, so a click has to be told to land on it rather than fall
+    // through to the board underneath.
+    expect(editing).toContain('pointer-events="all"');
+    // The bottom face has its own crossings and none of the top face's.
+    expect(count(renderView(layout, 'bottom', { nailTargets: true }), /data-crossing/g)).toBe(9);
+    expect(count(renderView(layout, 'side', { nailTargets: true }), /data-crossing/g)).toBe(0);
   });
 
-  it('schedules what it drew, and nothing else', () => {
-    const total = layout.nailLines.reduce((sum, line) => sum + line.count, 0);
-    expect(total).toBe(TOP_NAILS + BOTTOM_NAILS);
-    expect(layout.nailLines.map((line) => [line.sizeMm, line.count])).toEqual([
-      [64, 16],
-      [50, 30],
-      [64, 18],
-    ]);
-    expect(layout.nailLines.every((line) => line.derived)).toBe(true);
-  });
-
-  it('shares a hand-typed count evenly across the crossings it overrides', () => {
+  /** The document a click on `crossing` would produce. */
+  function withPlacement(index: number, count: number) {
     const pallet = loadFixture('block-1000x800');
-    pallet.nails[0]!.count = 25;
-    const uneven = computeLayout(pallet).nailDots.filter((d) => d.face === 'top');
-    expect(uneven).toHaveLength(25);
-    // The bottom face was not named by that spec, so the rule still has it.
-    const layout = computeLayout(pallet);
-    expect(layout.nailDots.filter((d) => d.face === 'bottom')).toHaveLength(BOTTOM_NAILS);
-    expect(layout.nailLines.find((line) => line.face === 'top')!.derived).toBe(false);
+    const crossing = computeLayout(pallet).nailCrossings[index]!;
+    pallet.nailPlacements = [
+      {
+        upperLayerId: crossing.upperLayerId,
+        upperSource: crossing.upperSource,
+        lowerLayerId: crossing.lowerLayerId,
+        lowerSource: crossing.lowerSource,
+        count,
+      },
+    ];
+    return { pallet, crossing };
+  }
+
+  it('gives a clicked crossing the count it was clicked to, and leaves the rest', () => {
+    const { pallet } = withPlacement(0, 4);
+    const clicked = computeLayout(pallet);
+
+    expect(clicked.nailCrossings[0]!.count).toBe(4);
+    expect(clicked.nailCrossings[0]!.manual).toBe(true);
+    expect(clicked.nailCrossings.slice(1).every((c) => !c.manual)).toBe(true);
+    // The clicked crossing was a corner of 3, so the face gains exactly one.
+    expect(clicked.nailDots.filter((d) => d.face === 'top')).toHaveLength(TOP_NAILS + 1);
+    expect(clicked.nailDots.filter((d) => d.face === 'bottom')).toHaveLength(BOTTOM_NAILS);
   });
 
-  it('needs no nail spec at all: the drawing is what says where the nails go', () => {
+  it('draws no nails at a crossing clicked round to zero', () => {
+    const { pallet } = withPlacement(0, 0);
+    const cleared = computeLayout(pallet);
+    expect(cleared.nailCrossings[0]!.count).toBe(0);
+    expect(cleared.nailDots.filter((d) => d.face === 'top')).toHaveLength(TOP_NAILS - 3);
+  });
+
+  it('holds a placement at four however large a count reaches it', () => {
+    const { pallet } = withPlacement(0, 99);
+    expect(computeLayout(pallet).nailCrossings[0]!.count).toBe(MAX_NAILS_PER_CROSSING);
+  });
+
+  /**
+   * A placement names the two boards that cross, not a position, so the pallet
+   * can be resized under it without the nails ending up on a different board.
+   */
+  it('keeps a placement on its boards when the pallet is resized', () => {
+    const { pallet } = withPlacement(0, 1);
+    pallet.overallLength = 1200;
+    for (const layer of pallet.layers) {
+      if (layer.content.type === 'sequence' && layer.direction === 'along_length') {
+        for (const slot of layer.content.slots) slot.length = 1200;
+      }
+    }
+    const wider = computeLayout(pallet);
+    const manual = wider.nailCrossings.filter((c) => c.manual);
+    expect(manual).toHaveLength(1);
+    expect(manual[0]!.count).toBe(1);
+  });
+
+  /**
+   * The schedule is a written statement of what the pallet is built with. It is
+   * priced and printed; it does not move a dot.
+   */
+  it('is not touched by the nail schedule typed on the document', () => {
     const pallet = loadFixture('block-1000x800');
+    pallet.nails = [{ label: 'anything at all', type: 'ring shank', sizeMm: 90, count: 500 }];
+    const typed = computeLayout(pallet);
+    expect(typed.issues).toEqual([]);
+    expect(typed.nailDots).toHaveLength(TOP_NAILS + BOTTOM_NAILS);
+
     pallet.nails = [];
-    const bare = computeLayout(pallet);
-    expect(bare.issues).toEqual([]);
-    expect(bare.nailDots.filter((d) => d.face === 'top')).toHaveLength(TOP_NAILS);
-    expect(bare.nailLines.every((line) => line.type === 'wire nail')).toBe(true);
+    expect(computeLayout(pallet).nailDots).toHaveLength(TOP_NAILS + BOTTOM_NAILS);
   });
 });
 

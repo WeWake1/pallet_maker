@@ -52,7 +52,8 @@ describe('the three plywood pallets', () => {
       'bottom_deck',
     ]);
     const onTop = type2.nailDots.filter((dot) => dot.face === 'top');
-    expect(new Set(onTop.map((dot) => dot.lowerKind))).toEqual(new Set(['bearer']));
+    const crossings = type2.nailCrossings.filter((crossing) => crossing.face === 'top');
+    expect(new Set(crossings.map((crossing) => crossing.lowerKind))).toEqual(new Set(['bearer']));
     // The sheet crosses each of the three centre boards once. The two outer
     // crossings reach the ends of the pallet and take three nails; the middle
     // one takes two. Each dot is counted against the board it was driven into.
@@ -90,9 +91,9 @@ describe('the three plywood pallets', () => {
 
   it('nails the sheet to whatever it lands on, whichever type that is', () => {
     const joint = (layout: typeof type1): string =>
-      layout.nailDots
-        .filter((dot) => dot.face === 'top')
-        .map((dot) => `${dot.upperKind}->${dot.lowerKind}`)[0]!;
+      layout.nailCrossings
+        .filter((crossing) => crossing.face === 'top')
+        .map((crossing) => `${crossing.upperKind}->${crossing.lowerKind}`)[0]!;
     expect(joint(type1)).toBe('top_deck->block');
     expect(joint(type2)).toBe('top_deck->bearer');
     expect(joint(type3)).toBe('panel->top_deck');
@@ -103,10 +104,9 @@ describe('the three plywood pallets', () => {
 
   it('only draws the nails that can be seen from the face being viewed', () => {
     // The top boards of a type 3 are nailed to the centre boards underneath,
-    // but that joint is under the sheet: it is neither drawn nor scheduled, so
-    // it produces no nails at all.
-    expect(type3.nailDots.filter((dot) => dot.face === null)).toEqual([]);
-    expect(type3.nailLines.every((line) => line.face !== null)).toBe(true);
+    // but that joint is under the sheet: it is neither drawn nor clickable, so
+    // it produces no nails and no crossings at all.
+    expect(type3.nailCrossings.filter((crossing) => crossing.upperKind === 'top_deck')).toEqual([]);
     const top = renderView(type3, 'top');
     expect([...top.matchAll(/<circle/g)]).toHaveLength(2 * 3 + 5 * 2);
     expect([...renderView(type3, 'bottom').matchAll(/<circle/g)]).toHaveLength(9 * 2);
@@ -135,7 +135,7 @@ describe('the three plywood pallets', () => {
 
   it('prices the sheet at the plywood rate, not the timber one', () => {
     const pallet = loadFixture('plywood-type2');
-    const costing = computeCosting(type2, rates);
+    const costing = computeCosting(pallet, type2, rates);
     const plywood = costing.materials.find((line) => line.material === 'plywood')!;
     expect(plywood.ratePerCft).toBe(2200);
     expect(plywood.pieces).toBe(1);
@@ -185,12 +185,12 @@ describe('runners in place of blocks', () => {
     const bottom = layout.nailDots.filter((dot) => dot.face === 'bottom');
     // 7 boards over 3 runners: 4 corner crossings of 3, 17 others of 2.
     expect(top).toHaveLength(4 * 3 + 17 * 2);
-    // 3 bottom boards under 3 runners: 9 crossings of 2, all in the long nail.
+    // 3 bottom boards under 3 runners: 9 crossings of 2.
     expect(bottom).toHaveLength(9 * 2);
-    expect(bottom.every((dot) => dot.sizeMm === 64)).toBe(true);
     // The runners are under the top boards and over the bottom ones.
-    for (const dot of top) expect(dot.lowerKind).toBe('runner');
-    for (const dot of bottom) expect(dot.upperKind).toBe('runner');
+    for (const crossing of layout.nailCrossings) {
+      expect(crossing.face === 'top' ? crossing.lowerKind : crossing.upperKind).toBe('runner');
+    }
   });
 
   it('emphasises the near layer in the flat views as it does anywhere else', () => {

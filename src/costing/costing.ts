@@ -1,4 +1,5 @@
 import type { Layout } from '../geometry/types.js';
+import type { Pallet } from '../types.js';
 import { rateFor } from './rates.js';
 import type { Rates } from './rates.js';
 
@@ -29,7 +30,8 @@ export interface MaterialLine {
 export interface NailCostLine {
   label: string;
   type: string;
-  sizeMm: number;
+  /** Undefined on a schedule line whose size has not been filled in. */
+  sizeMm?: number;
   count: number;
   ratePerThousand: number;
   cost: number;
@@ -55,10 +57,12 @@ export function timberVolumeMm3(layout: Layout): number {
 }
 
 /**
- * Nails are counted off the layout rather than passed in, so the price is for
- * the nails the drawing actually shows.
+ * Timber is priced off the layout, so it is priced for the pieces the drawing
+ * actually shows. Nails are priced off the schedule typed on the document,
+ * because how many a pallet takes is an estimate somebody makes rather than
+ * something the geometry can be trusted to say.
  */
-export function computeCosting(layout: Layout, rates: Rates): Costing {
+export function computeCosting(pallet: Pallet, layout: Layout, rates: Rates): Costing {
   const volumes = new Map<string, { volumeMm3: number; pieces: number }>();
   for (const piece of layout.pieces) {
     const found = volumes.get(piece.material) ?? { volumeMm3: 0, pieces: 0 };
@@ -82,15 +86,18 @@ export function computeCosting(layout: Layout, rates: Rates): Costing {
     })
     .sort((a, b) => b.cost - a.cost);
 
-  const nailLines: NailCostLine[] = layout.nailLines.map((nail) => {
+  const nailLines: NailCostLine[] = pallet.nails.map((nail) => {
     const ratePerThousand = rateFor(rates.nailsPerThousand, nail.type);
+    // A row whose qty has not been filled in prices at nothing rather than
+    // guessing a number and quietly putting it in the total.
+    const count = nail.count ?? 0;
     return {
       label: nail.label,
       type: nail.type,
       sizeMm: nail.sizeMm,
-      count: nail.count,
+      count,
       ratePerThousand,
-      cost: (nail.count / 1000) * ratePerThousand,
+      cost: (count / 1000) * ratePerThousand,
     };
   });
 

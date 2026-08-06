@@ -74,7 +74,11 @@ export const FAR = PRINT_EMPHASIS.far;
 
 export const INK = '#1b1b1b';
 export const DIM_INK = '#333333';
-export const NAIL_INK = '#111111';
+/**
+ * Softer than the outlines. A nail is a mark on a board, not a feature of it,
+ * so it sits back from the drawing rather than punching through it.
+ */
+export const NAIL_INK = '#5a5f66';
 /** The outline round the board selected in the editor. */
 export const SELECTION_INK = '#0f62fe';
 
@@ -106,11 +110,22 @@ export const EXTENSION_GAP = 2.5;
 export const EXTENSION_OVERSHOOT = 3;
 
 /**
- * Big enough to count at a glance. The nailing pattern is instruction, not
- * decoration: a fitter has to be able to see three dots at a corner and two
- * everywhere else on a printed sheet, across a bench.
+ * Small enough to read as a nail position rather than as a hole in the board,
+ * but still countable: a fitter has to be able to see three dots at a corner
+ * and two everywhere else on a printed sheet.
  */
-export const NAIL_RADIUS = 2.4;
+export const NAIL_RADIUS = 1.1;
+/** The halo that keeps two close dots apart without thickening either. */
+export const NAIL_HALO = 0.25;
+
+/**
+ * The outline round a crossing while nails are being placed in the editor.
+ * Never printed: it is there to show what a click will land on, and to make a
+ * crossing that was set by hand tell itself apart from one still on the default.
+ */
+export const NAIL_TARGET_INK = '#94a3b8';
+export const NAIL_TARGET_MANUAL_INK = '#0f62fe';
+export const NAIL_TARGET_STROKE = 0.4;
 
 /**
  * The isometric is a pictorial view, so nothing in it is faint: every piece is

@@ -3,7 +3,8 @@ import { renderIsometric } from '../render/isoView.js';
 import { mmLabel } from '../render/scene.js';
 import { esc } from '../render/svg.js';
 import { renderView } from '../render/views.js';
-import type { Pallet } from '../types.js';
+import { notApplicable } from '../types.js';
+import type { LoadKg, Pallet } from '../types.js';
 import { componentTable } from './components.js';
 import type { ComponentGroup } from './components.js';
 import { DRAWING, mmToPx, PAGE, SHEET } from './layout.js';
@@ -13,13 +14,18 @@ import { DRAWING, mmToPx, PAGE, SHEET } from './layout.js';
  * no geometry of its own.
  */
 
-const DECK_TYPE: Record<Pallet['deckType'], string> = {
+/**
+ * What each code prints as. Partial because the two states that are not values
+ * — blank and `na` — are not printed names but instructions about the row
+ * itself, and are handled by `stated` below.
+ */
+const DECK_TYPE: Partial<Record<Pallet['deckType'], string>> = {
   single_face: 'Single face',
   double_face_reversible: 'Double face, reversible',
   double_face_non_reversible: 'Double face, non-reversible',
 };
 
-const PALLET_TYPE: Record<Pallet['palletType'], string> = {
+const PALLET_TYPE: Partial<Record<Pallet['palletType'], string>> = {
   block_4way: 'Block, 4-way',
   stringer_2way: 'Stringer, 2-way',
   plywood_type1: 'Plywood type 1, sheet on blocks',
@@ -29,18 +35,21 @@ const PALLET_TYPE: Record<Pallet['palletType'], string> = {
   other: 'Other',
 };
 
-const ENTRY: Record<Pallet['entry'], string> = {
+const ENTRY: Partial<Record<Pallet['entry'], string>> = {
   '2_way': '2-way',
   '4_way': '4-way',
   partial_4way: 'Partial 4-way',
 };
 
-const PLANING: Record<Pallet['planing'], string> = {
+const PLANING: Partial<Record<Pallet['planing'], string>> = {
   none: 'None',
   '1_side': '1 side',
   '2_side': '2 sides',
   '4_side': '4 sides',
 };
+
+/** What an attribute reads as when the design has not settled it. */
+const DASH = '—';
 
 /**
  * Shop tolerances. The same on every drawing this generator produces, so they
@@ -122,7 +131,7 @@ export function renderSheet(
     <section class="data">
       ${overallBlock(pallet, layout, size)}
       ${componentsBlock(groups)}
-      ${nailsBlock(layout)}
+      ${nailsBlock(pallet)}
       ${materialBlock(pallet)}
     </section>
 
@@ -147,12 +156,37 @@ export function renderSheet(
 `;
 }
 
+/**
+ * One line of the data column — or none at all.
+ *
+ * Three states, not two. A value prints as itself. Blank is a question nobody
+ * has answered yet, so it prints as a dash and stays on the sheet where the
+ * shop can see it is still open. `na` says the attribute has no bearing on this
+ * design, and a specification is not improved by a line saying so, so the row
+ * is dropped and the ones below it close up.
+ */
+function stated(label: string, value: string): Array<[string, string]> {
+  if (notApplicable(value)) return [];
+  return [[label, value === '' ? DASH : value]];
+}
+
+/** A code as it prints. Blank and `na` carry through as themselves. */
+function named<T extends string>(value: T, names: Partial<Record<T, string>>): string {
+  return names[value] ?? value;
+}
+
+/** A load: a figure in kilograms, a dash, or no row. */
+function loadRow(label: string, value: LoadKg | undefined): Array<[string, string]> {
+  if (typeof value === 'number') return stated(label, `${value} kg`);
+  return stated(label, value ?? '');
+}
+
 function overallBlock(pallet: Pallet, layout: Layout, size: string): string {
   const rows: Array<[string, string]> = [
     ['Overall size', size],
-    ['Type', PALLET_TYPE[pallet.palletType]],
-    ['Entry', ENTRY[pallet.entry]],
-    ['Deck', DECK_TYPE[pallet.deckType]],
+    ...stated('Type', named(pallet.palletType, PALLET_TYPE)),
+    ...stated('Entry', named(pallet.entry, ENTRY)),
+    ...stated('Deck', named(pallet.deckType, DECK_TYPE)),
   ];
   const overhang = layout.topOverhang;
   if (overhang && (overhang.lengthStart || overhang.lengthEnd)) {
@@ -176,10 +210,10 @@ function componentsBlock(groups: ComponentGroup[]): string {
     .map(
       (row) =>
         `<tr>` +
-        `<td class="num">${row.partNo}</td>` +
+        `<td class="mid narrow">${row.partNo}</td>` +
         `<td class="name">${esc(row.name)}${row.variant ? ` <span class="variant">${esc(row.variant)}</span>` : ''}</td>` +
-        `<td class="dims">${mmLabel(row.length)} × ${mmLabel(row.width)} × ${mmLabel(row.thickness)}</td>` +
-        `<td class="num">${row.quantity}</td>` +
+        `<td class="dims">${dimsCell(row.length, row.width, row.thickness)}</td>` +
+        `<td class="mid narrow">${row.quantity}</td>` +
         `</tr>`,
     )
     .join('');
@@ -187,7 +221,7 @@ function componentsBlock(groups: ComponentGroup[]): string {
   return block(
     'Components',
     `<table class="grid components">
-      <thead><tr><th class="num">Part</th><th>Component</th><th>L × W × T (mm)</th><th class="num">Qty</th></tr></thead>
+      <thead><tr><th class="mid narrow">Part</th><th>Component</th><th class="mid">L × W × T (mm)</th><th class="mid narrow">Qty</th></tr></thead>
       <tbody>${body}</tbody>
     </table>`,
     'wide',
@@ -195,19 +229,34 @@ function componentsBlock(groups: ComponentGroup[]): string {
 }
 
 /**
- * The nail schedule, counted off the drawing rather than typed in: the sheet
- * cannot state a nail the top and bottom views do not show.
+ * Length, width and thickness each in a box of the same width, with the × marks
+ * between them. Every row measures out the same, so the three figures and the
+ * two × marks stand in the same five places down the column, and the eye reads
+ * a column of lengths rather than three ragged numbers.
  */
-function nailsBlock(layout: Layout): string {
-  if (layout.nailLines.length === 0) return '';
-  const rows = layout.nailLines
+function dimsCell(length: number, width: number, thickness: number): string {
+  return [mmLabel(length), mmLabel(width), mmLabel(thickness)]
+    .map((value) => `<span class="d">${value}</span>`)
+    .join('<span class="x">×</span>');
+}
+
+/**
+ * The nail schedule as typed on the document. It states what the pallet is
+ * built with and bought for; the dots in the top and bottom views state where
+ * the nails go. The two are kept apart on purpose and neither is derived from
+ * the other.
+ */
+function nailsBlock(pallet: Pallet): string {
+  if (pallet.nails.length === 0) return '';
+  const rows = pallet.nails
     .map(
       (nail) =>
         `<tr><td class="name">${esc(nail.label)}</td><td>${esc(nail.type)}</td>` +
-        `<td class="num">${mmLabel(nail.sizeMm)}</td><td class="num">${nail.count}</td></tr>`,
+        `<td class="num">${nail.sizeMm === undefined ? '' : mmLabel(nail.sizeMm)}</td>` +
+        `<td class="num">${nail.count ?? ''}</td></tr>`,
     )
     .join('');
-  const total = layout.nailLines.reduce((sum, nail) => sum + nail.count, 0);
+  const total = pallet.nails.reduce((sum, nail) => sum + (nail.count ?? 0), 0);
   return block(
     'Nails',
     `<table class="grid">
@@ -220,10 +269,10 @@ function nailsBlock(layout: Layout): string {
 
 function materialBlock(pallet: Pallet): string {
   const rows: Array<[string, string]> = [
-    ['Static load', pallet.staticLoadKg === undefined ? '—' : `${pallet.staticLoadKg} kg`],
-    ['Dynamic load', pallet.dynamicLoadKg === undefined ? '—' : `${pallet.dynamicLoadKg} kg`],
-    ['Species', pallet.species],
-    ['Planing', PLANING[pallet.planing]],
+    ...loadRow('Static load', pallet.staticLoadKg),
+    ...loadRow('Dynamic load', pallet.dynamicLoadKg),
+    ...stated('Species', pallet.species),
+    ...stated('Planing', named(pallet.planing, PLANING)),
     ['Component tolerance', COMPONENT_TOLERANCE],
     ['Total pallet tolerance', PALLET_TOLERANCE],
   ];
@@ -329,14 +378,19 @@ function styles(): string {
   }
   .grid tfoot td { font-weight: 700; background: #f4f6f8; }
   .grid .num { text-align: right; white-space: nowrap; }
-  .grid .dims { white-space: nowrap; }
+  .grid .mid { text-align: center; white-space: nowrap; }
+  .grid .dims { white-space: nowrap; text-align: center; }
   .grid .name { font-weight: 600; }
 
   /* The components table is the one the bench works from, so it is the biggest
      thing on the written side. */
   .components { font-size: 10.5pt; }
   .components th { font-size: 9.5pt; }
-  .components .num { width: 11mm; }
+  .components .narrow { width: 12mm; }
+
+  /* Fixed boxes, so the figures and the × marks line up down the column. */
+  .dims .d { display: inline-block; width: 13.5mm; text-align: center; }
+  .dims .x { display: inline-block; width: 4mm; text-align: center; color: #555; }
 
   .variant { color: #555; font-weight: 400; }
   .notes { font-size: 9pt; color: #333; margin: 1.4mm 0 0; }

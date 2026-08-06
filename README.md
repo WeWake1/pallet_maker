@@ -106,6 +106,14 @@ it is fixed in millimetres ([src/sheet/layout.ts](src/sheet/layout.ts)), and eac
 view is rendered to the exact pixel size of its cell rather than scaled to fit,
 so the stroke weights land on paper as drawn.
 
+An attribute in the data column has three states, not two. A value prints. Left
+blank it prints as a dash and stays on the sheet, because a question nobody has
+answered yet is one the shop should be able to see is open. Set to `na` — typed
+into a field, or picked as *not applicable* from a list — the whole row comes
+off the sheet and the rows below it close up. Species, planing, both loads,
+type, entry and deck all work this way; the overall size and the two tolerances
+are on every sheet whatever the design.
+
 The drawings run top and bottom view on the first row, side and end view on the
 second, isometric across the full width on the third: plans with plans,
 elevations with elevations, and the finished pallet closing the sheet. The rows
@@ -146,6 +154,35 @@ with the arrow keys (shift for 10), and that value is saved to `slot.nudgeMm`.
 Nothing else records where the board is: nudge a board and the drawing prints
 its real position from the nearest edge, because the number changed and the
 drawing was rebuilt, not because anything moved the drawing.
+
+### Undo, and the keyboard
+
+Every change is a change to the document, and the drawing, the costing and the
+problem list are all regenerated from it, so a step backwards is just an older
+document put back — there is no second thing to unwind.
+[src/editor/history.ts](src/editor/history.ts) keeps the list of them.
+
+| | |
+| --- | --- |
+| `⌘Z` / `Ctrl+Z` | Undo |
+| `⌘⇧Z` / `Ctrl+Shift+Z`, `Ctrl+Y` | Redo |
+| `⌘S` / `Ctrl+S` | Save |
+| `←` `→` `↑` `↓` | Nudge the selected board, shift for 10 |
+| `Delete` | Remove the selected board |
+| `Esc` | Leave the field, then let the board go |
+
+Undo and Save work from wherever the cursor is, mid-field included: the document
+is what they act on, and the browser's own undo inside a text field knows
+nothing about the board that was deleted a moment ago. The rest wait until
+nothing is being typed into, because `Delete` belongs to the digits under the
+cursor first.
+
+A number typed digit by digit is **one** step, not four: edits to the same field
+within 600 ms of each other fold together, and a pause or a move to another
+field starts a new one. Saving clears the list — those steps are all in the
+store now. Selecting a board is not a step at all, and neither is an edit that
+landed on nothing; recording either would mean pressing Undo and watching
+nothing happen.
 
 A new pallet starts as a whole plain 1000 × 800 block pallet rather than an
 empty stack of layers. Nearly every design is a variation on that one, so the
@@ -275,24 +312,41 @@ which is what "plywood sheet replaces the top board layer" means. Type 3 is the
 one that does not replace anything, so it has a layer kind of its own: `panel`.
 That is the model being widened rather than a branch being added for one pallet.
 
-Nails follow from the same idea. A joint is any two layers that meet, and nails
-go wherever a piece of one crosses a piece of the other. How many and how long
-is a rule read off the drawing rather than a number anybody types:
+## Nails
 
-- three nails where the crossing sits at a corner of the pallet, two on a
-  diagonal at every other crossing;
-- 64mm through the outermost boards of the top face and through the whole
-  underside, 50mm through the rest.
+Nails are two things that deliberately do not talk to each other.
 
-Only the joints at the two faces are nailed, since an internal joint is under
-timber and can be neither seen nor reached — it gets no dots and no count.
+**Where they go** is the drawing. A joint is any two layers that meet, and a
+crossing is one place where a piece of the upper crosses a piece of the lower.
+Every crossing carries two nails on a diagonal — which is how a board is pinned
+against turning on its fixing — and the four corners of the top face carry
+three. Only the joints at the two faces count, since an internal joint is under
+timber and can be neither seen nor reached.
 
-A nail spec still names a joint by its vocabulary — "plywood sheet to centre
-board", "top board to runner" — but it now carries the nail *type*, which is
-what costing prices the joint by, and an optional size or count to override the
-rule where a pallet needs something else. Left blank, they stay derived. The
-schedule on the sheet is counted off the dots themselves, so what the drawing
-shows, what the table states and what costing prices cannot come apart.
+That default covers most of a pallet. Anywhere it does not, the crossing is
+clicked: open the top or bottom view in the editor, turn on **Place nails**, and
+each click steps that crossing 0 → 1 → 2 → 3 → 4 and round again — one in the
+centre, two on a diagonal, three in a triangle, four in a square. Only what you
+changed is written to the document, keyed by the two boards that cross rather
+than by a position, so resizing the pallet carries the nails along with it and a
+crossing clicked back to its default stops being recorded at all.
+
+The dots are drawn in the two plan views and in the pictorial ones. A NailDot
+carries the height of the surface its head sits on, so the isometric can put it
+on the timber rather than on the pallet's floor. Only the face being looked at
+shows: the printed isometric has a fixed eye above the deck and shows the top
+face; the editor's 3D view swaps to the underside as soon as the eye is dragged
+below it.
+
+**How many are bought** is the schedule on the sheet: label, type, size and
+quantity, typed by hand and printed as written. Costing prices that table.
+
+The two used to be one thing — the schedule was counted off the dots, and a
+spec's label was matched against layer names by a list of words it might contain
+("plywood", "centre board", "stringer") to decide which joint it overrode. It
+guessed wrong more often than it guessed right, and a wrong count on a sheet is
+worse than an empty field. So the guessing is gone: the drawing states where,
+the estimator states how many, and neither is derived from the other.
 
 ## DXF
 
