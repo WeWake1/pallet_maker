@@ -36,6 +36,9 @@ export const api = {
   rates: () => call<Rates>('/api/rates'),
   sheetUrl: (id: string) => `/api/pallets/${id}/sheet.pdf`,
   dxfUrl: (id: string) => `/api/pallets/${id}/drawing.dxf`,
+  // The whole sheet as vector, for taking into a drawing or page-layout
+  // program. Downloads rather than opens.
+  svgUrl: (id: string) => `/api/pallets/${id}/sheet.svg`,
 };
 
 export type { Client, ClientDesigns, PalletSummary };

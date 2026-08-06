@@ -9,6 +9,7 @@ import { analysePallet } from '../geometry/layout.js';
 import { PalletLayoutError } from '../geometry/types.js';
 import { exportPdfBuffer } from '../sheet/pdf.js';
 import { renderSheet } from '../sheet/sheet.js';
+import { renderSheetSvg } from '../sheet/svgSheet.js';
 import type { Db } from './db.js';
 import {
   ClientNotFoundError,
@@ -137,6 +138,21 @@ export function createApp(db: Db, options: AppOptions = {}): Express {
     fresh(res);
     res.type('pdf').setHeader('Content-Disposition', `inline; filename="${name}"`);
     res.send(pdf);
+  }));
+
+  // The same sheet as one SVG, for taking into a drawing or page-layout
+  // program. Downloaded rather than shown, because a browser would only render
+  // what the PDF already shows better.
+  app.get('/api/pallets/:id/sheet.svg', wrap((req, res) => {
+    const pallet = pallets.get(idOf(req));
+    const layout = analysePallet(pallet);
+    const errors = layout.issues.filter((issue) => issue.severity === 'error');
+    if (errors.length > 0) throw new PalletLayoutError(errors);
+
+    const name = `${pallet.palletCode || 'pallet'}-${pallet.updatedAt}.svg`;
+    fresh(res);
+    res.type('image/svg+xml').setHeader('Content-Disposition', `attachment; filename="${name}"`);
+    res.send(renderSheetSvg(pallet, layout));
   }));
 
   app.get('/api/pallets/:id/costing', wrap((req, res) => {

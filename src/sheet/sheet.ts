@@ -1,76 +1,31 @@
+import { brandFontFace, BRAND_FONT_STACK, COMPANY_NAME, LOGO_DATA_URI } from '../brand/brand.js';
 import type { Layout } from '../geometry/types.js';
 import { renderIsometric } from '../render/isoView.js';
 import { mmLabel } from '../render/scene.js';
 import { esc } from '../render/svg.js';
 import { renderView } from '../render/views.js';
-import { notApplicable } from '../types.js';
-import type { LoadKg, Pallet } from '../types.js';
-import { componentTable } from './components.js';
-import type { ComponentGroup } from './components.js';
-import { DRAWING, mmToPx, PAGE, SHEET } from './layout.js';
+import type { Pallet } from '../types.js';
+import type { ComponentRow, NailRow, Pair, SheetContent } from './content.js';
+import { PROJECTION_NOTE, sheetContent } from './content.js';
+import { DRAWING, LOGO, mmToPx, PAGE, SHEET, WATERMARK } from './layout.js';
 
 /**
- * The specification sheet. Reads the layout and the pallet document; recomputes
- * no geometry of its own.
+ * The specification sheet, as HTML for a browser to print. What is on it is
+ * settled in `content.ts`; this file only sets it out.
+ *
+ * The sheet carries the company's name across the diagonal as a watermark and
+ * its mark in the bottom right corner. Both are embedded in the document rather
+ * than linked, because the printer is handed the HTML with no base URL to
+ * resolve against.
  */
-
-/**
- * What each code prints as. Partial because the two states that are not values
- * — blank and `na` — are not printed names but instructions about the row
- * itself, and are handled by `stated` below.
- */
-const DECK_TYPE: Partial<Record<Pallet['deckType'], string>> = {
-  single_face: 'Single face',
-  double_face_reversible: 'Double face, reversible',
-  double_face_non_reversible: 'Double face, non-reversible',
-};
-
-const PALLET_TYPE: Partial<Record<Pallet['palletType'], string>> = {
-  block_4way: 'Block, 4-way',
-  stringer_2way: 'Stringer, 2-way',
-  plywood_type1: 'Plywood type 1, sheet on blocks',
-  plywood_type2: 'Plywood type 2, sheet on centre boards',
-  plywood_type3: 'Plywood type 3, sheet over a boarded deck',
-  wing: 'Wing',
-  other: 'Other',
-};
-
-const ENTRY: Partial<Record<Pallet['entry'], string>> = {
-  '2_way': '2-way',
-  '4_way': '4-way',
-  partial_4way: 'Partial 4-way',
-};
-
-const PLANING: Partial<Record<Pallet['planing'], string>> = {
-  none: 'None',
-  '1_side': '1 side',
-  '2_side': '2 sides',
-  '4_side': '4 sides',
-};
-
-/** What an attribute reads as when the design has not settled it. */
-const DASH = '—';
-
-/**
- * Shop tolerances. The same on every drawing this generator produces, so they
- * are stated here rather than being one more thing to fill in per design.
- */
-const COMPONENT_TOLERANCE = '± 2 mm';
-const PALLET_TOLERANCE = '± 5 mm';
 
 export interface SheetOptions {
   /** Desaturate every view, to check the sheet the way the shop floor prints it. */
   greyscale?: boolean;
 }
 
-export function renderSheet(
-  pallet: Pallet,
-  layout: Layout,
-  options: SheetOptions = {},
-): string {
-  const groups = componentTable(pallet, layout);
-  const grey = options.greyscale === true;
-
+/** The five views, each rendered to the exact pixel size of its cell. */
+export function sheetViews(layout: Layout, greyscale = false): Record<string, string> {
   const plan = {
     fitWidth: mmToPx(DRAWING.pairCellWidth),
     fitHeight: mmToPx(DRAWING.planRowHeight),
@@ -84,55 +39,53 @@ export function renderSheet(
     fitHeight: mmToPx(DRAWING.isoRowHeight),
   };
 
-  const views = {
-    top: renderView(layout, 'top', { ...plan, greyscale: grey, idPrefix: 'sheet' }),
-    bottom: renderView(layout, 'bottom', { ...plan, greyscale: grey, idPrefix: 'sheet' }),
-    side: renderView(layout, 'side', { ...elevation, greyscale: grey, idPrefix: 'sheet' }),
-    end: renderView(layout, 'end', { ...elevation, greyscale: grey, idPrefix: 'sheet' }),
-    iso: renderIsometric(layout, { ...iso, greyscale: grey, idPrefix: 'sheet' }),
+  return {
+    top: renderView(layout, 'top', { ...plan, greyscale, idPrefix: 'sheet' }),
+    bottom: renderView(layout, 'bottom', { ...plan, greyscale, idPrefix: 'sheet' }),
+    side: renderView(layout, 'side', { ...elevation, greyscale, idPrefix: 'sheet' }),
+    end: renderView(layout, 'end', { ...elevation, greyscale, idPrefix: 'sheet' }),
+    iso: renderIsometric(layout, { ...iso, greyscale, idPrefix: 'sheet' }),
   };
+}
 
-  const size = `${mmLabel(layout.overallLength)} × ${mmLabel(layout.overallWidth)} × ${mmLabel(layout.overallHeight)}`;
-  // A design without a code is a normal design, so the line under the name is
-  // the size alone rather than the size behind a dangling separator.
-  const subtitle = pallet.palletCode ? `${pallet.palletCode} · ${size}` : size;
-  const title = [pallet.palletCode, pallet.palletName, pallet.updatedAt]
-    .filter((part) => part !== '')
-    .join(' ');
+export function renderSheet(pallet: Pallet, layout: Layout, options: SheetOptions = {}): string {
+  const content = sheetContent(pallet, layout);
+  const views = sheetViews(layout, options.greyscale === true);
+  const { heading } = content;
 
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>${esc(title)}</title>
+<title>${esc(content.title)}</title>
 <style>${styles()}</style>
 </head>
 <body>
 <div class="sheet">
   <header>
     <div class="who">
-      <div class="name">${esc(pallet.clientName)}</div>
-      ${pallet.clientPartNo ? `<div class="sub">Client part ${esc(pallet.clientPartNo)}</div>` : '<div class="sub"></div>'}
+      <div class="name">${esc(heading.clientName)}</div>
+      ${heading.clientPartNo ? `<div class="sub">Client part ${esc(heading.clientPartNo)}</div>` : '<div class="sub"></div>'}
     </div>
     <div class="what">
-      <div class="name">${esc(pallet.palletName)}</div>
-      <div class="sub">${esc(subtitle)}</div>
+      <div class="name">${esc(heading.palletName)}</div>
+      <div class="sub">${esc(heading.subtitle)}</div>
     </div>
     <!-- The date is stamped by the store on every save, so it is always the
          date of the drawing on this page. The note underneath is free text and
          says whatever the shop or the client needs it to. -->
     <div class="when">
-      <div class="name">${esc(pallet.updatedAt)}</div>
-      <div class="sub">${pallet.note ? esc(pallet.note) : ''}</div>
+      <div class="name">${esc(heading.date)}</div>
+      <div class="sub">${esc(heading.note)}</div>
     </div>
   </header>
 
   <div class="body">
     <section class="data">
-      ${overallBlock(pallet, layout, size)}
-      ${componentsBlock(groups)}
-      ${nailsBlock(pallet)}
-      ${materialBlock(pallet)}
+      ${block('Overall', pairTable(content.overall))}
+      ${componentsBlock(content.components)}
+      ${nailsBlock(content.nails)}
+      ${block('Load and material', pairTable(content.material) + notesHtml(content.notes))}
     </section>
 
     <section class="drawing">
@@ -147,66 +100,27 @@ export function renderSheet(
       <div class="row iso">
         <figure>${views.iso}</figure>
       </div>
-      <p class="projection">First-angle projection, all dimensions in mm</p>
+      <!-- The mark in the bottom right corner, where a title block's owner
+           belongs on a drawing. -->
+      <div class="footer">
+        <p class="projection">${esc(PROJECTION_NOTE)}</p>
+        <img class="logo" src="${LOGO_DATA_URI}" alt="${esc(COMPANY_NAME)}">
+      </div>
     </section>
   </div>
+
+  <!-- Whose drawing this is, corner to corner. Last, so it lies over the
+       drawings: every view carries a white background of its own and a
+       watermark beneath them would show only in the gaps. -->
+  <div class="watermark" aria-hidden="true"><span>${esc(COMPANY_NAME)}</span></div>
 </div>
 </body>
 </html>
 `;
 }
 
-/**
- * One line of the data column — or none at all.
- *
- * Three states, not two. A value prints as itself. Blank is a question nobody
- * has answered yet, so it prints as a dash and stays on the sheet where the
- * shop can see it is still open. `na` says the attribute has no bearing on this
- * design, and a specification is not improved by a line saying so, so the row
- * is dropped and the ones below it close up.
- */
-function stated(label: string, value: string): Array<[string, string]> {
-  if (notApplicable(value)) return [];
-  return [[label, value === '' ? DASH : value]];
-}
-
-/** A code as it prints. Blank and `na` carry through as themselves. */
-function named<T extends string>(value: T, names: Partial<Record<T, string>>): string {
-  return names[value] ?? value;
-}
-
-/** A load: a figure in kilograms, a dash, or no row. */
-function loadRow(label: string, value: LoadKg | undefined): Array<[string, string]> {
-  if (typeof value === 'number') return stated(label, `${value} kg`);
-  return stated(label, value ?? '');
-}
-
-function overallBlock(pallet: Pallet, layout: Layout, size: string): string {
-  const rows: Array<[string, string]> = [
-    ['Overall size', size],
-    ...stated('Type', named(pallet.palletType, PALLET_TYPE)),
-    ...stated('Entry', named(pallet.entry, ENTRY)),
-    ...stated('Deck', named(pallet.deckType, DECK_TYPE)),
-  ];
-  const overhang = layout.topOverhang;
-  if (overhang && (overhang.lengthStart || overhang.lengthEnd)) {
-    rows.push([
-      'Wing',
-      `${mmLabel(overhang.lengthStart)} / ${mmLabel(overhang.lengthEnd)} along length, ` +
-        `${mmLabel(overhang.widthStart)} / ${mmLabel(overhang.widthEnd)} across width`,
-    ]);
-  }
-  return block('Overall', pairTable(rows));
-}
-
-/**
- * One row per part, named for itself. A layer that makes a single part carries
- * that layer's name; a layer that makes several numbers them off. Nothing is a
- * heading over one row of its own restatement.
- */
-function componentsBlock(groups: ComponentGroup[]): string {
-  const body = groups
-    .flatMap((group) => group.rows)
+function componentsBlock(rows: ComponentRow[]): string {
+  const body = rows
     .map(
       (row) =>
         `<tr>` +
@@ -240,49 +154,30 @@ function dimsCell(length: number, width: number, thickness: number): string {
     .join('<span class="x">×</span>');
 }
 
-/**
- * The nail schedule as typed on the document. It states what the pallet is
- * built with and bought for; the dots in the top and bottom views state where
- * the nails go. The two are kept apart on purpose and neither is derived from
- * the other.
- */
-function nailsBlock(pallet: Pallet): string {
-  if (pallet.nails.length === 0) return '';
-  const rows = pallet.nails
+function nailsBlock(nails: SheetContent['nails']): string {
+  if (!nails) return '';
+  const rows = nails.rows
     .map(
-      (nail) =>
+      (nail: NailRow) =>
         `<tr><td class="name">${esc(nail.label)}</td><td>${esc(nail.type)}</td>` +
-        `<td class="num">${nail.sizeMm === undefined ? '' : mmLabel(nail.sizeMm)}</td>` +
-        `<td class="num">${nail.count ?? ''}</td></tr>`,
+        `<td class="num">${esc(nail.size)}</td><td class="num">${esc(nail.quantity)}</td></tr>`,
     )
     .join('');
-  const total = pallet.nails.reduce((sum, nail) => sum + (nail.count ?? 0), 0);
   return block(
     'Nails',
     `<table class="grid">
       <thead><tr><th>Joint</th><th>Type</th><th class="num">Size</th><th class="num">Qty</th></tr></thead>
       <tbody>${rows}</tbody>
-      <tfoot><tr><td class="name">Total</td><td></td><td></td><td class="num">${total}</td></tr></tfoot>
+      <tfoot><tr><td class="name">Total</td><td></td><td></td><td class="num">${nails.total}</td></tr></tfoot>
     </table>`,
   );
 }
 
-function materialBlock(pallet: Pallet): string {
-  const rows: Array<[string, string]> = [
-    ...loadRow('Static load', pallet.staticLoadKg),
-    ...loadRow('Dynamic load', pallet.dynamicLoadKg),
-    ...stated('Species', pallet.species),
-    ...stated('Planing', named(pallet.planing, PLANING)),
-    ['Component tolerance', COMPONENT_TOLERANCE],
-    ['Total pallet tolerance', PALLET_TOLERANCE],
-  ];
-  const notes = pallet.notes
-    ? `<p class="notes">${esc(pallet.notes)}</p>`
-    : '';
-  return block('Load and material', pairTable(rows) + notes);
+function notesHtml(notes: string): string {
+  return notes ? `<p class="notes">${esc(notes)}</p>` : '';
 }
 
-function pairTable(rows: Array<[string, string]>): string {
+function pairTable(rows: Pair[]): string {
   return `<table class="pairs"><tbody>${rows
     .map(([label, value]) => `<tr><th>${esc(label)}</th><td>${esc(value)}</td></tr>`)
     .join('')}</tbody></table>`;
@@ -296,6 +191,7 @@ function block(heading: string, body: string, modifier = ''): string {
 function styles(): string {
   return `
   @page { size: ${PAGE.width}mm ${PAGE.height}mm; margin: 0; }
+  ${brandFontFace()}
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
   body {
@@ -305,12 +201,36 @@ function styles(): string {
     print-color-adjust: exact;
   }
   .sheet {
+    position: relative;
     width: ${PAGE.width}mm;
     height: ${PAGE.height}mm;
     padding: ${PAGE.padding}mm;
     display: flex;
     flex-direction: column;
     overflow: hidden;
+  }
+
+  /* Corner to corner, over everything, in the company's own face. Never a
+     click target and never read aloud: it is not information, it is whose
+     drawing this is. */
+  .watermark {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 2;
+  }
+  .watermark span {
+    font-family: ${BRAND_FONT_STACK};
+    font-size: ${WATERMARK.fontSize}pt;
+    letter-spacing: ${WATERMARK.tracking}em;
+    white-space: nowrap;
+    color: #111;
+    opacity: ${WATERMARK.opacity};
+    transform: rotate(-${WATERMARK.angle.toFixed(2)}deg);
   }
 
   header {
@@ -409,12 +329,31 @@ function styles(): string {
     min-width: 0;
   }
   .row svg { display: block; }
-  .projection {
+
+  /* The projection note keeps the middle of the page; the logo takes the
+     corner. The note is centred on the column, not on what is left of it, so
+     the logo does not push it off centre. */
+  .footer {
     margin: auto 0 0;
+    height: ${SHEET.footerHeight}mm;
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+  .projection {
+    margin: 0;
+    flex: 1;
     font-size: 8.5pt;
     color: #333;
     text-align: center;
-    height: ${SHEET.footerHeight}mm;
+  }
+  .footer .logo {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    height: ${LOGO.height}mm;
+    max-width: ${LOGO.maxWidth}mm;
+    object-fit: contain;
   }
   `;
 }

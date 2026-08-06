@@ -12,6 +12,7 @@ import type { Client, LayerKind, Pallet, Unstated } from '../types.js';
 import { api } from './api.js';
 import type { ClientDesigns } from './api.js';
 import { Dashboard } from './Dashboard.jsx';
+import type { DesignActions } from './Dashboard.jsx';
 import { clearDraft, clearDrafts, draftAge, listDrafts, readDraft, writeDraft } from './drafts.js';
 import type { Draft } from './drafts.js';
 import { canRedo, canUndo, historyReducer, initialHistory } from './history.js';
@@ -179,6 +180,38 @@ export function App() {
   };
 
   /**
+   * What a card offers without the editor being opened.
+   *
+   * A copy is opened rather than left on the dashboard. It carries the name and
+   * the code of what it was copied from, so two cards that cannot be told apart
+   * is exactly what leaving it there would produce; the editor is where one of
+   * them gets renamed.
+   *
+   * Deleting takes the browser's copy with it. A draft left behind would come
+   * straight back as a card of a design that has just been thrown away, and
+   * could be saved again from there, which is not what deleting it meant.
+   *
+   * The sheet is the stored design's, as it is everywhere else — what is
+   * printed is what is recorded — so a card with unsaved changes prints what
+   * was last saved, not what the browser is holding.
+   */
+  const designActions: DesignActions = {
+    onOpen: (id) => void openDesign(id),
+    onDuplicate: (id) =>
+      void attempt(() => api.duplicate(id)).then((copy) => {
+        if (copy) setOpen({ pallet: copy, saved: copy });
+      }),
+    onDelete: (design) =>
+      void attempt(async () => {
+        await api.remove(design.id);
+        clearDraft(design.id);
+      }),
+    onSheet: (id) => {
+      window.open(api.sheetUrl(id), '_blank');
+    },
+  };
+
+  /**
    * A new design starts in the editor only. It reaches the dashboard when it is
    * first saved, so backing out of one started by accident leaves nothing
    * behind — though it is kept as a draft in the meantime, so closing the tab
@@ -225,7 +258,7 @@ export function App() {
             sections={sections}
             drafts={drafts}
             busy={busy}
-            onOpen={(id) => void openDesign(id)}
+            actions={designActions}
             onOpenDraft={openDraft}
             onDiscardDraft={discardDraft}
             onCreate={createDesign}
@@ -447,6 +480,18 @@ function Editor({
       return saved;
     });
 
+  /**
+   * The whole sheet as one SVG. The DXF is a CAD file and page-layout software
+   * will not read it; this is the same drawing in a form that Canva,
+   * Illustrator and Inkscape all open and let you work on.
+   */
+  const openSvg = () =>
+    attempt(async () => {
+      const saved = await store();
+      window.open(api.svgUrl(saved.id), '_blank');
+      return saved;
+    });
+
   const openSheet = () => {
     const html = renderSheet(pallet, layout);
     const tab = window.open('', '_blank');
@@ -664,8 +709,19 @@ function Editor({
           <Button onClick={openSheet} disabled={errors.length > 0}>
             Sheet
           </Button>
-          <Button onClick={() => void openDxf()} disabled={busy || !canStore}>
+          <Button
+            onClick={() => void openDxf()}
+            disabled={busy || !canStore}
+            title="The plan as a CAD file, for AutoCAD and the like"
+          >
             DXF
+          </Button>
+          <Button
+            onClick={() => void openSvg()}
+            disabled={busy || !canStore}
+            title="The whole sheet as vector, to work on in Canva, Illustrator or Inkscape"
+          >
+            SVG
           </Button>
           <Button onClick={() => void openPdf()} disabled={busy || !canStore}>
             PDF

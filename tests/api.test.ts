@@ -150,7 +150,7 @@ describe('the API', () => {
     // cached one would print a drawing of a pallet nobody is building.
     const pallet = fixture('AP-111');
     await call('POST', '/api/pallets', pallet);
-    for (const path of ['sheet.html', 'drawing.dxf']) {
+    for (const path of ['sheet.html', 'drawing.dxf', 'sheet.svg']) {
       const response = await fetch(`${base}/api/pallets/${pallet.id}/${path}`);
       expect(response.headers.get('cache-control')).toContain('no-store');
     }
@@ -202,6 +202,33 @@ describe('the API', () => {
     const dxf = await response.text();
     expect(dxf).toContain('AC1009');
     expect(dxf.trimEnd().endsWith('0\nEOF')).toBe(true);
+  });
+
+  it('serves the whole sheet as an SVG download, for a drawing program', async () => {
+    const pallet = fixture('AP-112');
+    await call('POST', '/api/pallets', pallet);
+    const response = await fetch(`${base}/api/pallets/${pallet.id}/sheet.svg`);
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('image/svg+xml');
+    const today = new Date().toISOString().slice(0, 10);
+    expect(response.headers.get('content-disposition')).toContain(`AP-112-${today}.svg`);
+
+    const svg = await response.text();
+    expect(svg.startsWith('<svg')).toBe(true);
+    expect(svg.trimEnd().endsWith('</svg>')).toBe(true);
+    // The whole sheet, not only the drawing: the written column is on it too.
+    expect(svg).toContain('Ambica Patterns India Pvt Ltd');
+    expect(svg).toContain('Overall size');
+  });
+
+  it('refuses an SVG of a design that does not lay out', async () => {
+    const broken = fixture('AP-113');
+    const layer = broken.layers[0]!;
+    if (layer.content.type === 'sequence') {
+      layer.content.slots = layer.content.slots.map((slot) => ({ ...slot, width: 400 }));
+    }
+    await call('POST', '/api/pallets', broken);
+    expect((await call('GET', `/api/pallets/${broken.id}/sheet.svg`)).status).toBe(422);
   });
 
   it('refuses a DXF of a design that does not lay out', async () => {

@@ -9,8 +9,16 @@ import { DRAWING, mmToPx, PAGE, SHEET } from '../src/sheet/layout.js';
 import { renderSheet } from '../src/sheet/sheet.js';
 import { loadFixture } from './helpers.js';
 
+/**
+ * What the sheet reads as. The stylesheet goes first — it carries the embedded
+ * font as base64, which is not text on the page and would answer to almost any
+ * substring asked about below.
+ */
 function textOf(html: string): string {
-  return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ');
 }
 
 describe('the components table', () => {

@@ -15,18 +15,21 @@ component.
 | [src/schema.ts](src/schema.ts) | Zod shape for a pallet document, with defaults |
 | [src/geometry/](src/geometry/) | The layout engine. No React, no zod, no I/O |
 | [src/render/](src/render/) | SVG views, built from `PlacedPiece[]` alone |
-| [src/sheet/](src/sheet/) | The A4 sheet and its PDF export |
+| [src/sheet/](src/sheet/) | The A4 sheet, its PDF export and its SVG export |
+| [src/sheet/content.ts](src/sheet/content.ts) | What the sheet says, with nothing about how it looks |
+| [src/brand/](src/brand/) | The company name, the logo and the company font |
 | [src/editor/](src/editor/) | The React editor: form, live preview, nudge |
 | [docs/guide.ts](docs/guide.ts) | The user guide, drawings and all |
 | [src/dxf/](src/dxf/) | DXF R12 output, from `PlacedPiece[]` |
 | [src/costing/](src/costing/) | Timber volume and cost, at the rates in the config |
 | [config/rates.json](config/rates.json) | Every rate the tool knows. Edit here, nowhere else |
-| [src/server/](src/server/) | SQLite storage, the revision rules, the local API |
-| [src/revisions.ts](src/revisions.ts) | Next revision, and copying a design |
+| [src/server/](src/server/) | SQLite storage and the local API |
+| [src/duplicate.ts](src/duplicate.ts) | Copying a design into one that is linked to nothing |
 | [src/cli/layout.ts](src/cli/layout.ts) | Loads a JSON pallet, prints `PlacedPiece[]` |
 | [src/cli/views.ts](src/cli/views.ts) | Writes the views to SVG files |
-| [src/cli/sheet.ts](src/cli/sheet.ts) | Writes the specification sheet as HTML and PDF |
+| [src/cli/sheet.ts](src/cli/sheet.ts) | Writes the specification sheet as HTML, PDF and SVG |
 | [fixtures/](fixtures/) | Hand-written pallet documents used by the tests |
+| [fixtures/stored/](fixtures/stored/) | Documents frozen as an earlier version wrote them. Never edited |
 | [tests/](tests/) | Vitest suites |
 
 ## Commands
@@ -43,7 +46,9 @@ npm run layout -- fixtures/block-1000x800.json --full   # whole layout result
 npm run views -- fixtures/wing-both-decks.json --out out # five SVGs + contact sheet
 npm run sheet -- fixtures/wing-both-decks.json --out out # the spec sheet, HTML and PDF
 npm run sheet -- fixtures/wing-both-decks.json --html-only
+npm run sheet -- fixtures/wing-both-decks.json --svg       # the same sheet as one SVG
 npm run dxf -- fixtures/wing-both-decks.json --out out    # R12 DXF
+npm run brand                                            # re-embed the logo and font after artwork changes
 npm run costing -- fixtures/block-1000x800.json           # timber volume and cost
 npm run guide                                            # the user guide, HTML and PDF
 ```
@@ -106,6 +111,12 @@ it is fixed in millimetres ([src/sheet/layout.ts](src/sheet/layout.ts)), and eac
 view is rendered to the exact pixel size of its cell rather than scaled to fit,
 so the stroke weights land on paper as drawn.
 
+**What the sheet says is settled once**, in
+[src/sheet/content.ts](src/sheet/content.ts), with nothing in it about how any of
+it looks. The sheet is then set out twice — as HTML for a browser to print, and
+as SVG — so a row added to one appears on both and the two can never say
+different things.
+
 An attribute in the data column has three states, not two. A value prints. Left
 blank it prints as a dash and stays on the sheet, because a question nobody has
 answered yet is one the shop should be able to see is open. Set to `na` — typed
@@ -131,6 +142,45 @@ they are given separate lanes. Since lanes decide the margins, the margins decid
 the scale and the scale decides what collides, `renderView` iterates until the
 lanes stop moving.
 
+### Branding
+
+A sheet goes out to customers, so it says whose drawing it is: **Ambica Patterns
+India Pvt Ltd** corner to corner as a watermark, in the company's own face, and
+the mark in the bottom right corner, where a title block's owner belongs on a
+drawing.
+
+The watermark is set on the sheet's true diagonal — `atan2(210, 297)`, about
+35.3° — rather than at a round angle, so it runs to the corners of *this* page
+rather than to the corners of a page it is not on. It is drawn **over** the
+sheet, not under it: every view carries a white background of its own, so a
+watermark beneath them would show only in the gaps between the drawings. At 6%
+it never competes with a dimension line, which is the constraint that matters —
+the sheet is built from on a bench. It takes no clicks and is `aria-hidden`,
+because it is not information; it is whose drawing this is. Angle, opacity, size
+and tracking are all in `WATERMARK` in
+[src/sheet/layout.ts](src/sheet/layout.ts), and both renderers read them, so the
+printed sheet and the SVG can never drift apart.
+
+Both travel *inside* the document, as base64 data URIs in
+[src/brand/assets.ts](src/brand/assets.ts). A sheet is handed to the printer, and
+to the browser, as one self-contained string with no base URL to resolve a file
+path against, so a linked logo would simply not be there.
+[tests/branding.test.ts](tests/branding.test.ts) checks every `url()` on the
+sheet is a data URI, because one that was not would be a sheet that prints
+differently on a machine without the file.
+
+`npm run brand` regenerates that module from the artwork in the project root.
+Run it only when the artwork changes; the output is committed and the originals
+are not needed to build or serve the tool.
+
+The watermark costs the drawings nothing, since it lies over the page rather
+than taking a band of its own. The logo costs 7 mm: the footer is that much
+deeper than it was, so the mark stands beside the projection note instead of
+over the drawing above it. The views auto-fit, so they simply came down by that
+much. `SHEET` and `LOGO` in [src/sheet/layout.ts](src/sheet/layout.ts) hold it
+all, and [tests/sheet.test.ts](tests/sheet.test.ts) checks the bands still add up
+to the page.
+
 ### PDF
 
 `puppeteer-core` drives a Chromium that is already on the machine rather than
@@ -138,9 +188,58 @@ downloading its own. It looks for Edge then Chrome in the usual places; set
 `PALLET_BROWSER` to point it somewhere else.
 
 The page carries its own A4 landscape `@page` rule and the browser is told to
-honour it. Nothing is rasterised anywhere: [tests/pdf.test.ts](tests/pdf.test.ts)
-prints a sheet and checks the result is one page of the right size with embedded
-fonts and no image XObject at all.
+honour it. Nothing but the logo is rasterised:
+[tests/pdf.test.ts](tests/pdf.test.ts) prints a sheet and checks the result is
+one page of the right size, with embedded fonts and at most two image
+XObjects — the logo and the soft mask its transparency needs. A third would mean
+something in the pipeline had rasterised a drawing.
+
+### SVG
+
+The whole sheet as one vector file, for taking a drawing somewhere else and
+working on it: **SVG** in the editor, `/api/pallets/:id/sheet.svg`, or
+`npm run sheet -- <file> --svg`. Canva, Illustrator, Inkscape and Figma all open
+it and let every line and every word be moved, recoloured or deleted. The DXF
+cannot do that job — it is a CAD file and page-layout software does not read it —
+and the two are for different things.
+
+It is the same page, not just the drawing: header, the written column, the five
+views and the logo. SVG has no text layout of its own, so
+[src/sheet/svgSheet.ts](src/sheet/svgSheet.ts) places every box on the same
+millimetre grid the printed sheet is built on. The five views nest inside it
+unchanged, exactly as the printed sheet embeds them.
+
+Two things to know. Canva's SVG import is a Pro feature, so on a free plan use
+the PDF or a PNG exported from the SVG. And the company font is embedded as an
+`@font-face` inside the file, which browsers and drawing programs honour but
+Canva does not — the company name may come through in a substitute face there.
+
+## The design library
+
+The home screen: every client in turn, each with their designs as cards. A card
+carries the three things most often wanted of a design that is not being changed
+— **PDF** opens its sheet, **Copy** duplicates it and opens the copy, **×**
+deletes it — so none of them needs the editor opened first. Each is offered on
+the card itself, plainly and always visible, because a control that only appears
+on hover is one nobody finds.
+
+Copy opens the copy rather than leaving it on the dashboard: it carries the same
+name and code as what it was copied from, so two cards that cannot be told apart
+is exactly what leaving it there would produce. Rename one of them "… (old)" and
+they read plainly.
+
+Deleting from a card takes the browser's draft of that design with it. A draft
+left behind would come straight back as a card of a design that has just been
+thrown away, and could be saved again from there.
+
+The search box narrows every client at once, by design name, code or client
+name, and drops the clients left with nothing — a search that left every empty
+client on screen would bury the handful that matched. Cards are ordered most
+recently edited first. The store stamps a date and not a time, so that only
+sorts to the day; a day's work is one bucket and the code is what tells those
+apart. See `visibleSections` in
+[src/editor/Dashboard.tsx](src/editor/Dashboard.tsx) and
+[tests/dashboard.test.ts](tests/dashboard.test.ts).
 
 ## The editor
 
@@ -261,7 +360,7 @@ Fast Refresh: editing a component reloads the page. `@vitejs/plugin-react`
 requires Vite 8 while Vitest pins Vite 5, and one fewer dependency to keep in
 step is worth more here than hot reload.
 
-## Storage and revisions
+## Storage
 
 One local SQLite file, `data/pallets.sqlite` by default and `PALLET_DB`
 otherwise. A pallet is stored as its document, with the few fields the design
@@ -269,29 +368,63 @@ list needs lifted into columns: the document is the truth, the columns are an
 index. `npm run serve` puts an Express API in front of it and serves the built
 editor from the same port, so the whole tool is one process.
 
-A published revision is frozen and never edited. Editing one creates a new row
-with the next revision letter, `supersedes` pointing at the previous id, and a
-fresh date; the old row is not touched. Revision letters count like spreadsheet
-columns, so Z is followed by AA.
-
-**That rule is enforced by the database, not only by the code above it.**
-Triggers on the table refuse any update or delete of a frozen row
-([db.ts](src/server/db.ts)). A pallet built last year was built to rev A, and if
-a client raises a complaint that row has to still say what it said then — which
-has to hold even if a later version of this program forgets the rule.
+A design is edited in place. Saving overwrites it and there is no history: to
+keep an old design, **duplicate it before reworking it** — the copy is a separate
+row from that moment on and nothing done to either can reach the other. The date
+a design carries is the whole of what says how current it is.
 
 PDFs are served from the store rather than from the editor's working copy, and
-named for the design and its revision, so what is printed is what is recorded.
+named for the design and its date, so what is printed is what is recorded.
 
 ### Backups
 
 Every start copies the database into `data/backups/` and keeps the last twenty
 (`PALLET_BACKUPS` to change that). The copy is taken with SQLite's own backup,
-not a file copy that could catch a half-written page, and the frozen-row
-triggers come with it: a snapshot is as much the record as the original.
+not a file copy that could catch a half-written page.
 
-The triggers stop the program from spoiling the file. They do nothing about a
+That protects against this program spoiling the file. It does nothing about a
 disk fault, so copy the `data` folder somewhere else now and then.
+
+## Keeping designs safe across a change to this program
+
+Once a couple of hundred designs are in it, that one file is the business
+record — the thing a client complaint gets judged against. Everything below is
+about not breaking it while the program keeps growing.
+
+**A design is a JSON document, read back through the schema every time it is
+opened.** That read is the one place where a change to this program can lose
+somebody's work. Make a field required that a stored document has not got, and
+every design drawn before the change stops opening at once. The database is
+untouched and the backups are fine, and none of that helps, because nothing can
+read them any more.
+
+So the rule is: **a field added later must be optional or carry a default.**
+Adding one that way is safe, and so is anything that only changes how the sheet
+looks — the sheet is rendered fresh from the document every time it is asked
+for, and nothing about it is stored. Renaming a field, removing one, or
+tightening what an existing one will accept is not safe, and needs a migration
+in [src/server/db.ts](src/server/db.ts) — the way the change that removed
+revisions had one, which rewrote every row rather than dropping any.
+
+Two guards, in [tests/compatibility.test.ts](tests/compatibility.test.ts):
+
+- **Frozen snapshots.** [fixtures/stored/](fixtures/stored/) holds documents
+  exactly as a version of this program wrote them, on the day it wrote them.
+  They are never edited. Every one must still parse, still lay out and still
+  print, on paper and as vector. Add a snapshot whenever the document shape
+  changes, so the shape being retired is remembered.
+- **What may be absent.** Every field a stored document is allowed not to carry
+  is listed and checked one at a time. Taking one away must not stop a document
+  parsing.
+
+Both run in `npm test`. A change that would strand existing designs fails there
+rather than in the shop.
+
+One thing the tests cannot cover: **a sheet already sent to a client.** Changing
+the output page changes what a reprint of an old design looks like — the drawing
+is still correct, but it will not be pixel-for-pixel the document that was
+emailed last year. If that matters for a particular job, keep the PDF that was
+sent alongside the order rather than relying on being able to reproduce it.
 
 ## The pallets it knows about
 
@@ -383,7 +516,7 @@ appears on the sheet: that is a specification, not a quotation.
 ## Build stage
 
 Stages 1 to 7 are complete: geometry, flat views, isometric, sheet and PDF,
-editor, storage and revisions, DXF and costing.
+editor, storage, DXF and costing.
 
 The fixtures in [fixtures/](fixtures/) are the shapes the model has been taken
 all the way through, from layout to sheet, DXF and costing: a plain block
