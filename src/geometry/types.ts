@@ -48,8 +48,15 @@ export interface LayerLayout {
   order: number;
   direction: Direction;
   contentType: 'sequence' | 'grid' | 'sheet';
+  /**
+   * Which course of timber this layer is part of, counted from the top. Layers
+   * that share a level share a height: see `sameLevelAsPrev` on Layer. Normally
+   * one layer per level, so normally this is just the layer's position.
+   */
+  level: number;
   /** Underside of the layer, measured up from the underside of the pallet. */
   zBottom: number;
+  /** This layer's own thickness. Its level may be thicker; nothing else is. */
   thickness: number;
   /** Spacing across the direction the boards run. Null for grid layers. */
   spread: SpacingResult | null;

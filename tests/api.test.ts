@@ -192,13 +192,17 @@ describe('the API', () => {
     expect(costing.materials).toHaveLength(1);
   });
 
-  it('serves the DXF as a download named for the design and its date', async () => {
-    const pallet = fixture('AP-110');
+  // Named for the design, the client and the date, so that a file that has left
+  // this program can be found again among other people's.
+  it('serves the DXF as a download named for the design, its client and its date', async () => {
+    const pallet = { ...fixture('AP-110'), palletName: 'Export crate base' };
     await call('POST', '/api/pallets', pallet);
     const response = await fetch(`${base}/api/pallets/${pallet.id}/drawing.dxf`);
     expect(response.status).toBe(200);
     const today = new Date().toISOString().slice(0, 10);
-    expect(response.headers.get('content-disposition')).toContain(`AP-110-${today}.dxf`);
+    expect(response.headers.get('content-disposition')).toContain(
+      `filename="Export crate base - Demo Client - ${today}.dxf"`,
+    );
     const dxf = await response.text();
     expect(dxf).toContain('AC1009');
     expect(dxf.trimEnd().endsWith('0\nEOF')).toBe(true);
@@ -211,7 +215,9 @@ describe('the API', () => {
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toContain('image/svg+xml');
     const today = new Date().toISOString().slice(0, 10);
-    expect(response.headers.get('content-disposition')).toContain(`AP-112-${today}.svg`);
+    expect(response.headers.get('content-disposition')).toContain(
+      `filename="${pallet.palletName} - Demo Client - ${today}.svg"`,
+    );
 
     const svg = await response.text();
     expect(svg.startsWith('<svg')).toBe(true);

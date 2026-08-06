@@ -6,6 +6,7 @@ import type { DimSpec, DimTier } from '../src/render/scene.js';
 import { renderView } from '../src/render/views.js';
 import { componentTable, totalPieces } from '../src/sheet/components.js';
 import { sheetContent } from '../src/sheet/content.js';
+import { contentDisposition, downloadName } from '../src/sheet/filename.js';
 import { DRAWING, mmToPx, PAGE, SHEET } from '../src/sheet/layout.js';
 import { renderSheet } from '../src/sheet/sheet.js';
 import { loadFixture } from './helpers.js';
@@ -340,7 +341,7 @@ describe('a design with no name', () => {
   it('still prints, and names itself by whatever it does have', () => {
     const bare = { ...pallet, palletName: '', palletCode: '' };
     expect(renderSheet(bare, layout)).toContain('</html>');
-    expect(sheetContent(bare, layout).title).toBe(pallet.updatedAt);
+    expect(sheetContent(bare, layout).title).toBe(`${pallet.clientName} - ${pallet.updatedAt}`);
   });
 
   it('changes nothing for a design that has a name', () => {
@@ -426,5 +427,48 @@ describe('the sheet fits its page', () => {
         DRAWING.isoRowHeight +
         2 * SHEET.rowGap,
     ).toBeLessThanOrEqual(DRAWING.height + 1e-6);
+  });
+});
+
+/**
+ * A downloaded sheet lands in a folder of other people's files, so its name has
+ * to say what it is: the design, whose it is, and when it was saved.
+ */
+describe('the name a sheet downloads as', () => {
+  const pallet = loadFixture('block-1000x800');
+  const named = {
+    ...pallet,
+    palletName: 'Export crate base',
+    palletCode: 'AP-001',
+    clientName: 'Acme Ltd',
+    updatedAt: '2026-08-06',
+  };
+
+  it('is the design, the client and the date', () => {
+    expect(downloadName(named, 'pdf')).toBe('Export crate base - Acme Ltd - 2026-08-06.pdf');
+    expect(downloadName(named, 'dxf')).toBe('Export crate base - Acme Ltd - 2026-08-06.dxf');
+  });
+
+  it('falls back to the code while a design has no name', () => {
+    expect(downloadName({ ...named, palletName: '' }, 'pdf')).toBe(
+      'AP-001 - Acme Ltd - 2026-08-06.pdf',
+    );
+  });
+
+  it('still has something to save under when a design has neither', () => {
+    expect(downloadName({ ...named, palletName: '', palletCode: '', clientName: '' }, 'pdf')).toBe(
+      '2026-08-06.pdf',
+    );
+  });
+
+  it('drops what a file system would not take', () => {
+    const awkward = { ...named, palletName: '1000/800 pallet', clientName: 'A: B' };
+    expect(downloadName(awkward, 'pdf')).toBe('1000800 pallet - A B - 2026-08-06.pdf');
+  });
+
+  it('carries the name in full as well as in ASCII, for every browser', () => {
+    const header = contentDisposition('Palé - Café Ltd - 2026-08-06.pdf', 'inline');
+    expect(header).toContain('inline; filename="Pal_ - Caf_ Ltd - 2026-08-06.pdf"');
+    expect(header).toContain("filename*=UTF-8''Pal%C3%A9%20-%20Caf%C3%A9%20Ltd%20-%202026-08-06.pdf");
   });
 });

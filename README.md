@@ -480,11 +480,47 @@ Everything below falls out of that; none of it is a code path of its own.
 | Plywood type 1 | A sheet straight onto the blocks |
 | Plywood type 2 | A sheet onto centre boards that connect the blocks |
 | Plywood type 3 | A whole boarded pallet with a sheet laid over its top deck |
+| M pallet | A bottom deck whose boards run both ways: two across the width at the ends, three along the length between them |
 
 A sheet that *replaces* the top boards is a `top_deck` whose content is a sheet,
 which is what "plywood sheet replaces the top board layer" means. Type 3 is the
 one that does not replace anything, so it has a layer kind of its own: `panel`.
 That is the model being widened rather than a branch being added for one pallet.
+
+### A deck that runs two ways
+
+A layer runs one way, and for nearly every deck that is right. The M pallet is
+the one it is wrong for: five bottom boards, two crossing the width at the ends
+and three running along the length between them, every one of the five nailed
+straight to the blocks. Those five are not two decks stacked — they are one
+course of timber at one height, and a stack of layers cannot say so.
+
+So a layer can be marked **same level as the layer above** (`sameLevelAsPrev`)
+and share its height instead of sitting under it. Layers sharing a level share
+a `zBottom`, the level counts once towards the pallet height, and each keeps its
+own direction, span, offset and run — which is exactly what the cross-running
+group needs in order to be cut short and placed between the boards it sits
+between. The M pallet's bottom deck is two layers: `bottom-ends` across the
+width, and `bottom-inner` along the length with a run of 1000 from 100.
+
+That widens the model rather than adding a branch, so everything downstream
+follows for free — costing, DXF, part numbers and the drawings all read the same
+piece list. Three things did have to learn that a *course* is not a *layer*:
+
+- **Nails.** A joint is between two courses. The M pallet's bottom joint is the
+  blocks against all five boards, not the ends against the inner boards.
+- **The near layer.** The top and bottom views draw the course you are looking
+  at solid and everything under it faint. Holding back half a deck because it
+  runs the other way would say it was underneath the rest, which it is not.
+- **Height.** A course is as thick as its thickest layer, counted once.
+
+Two layers at one height cannot both have timber in the same place, so an
+overlap between them in plan is an error (`level_clash`) — usually a group that
+was never cut short. **Fit between the boards on this level** in the editor does
+that arithmetic: it reads the run left free by the boards sharing the level and
+writes the run span, the run offset and the board lengths together, so the three
+cannot disagree. It fills the fields in and leaves them yours to change; nothing
+is applied behind the form.
 
 ## Nails
 

@@ -6,6 +6,7 @@ import { duplicatePallet } from '../duplicate.js';
 import { analysePallet } from '../geometry/layout.js';
 import { LAYER_STYLE } from '../render/theme.js';
 import { PalletSchema, parsePallet } from '../schema.js';
+import { downloadName } from '../sheet/filename.js';
 import { renderSheet } from '../sheet/sheet.js';
 import { NOT_APPLICABLE } from '../types.js';
 import type { Client, LayerKind, Pallet, Unstated } from '../types.js';
@@ -505,7 +506,7 @@ function Editor({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${pallet.palletCode || 'pallet'}-${pallet.updatedAt}.json`;
+    link.download = downloadName(pallet, 'json');
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -899,11 +900,13 @@ function Editor({
             </p>
           </Panel>
 
-          {pallet.layers.map((layer) => (
+          {pallet.layers.map((layer, index) => (
             <LayerEditor
               key={layer.id}
               layer={layer}
+              layout={layout}
               computed={layout.layers.find((computed) => computed.layerId === layer.id)}
+              first={index === 0}
               selection={selection}
               dispatch={dispatch}
             />
@@ -931,7 +934,9 @@ function Editor({
             }
           >
             <p className="text-xs text-slate-500">
-              Layers are ordered top to bottom. A new layer goes underneath the rest.
+              Layers are ordered top to bottom. A new layer goes underneath the rest. A deck
+              whose boards do not all run the same way is built as one layer per direction,
+              each marked <em>same level as the layer above</em>.
             </p>
           </Panel>
 

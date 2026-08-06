@@ -64,6 +64,108 @@ function describe(layer: Layer): string {
 }
 
 /**
+ * Which level each layer belongs to, for layers already ordered top to bottom.
+ *
+ * A level is a course of timber at one height. Normally it is one layer, and
+ * these come out 0, 1, 2, 3. A layer marked `sameLevelAsPrev` joins the level
+ * above instead of starting one of its own. The topmost layer always starts
+ * level 0 whatever it is marked, since there is nothing above it to join.
+ */
+export function levelIndices(ordered: Layer[]): number[] {
+  const levels: number[] = [];
+  let level = -1;
+  ordered.forEach((layer, index) => {
+    if (index === 0 || !layer.sameLevelAsPrev) level += 1;
+    levels.push(level);
+  });
+  return levels;
+}
+
+/** The extent of each level: as thick as the thickest layer in it. */
+function levelExtents(levelOf: number[], thicknesses: number[]): number[] {
+  const extents: number[] = [];
+  levelOf.forEach((level, index) => {
+    extents[level] = Math.max(extents[level] ?? 0, thicknesses[index]!);
+  });
+  return extents;
+}
+
+/**
+ * Two layers at one height cannot both have timber in the same place, so an
+ * overlap in plan between them is a mistake — usually a cross-running group
+ * that was never shortened to fit between the boards it sits between.
+ *
+ * Only checked across layers of a level. Pieces inside one layer are already
+ * spaced by `distribute`, and an over-full layer is reported as that.
+ */
+function reportLevelClashes(
+  ordered: Layer[],
+  levelOf: number[],
+  layerLayouts: LayerLayout[],
+  pieces: PlacedPiece[],
+  issues: LayoutIssue[],
+): void {
+  const byLayer = new Map<string, PlacedPiece[]>();
+  for (const piece of pieces) {
+    const list = byLayer.get(piece.layerId);
+    if (list) list.push(piece);
+    else byLayer.set(piece.layerId, [piece]);
+  }
+  // A layer that failed to place anything has no layout, and nothing to clash.
+  const placed = new Set(layerLayouts.map((layout) => layout.layerId));
+
+  for (let i = 0; i < ordered.length; i++) {
+    for (let j = i + 1; j < ordered.length; j++) {
+      if (levelOf[i] !== levelOf[j]) continue;
+      const a = ordered[i]!;
+      const b = ordered[j]!;
+      if (!placed.has(a.id) || !placed.has(b.id)) continue;
+
+      // Boards of one course are cut from one board. Where they are not, the
+      // level is as deep as the deeper of them and the shallower sits on the
+      // underside of it, which is a step in the deck and worth saying so.
+      const thickA = layerThickness(a);
+      const thickB = layerThickness(b);
+      if (Math.abs(thickA - thickB) > EPSILON) {
+        issues.push({
+          severity: 'warning',
+          code: 'level_thickness',
+          layerId: b.id,
+          layerKind: b.kind,
+          message: `${describe(b)} is ${thickB} thick and shares its level with ${describe(a)} at ${thickA}, so the two do not finish flush`,
+        });
+      }
+
+      if (!anyOverlapInPlan(byLayer.get(a.id) ?? [], byLayer.get(b.id) ?? [])) continue;
+      issues.push({
+        severity: 'error',
+        code: 'level_clash',
+        layerId: b.id,
+        layerKind: b.kind,
+        message: `${describe(b)} shares its level with ${describe(a)} but overlaps it in plan, so the two would occupy the same timber`,
+      });
+    }
+  }
+}
+
+function anyOverlapInPlan(a: PlacedPiece[], b: PlacedPiece[]): boolean {
+  return a.some((one) =>
+    b.some(
+      (other) =>
+        Math.min(one.x + one.dx, other.x + other.dx) - Math.max(one.x, other.x) > EPSILON &&
+        Math.min(one.y + one.dy, other.y + other.dy) - Math.max(one.y, other.y) > EPSILON,
+    ),
+  );
+}
+
+/** Where a layer sits in the stack, worked out once before it is placed. */
+interface LevelPosition {
+  level: number;
+  zBottom: number;
+  thickness: number;
+}
+
+/**
  * Lay a pallet out. Collects issues rather than throwing so that the editor can
  * show a broken design; `computeLayout` is the strict entry point.
  */
@@ -100,38 +202,47 @@ export function analysePallet(pallet: Pallet): Layout {
   }
 
   // Layers are listed top to bottom, so stack z from the last one upwards.
+  // Layers sharing a level are one course of timber, so they take one z and one
+  // thickness between them rather than sitting on each other. See Layer.
   const thicknesses = ordered.map(layerThickness);
-  const derivedHeight = thicknesses.reduce((sum, t) => sum + t, 0);
-  const zBottoms: number[] = new Array(ordered.length).fill(0);
+  const levelOf = levelIndices(ordered);
+  const levelThicknesses = levelExtents(levelOf, thicknesses);
+  const derivedHeight = levelThicknesses.reduce((sum, t) => sum + t, 0);
+
+  const levelZ: number[] = new Array(levelThicknesses.length).fill(0);
   let z = 0;
-  for (let i = ordered.length - 1; i >= 0; i--) {
-    zBottoms[i] = z;
-    z += thicknesses[i]!;
+  for (let i = levelThicknesses.length - 1; i >= 0; i--) {
+    levelZ[i] = z;
+    z += levelThicknesses[i]!;
   }
 
   ordered.forEach((layer, index) => {
-    const zBottom = zBottoms[index]!;
+    const level = levelOf[index]!;
+    const zBottom = levelZ[level]!;
     const thickness = thicknesses[index]!;
     checkKind(layer, issues);
 
+    const at = { level, zBottom, thickness };
     switch (layer.content.type) {
       case 'sequence':
         layerLayouts.push(
-          placeSequence(pallet, layer, layer.content.slots, zBottom, thickness, pieces, issues, parts),
+          placeSequence(pallet, layer, layer.content.slots, at, pieces, issues, parts),
         );
         break;
       case 'sheet':
         layerLayouts.push(
-          placeSheet(pallet, layer, layer.content.sheet, zBottom, thickness, pieces, issues, parts),
+          placeSheet(pallet, layer, layer.content.sheet, at, pieces, issues, parts),
         );
         break;
       case 'grid':
         layerLayouts.push(
-          placeGrid(pallet, layer, layer.content.grid, zBottom, thickness, pieces, issues, parts),
+          placeGrid(pallet, layer, layer.content.grid, at, pieces, issues, parts),
         );
         break;
     }
   });
+
+  reportLevelClashes(ordered, levelOf, layerLayouts, pieces, issues);
 
   if (
     pallet.overallHeight > 0 &&
@@ -191,8 +302,7 @@ function placeSequence(
   pallet: Pallet,
   layer: Layer,
   slots: Slot[],
-  zBottom: number,
-  thickness: number,
+  at: LevelPosition,
   pieces: PlacedPiece[],
   issues: LayoutIssue[],
   parts: Map<string, number>,
@@ -223,16 +333,16 @@ function placeSequence(
   reportOverfull(layer, spread.slack, available, issues);
 
   slots.forEach((slot, i) => {
-    const at = spread.positions[i]!;
+    const across = spread.positions[i]!;
     checkRun(pallet, layer, slot.length, issues);
     pieces.push({
       partNo: parts.get(slotSignature(layer, slot)) ?? 0,
       layerKind: layer.kind,
       layerId: layer.id,
       source: { kind: 'slot', index: i },
-      x: run === 'x' ? layer.runOffsetMm : at,
-      y: run === 'x' ? at : layer.runOffsetMm,
-      z: zBottom,
+      x: run === 'x' ? layer.runOffsetMm : across,
+      y: run === 'x' ? across : layer.runOffsetMm,
+      z: at.zBottom,
       dx: run === 'x' ? slot.length : slot.width,
       dy: run === 'x' ? slot.width : slot.length,
       dz: slot.thickness,
@@ -248,8 +358,9 @@ function placeSequence(
     order: layer.order,
     direction: layer.direction,
     contentType: 'sequence',
-    zBottom,
-    thickness,
+    level: at.level,
+    zBottom: at.zBottom,
+    thickness: at.thickness,
     spread,
     rows: null,
     cols: null,
@@ -260,8 +371,7 @@ function placeSheet(
   pallet: Pallet,
   layer: Layer,
   sheet: SheetSpec,
-  zBottom: number,
-  thickness: number,
+  at: LevelPosition,
   pieces: PlacedPiece[],
   issues: LayoutIssue[],
   parts: Map<string, number>,
@@ -273,15 +383,15 @@ function placeSheet(
   reportOverfull(layer, spread.slack, available, issues);
   checkRun(pallet, layer, sheet.length, issues);
 
-  const at = spread.positions[0]!;
+  const across = spread.positions[0]!;
   pieces.push({
     partNo: parts.get(sheetSignature(layer, sheet)) ?? 0,
     layerKind: layer.kind,
     layerId: layer.id,
     source: { kind: 'sheet' },
-    x: run === 'x' ? layer.runOffsetMm : at,
-    y: run === 'x' ? at : layer.runOffsetMm,
-    z: zBottom,
+    x: run === 'x' ? layer.runOffsetMm : across,
+    y: run === 'x' ? across : layer.runOffsetMm,
+    z: at.zBottom,
     dx: run === 'x' ? sheet.length : sheet.width,
     dy: run === 'x' ? sheet.width : sheet.length,
     dz: sheet.thickness,
@@ -295,8 +405,9 @@ function placeSheet(
     order: layer.order,
     direction: layer.direction,
     contentType: 'sheet',
-    zBottom,
-    thickness,
+    level: at.level,
+    zBottom: at.zBottom,
+    thickness: at.thickness,
     spread,
     rows: null,
     cols: null,
@@ -307,8 +418,7 @@ function placeGrid(
   pallet: Pallet,
   layer: Layer,
   grid: BlockGrid,
-  zBottom: number,
-  thickness: number,
+  at: LevelPosition,
   pieces: PlacedPiece[],
   issues: LayoutIssue[],
   parts: Map<string, number>,
@@ -354,7 +464,7 @@ function placeGrid(
           source: { kind: 'cell', row: r, col: c },
           x,
           y,
-          z: zBottom,
+          z: at.zBottom,
           dx: cell.lengthMm,
           dy: cell.widthMm,
           dz: cell.heightMm,
@@ -372,8 +482,9 @@ function placeGrid(
     order: layer.order,
     direction: layer.direction,
     contentType: 'grid',
-    zBottom,
-    thickness,
+    level: at.level,
+    zBottom: at.zBottom,
+    thickness: at.thickness,
     spread: null,
     rows,
     cols,

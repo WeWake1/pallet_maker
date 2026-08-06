@@ -100,6 +100,9 @@ export const LayerSchema = z.object({
   kind: LayerKindSchema,
   order: z.number().int(),
   direction: DirectionSchema,
+  // Absent on every document written before decks could run two ways at once,
+  // and false is what those all meant: one layer, one height. See Layer.
+  sameLevelAsPrev: z.boolean().default(false),
   spanMm: positiveMm.nullable().default(null),
   offsetMm: mm.default(0),
   runSpanMm: positiveMm.nullable().default(null),

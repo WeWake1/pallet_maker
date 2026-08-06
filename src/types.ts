@@ -183,6 +183,26 @@ export interface Layer {
   direction: Direction;
 
   /**
+   * Sit at the same height as the layer above instead of underneath it.
+   *
+   * A layer runs one way. That is right for nearly every deck, and wrong for
+   * the deck whose boards do not all run the same way — the M pallet's bottom
+   * deck, where two boards run across the width at the ends and three run along
+   * the length between them, every one of the five nailed straight to the
+   * blocks. Those five are not two decks stacked; they are one deck of timber
+   * at one height, and a stack of layers cannot say so.
+   *
+   * So a layer may be marked as belonging to the level above rather than to the
+   * one below it. Layers sharing a level share a `zBottom`, the level is as
+   * thick as its thickest member, and each member keeps its own direction,
+   * span, offset and run — which is exactly what the cross-running group needs
+   * to be shortened and placed between the boards it sits between.
+   *
+   * Ignored on the topmost layer, which has nothing above to share with.
+   */
+  sameLevelAsPrev: boolean;
+
+  /**
    * Extent ACROSS the direction the boards run.
    * null means the full pallet dimension.
    */

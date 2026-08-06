@@ -112,6 +112,11 @@ const TOLERANCE = 1e-6;
  * topmost layer rather than the one called `top_deck`, because a plywood sheet
  * laid over a boarded deck is what you see from above.
  *
+ * A face is a whole course of timber, not one layer. A deck whose boards run
+ * two ways is several layers at one height, and every board of it is timber you
+ * are looking straight at — holding back the cross-running half of a deck would
+ * say it was underneath the rest, which it is not.
+ *
  * In the side and end views a piece is faint when something in front of it
  * covers it completely.
  */
@@ -119,10 +124,10 @@ function isNear(
   target: ReturnType<typeof place> & { piece: PlacedPiece },
   all: Array<ReturnType<typeof place> & { piece: PlacedPiece }>,
   view: ViewKind,
-  faces: { top: string | undefined; bottom: string | undefined },
+  faces: { top: Set<string>; bottom: Set<string> },
 ): boolean {
-  if (view === 'top') return target.piece.layerId === faces.top;
-  if (view === 'bottom') return target.piece.layerId === faces.bottom;
+  if (view === 'top') return faces.top.has(target.piece.layerId);
+  if (view === 'bottom') return faces.bottom.has(target.piece.layerId);
   return !all.some(
     (other) =>
       other !== target &&
@@ -134,11 +139,21 @@ function isNear(
   );
 }
 
-/** The layers a viewer meets first from above and from below. */
-export function facesOf(layout: Layout): { top: string | undefined; bottom: string | undefined } {
+/**
+ * The layers a viewer meets first from above and from below — every layer of
+ * the topmost course and of the bottom-most one, since a course may be more
+ * than one layer. See `sameLevelAsPrev` on Layer.
+ */
+export function facesOf(layout: Layout): { top: Set<string>; bottom: Set<string> } {
+  const idsAtLevel = (level: number | undefined): Set<string> =>
+    new Set(
+      level === undefined
+        ? []
+        : layout.layers.filter((layer) => layer.level === level).map((layer) => layer.layerId),
+    );
   return {
-    top: layout.layers[0]?.layerId,
-    bottom: layout.layers.at(-1)?.layerId,
+    top: idsAtLevel(layout.layers[0]?.level),
+    bottom: idsAtLevel(layout.layers.at(-1)?.level),
   };
 }
 

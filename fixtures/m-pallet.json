@@ -1,0 +1,255 @@
+{
+  "id": "fix-m-pallet",
+  "palletCode": "AP-006",
+  "clientId": "client-c28b5710",
+  "clientName": "Demo Client",
+  "palletName": "1200 x 1000 M pallet",
+  "overallLength": 1200,
+  "overallWidth": 1000,
+  "palletType": "block_4way",
+  "deckType": "double_face_non_reversible",
+  "entry": "4_way",
+  "species": "pine",
+  "planing": "none",
+  "staticLoadKg": 3000,
+  "dynamicLoadKg": 1200,
+  "nails": [
+    {
+      "label": "top board to centre board",
+      "type": "wire nail"
+    },
+    {
+      "label": "centre board to block",
+      "type": "wire nail"
+    },
+    {
+      "label": "bottom board to block",
+      "type": "wire nail"
+    }
+  ],
+  "notes": "The bottom deck runs two ways. Two boards cross the width at the ends and three run along the length between them, all five nailed straight to the blocks as one course of timber.",
+  "updatedAt": "2026-01-01",
+  "layers": [
+    {
+      "id": "top",
+      "kind": "top_deck",
+      "order": 1,
+      "direction": "along_length",
+      "content": {
+        "type": "sequence",
+        "slots": [
+          {
+            "length": 1200,
+            "width": 100,
+            "thickness": 18,
+            "material": "pine"
+          },
+          {
+            "length": 1200,
+            "width": 100,
+            "thickness": 18,
+            "material": "pine"
+          },
+          {
+            "length": 1200,
+            "width": 100,
+            "thickness": 18,
+            "material": "pine"
+          },
+          {
+            "length": 1200,
+            "width": 100,
+            "thickness": 18,
+            "material": "pine"
+          },
+          {
+            "length": 1200,
+            "width": 100,
+            "thickness": 18,
+            "material": "pine"
+          },
+          {
+            "length": 1200,
+            "width": 100,
+            "thickness": 18,
+            "material": "pine"
+          },
+          {
+            "length": 1200,
+            "width": 100,
+            "thickness": 18,
+            "material": "pine"
+          }
+        ]
+      }
+    },
+    {
+      "id": "centre",
+      "kind": "bearer",
+      "order": 2,
+      "direction": "across_width",
+      "content": {
+        "type": "sequence",
+        "slots": [
+          {
+            "length": 1000,
+            "width": 100,
+            "thickness": 20,
+            "material": "pine"
+          },
+          {
+            "length": 1000,
+            "width": 100,
+            "thickness": 20,
+            "material": "pine"
+          },
+          {
+            "length": 1000,
+            "width": 100,
+            "thickness": 20,
+            "material": "pine"
+          }
+        ]
+      }
+    },
+    {
+      "id": "blocks",
+      "kind": "block",
+      "order": 3,
+      "direction": "along_length",
+      "content": {
+        "type": "grid",
+        "grid": {
+          "rows": 3,
+          "cols": 3,
+          "rowSpanMm": null,
+          "rowOffsetMm": 0,
+          "colSpanMm": null,
+          "colOffsetMm": 0,
+          "cells": [
+            [
+              {
+                "lengthMm": 100,
+                "widthMm": 100,
+                "heightMm": 100,
+                "material": "pine"
+              },
+              {
+                "lengthMm": 100,
+                "widthMm": 100,
+                "heightMm": 100,
+                "material": "pine"
+              },
+              {
+                "lengthMm": 100,
+                "widthMm": 100,
+                "heightMm": 100,
+                "material": "pine"
+              }
+            ],
+            [
+              {
+                "lengthMm": 100,
+                "widthMm": 100,
+                "heightMm": 100,
+                "material": "pine"
+              },
+              {
+                "lengthMm": 100,
+                "widthMm": 100,
+                "heightMm": 100,
+                "material": "pine"
+              },
+              {
+                "lengthMm": 100,
+                "widthMm": 100,
+                "heightMm": 100,
+                "material": "pine"
+              }
+            ],
+            [
+              {
+                "lengthMm": 100,
+                "widthMm": 100,
+                "heightMm": 100,
+                "material": "pine"
+              },
+              {
+                "lengthMm": 100,
+                "widthMm": 100,
+                "heightMm": 100,
+                "material": "pine"
+              },
+              {
+                "lengthMm": 100,
+                "widthMm": 100,
+                "heightMm": 100,
+                "material": "pine"
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "id": "bottom-ends",
+      "kind": "bottom_deck",
+      "order": 4,
+      "direction": "across_width",
+      "content": {
+        "type": "sequence",
+        "slots": [
+          {
+            "length": 1000,
+            "width": 100,
+            "thickness": 18,
+            "material": "pine",
+            "variant": "end"
+          },
+          {
+            "length": 1000,
+            "width": 100,
+            "thickness": 18,
+            "material": "pine",
+            "variant": "end"
+          }
+        ]
+      }
+    },
+    {
+      "id": "bottom-inner",
+      "kind": "bottom_deck",
+      "order": 5,
+      "direction": "along_length",
+      "sameLevelAsPrev": true,
+      "runSpanMm": 1000,
+      "runOffsetMm": 100,
+      "content": {
+        "type": "sequence",
+        "slots": [
+          {
+            "length": 1000,
+            "width": 100,
+            "thickness": 18,
+            "material": "pine",
+            "variant": "inner"
+          },
+          {
+            "length": 1000,
+            "width": 100,
+            "thickness": 18,
+            "material": "pine",
+            "variant": "inner"
+          },
+          {
+            "length": 1000,
+            "width": 100,
+            "thickness": 18,
+            "material": "pine",
+            "variant": "inner"
+          }
+        ]
+      }
+    }
+  ]
+}

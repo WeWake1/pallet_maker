@@ -459,11 +459,15 @@ function overhangDims(layout: Layout, view: ViewKind, overhang: Overhang | null)
   return dims;
 }
 
-/** The layer this view emphasises: whichever one the viewer meets first. */
-function nearLayer(layout: Layout, view: ViewKind): LayerLayout | undefined {
+/**
+ * The layers this view emphasises: the course the viewer meets first. More than
+ * one where that course runs two ways, and each of those is dimensioned on its
+ * own side of the drawing, since each is spread across a different axis.
+ */
+function nearLayers(layout: Layout, view: ViewKind): LayerLayout[] {
   const faces = facesOf(layout);
-  const id = view === 'bottom' ? faces.bottom : faces.top;
-  return layout.layers.find((layer) => layer.layerId === id);
+  const ids = view === 'bottom' ? faces.bottom : faces.top;
+  return layout.layers.filter((layer) => ids.has(layer.layerId));
 }
 
 /**
@@ -489,8 +493,11 @@ function anchorFor(item: Projected, side: Side): number {
 
 /** The width of each distinct board variant, and the computed gap, once per layer. */
 function nearLayerDims(layout: Layout, view: ViewKind, projected: Projected[]): DimSpec[] {
-  const layer = nearLayer(layout, view);
-  if (!layer || layer.contentType === 'grid') return [];
+  return nearLayers(layout, view).flatMap((layer) => layerDims(layer, projected));
+}
+
+function layerDims(layer: LayerLayout, projected: Projected[]): DimSpec[] {
+  if (layer.contentType === 'grid') return [];
 
   const side = spreadSide(layer);
   const items = projected

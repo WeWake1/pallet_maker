@@ -139,6 +139,23 @@ ${page(`
     would drift apart.
   </p>
 
+  <h2>A deck whose boards run both ways</h2>
+  <p>
+    Some pallets have a deck where the boards do not all run the same way — the
+    M pallet, whose bottom deck is two boards across the width at the ends and
+    three along the length between them, all five nailed to the blocks. Build it
+    as two layers of bottom boards:
+  </p>
+  <ol>
+    <li>Add a second <strong>Bottom boards</strong> layer and set its direction the other way.</li>
+    <li>Tick <strong>Same level as the layer above</strong> on it, so the two share a height instead of stacking.</li>
+    <li>Press <strong>Fit between the boards on this level</strong> to cut them to the space the first layer leaves.</li>
+  </ol>
+  <p class="note">
+    Start from example… → <code>m-pallet</code> gives you the whole thing already
+    built, if it is easier to change one than to build one.
+  </p>
+
   <h2>Saving, and keeping an old design</h2>
   <p>
     <strong>Save</strong> overwrites the design. There is no history and nothing

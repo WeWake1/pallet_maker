@@ -41,6 +41,7 @@ export type Action =
   | { type: 'addLayer'; kind: LayerKind }
   | { type: 'removeLayer'; layerId: string }
   | { type: 'patchLayer'; layerId: string; patch: Partial<Layer> }
+  | { type: 'fitRun'; layerId: string; runOffsetMm: number; runSpanMm: number }
   | { type: 'moveLayer'; layerId: string; by: number }
   | { type: 'setContent'; layerId: string; contentType: LayerContent['type'] }
   | { type: 'addSlot'; layerId: string }
@@ -110,6 +111,10 @@ function renumber(pallet: Pallet): void {
   pallet.layers.forEach((layer, index) => {
     layer.order = index + 1;
   });
+  // The top layer has nothing above it to share a height with, so a layer that
+  // becomes the top one has to stop claiming that it does. Same reasoning as
+  // the first board of a layer and its join.
+  if (pallet.layers[0]) pallet.layers[0].sameLevelAsPrev = false;
 }
 
 function findLayer(pallet: Pallet, layerId: string): Layer | undefined {
@@ -172,6 +177,30 @@ export function reducer(state: EditorState, action: Action): EditorState {
     case 'patchLayer': {
       const layer = findLayer(pallet, action.layerId);
       if (layer) Object.assign(layer, action.patch);
+      break;
+    }
+
+    /**
+     * Shorten a layer to the run left free by the layers it shares its level
+     * with — the cross-running group of a deck that runs two ways, cut to sit
+     * between the boards at the ends.
+     *
+     * Where the boards start and how long they are cut are one answer, so this
+     * writes both rather than leaving a run span the boards overrun. The
+     * arithmetic is `fitRun` in the layout engine; this only records it, and
+     * either number can be typed over afterwards.
+     */
+    case 'fitRun': {
+      const layer = findLayer(pallet, action.layerId);
+      if (layer) {
+        layer.runOffsetMm = action.runOffsetMm;
+        layer.runSpanMm = action.runSpanMm;
+        if (layer.content.type === 'sequence') {
+          for (const slot of layer.content.slots) slot.length = action.runSpanMm;
+        } else if (layer.content.type === 'sheet') {
+          layer.content.sheet.length = action.runSpanMm;
+        }
+      }
       break;
     }
 

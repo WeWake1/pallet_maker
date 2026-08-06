@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
-import type { LayerLayout } from '../geometry/types.js';
+import { fitRun } from '../geometry/fit.js';
+import type { LayerLayout, Layout } from '../geometry/types.js';
 import { mmLabel } from '../render/scene.js';
 import { LAYER_STYLE } from '../render/theme.js';
 import type { LayerStyle } from '../render/theme.js';
@@ -85,12 +86,17 @@ const CONTENTS: Array<[LayerContent['type'], string]> = [
 
 export function LayerEditor({
   layer,
+  layout,
   computed,
+  first,
   selection,
   dispatch,
 }: {
   layer: Layer;
+  layout: Layout;
   computed: LayerLayout | undefined;
+  /** The topmost layer, which has nothing above it to share a level with. */
+  first: boolean;
   selection: Selection | null;
   dispatch: (action: Action) => void;
 }) {
@@ -98,6 +104,9 @@ export function LayerEditor({
   // The colour this layer is drawn in, worn by its card and by the boxed row
   // inside it, so the two agree about what is what.
   const accent = LAYER_STYLE[layer.kind];
+  // Only offered once there is something to fit between: the button is the
+  // arithmetic, and with nothing sharing the level there is no sum to do.
+  const fit = layer.content.type === 'grid' ? null : fitRun(layout, layer.id);
 
   return (
     <Panel
@@ -153,6 +162,21 @@ export function LayerEditor({
         </div>
       </div>
 
+      {/* A deck whose boards do not all run the same way is built as one layer
+          per direction, marked to share a height rather than to stack. Not
+          offered on the top layer, which has nothing above it. */}
+      {!first && (
+        <div className="mt-2">
+          <Check
+            checked={layer.sameLevelAsPrev}
+            label="Same level as the layer above — one course of timber, not stacked on it"
+            onChange={(sameLevelAsPrev) =>
+              dispatch({ type: 'patchLayer', layerId: layer.id, patch: { sameLevelAsPrev } })
+            }
+          />
+        </div>
+      )}
+
       {layer.content.type !== 'grid' && (
         <div className="mt-2 grid grid-cols-4 gap-2">
           <Field label="Span (mm)">
@@ -185,6 +209,23 @@ export function LayerEditor({
               onChange={(runOffsetMm) => dispatch({ type: 'patchLayer', layerId: layer.id, patch: { runOffsetMm } })}
             />
           </Field>
+        </div>
+      )}
+
+      {/* The numbers above, worked out from the boards this layer has to stop
+          short of. It fills the fields in and leaves them yours to change:
+          nothing here is applied behind the form. */}
+      {fit && (
+        <div className="mt-2 flex items-center gap-2">
+          <Button
+            onClick={() => dispatch({ type: 'fitRun', layerId: layer.id, ...fit })}
+            title="Cut these boards to the space left by the boards sharing this level, and start them where that space starts"
+          >
+            Fit between the boards on this level
+          </Button>
+          <span className="text-xs text-slate-500">
+            run {fit.runSpanMm} from {fit.runOffsetMm}
+          </span>
         </div>
       )}
 

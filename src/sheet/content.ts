@@ -4,6 +4,7 @@ import { notApplicable } from '../types.js';
 import type { LoadKg, Pallet } from '../types.js';
 import { componentTable } from './components.js';
 import type { ComponentRow } from './components.js';
+import { documentName } from './filename.js';
 
 export type { ComponentRow };
 
@@ -135,9 +136,7 @@ export function sheetContent(pallet: Pallet, layout: Layout): SheetContent {
     nails: nailRows(pallet),
     material: materialRows(pallet),
     notes: pallet.notes ?? '',
-    title: [pallet.palletCode, pallet.palletName, pallet.updatedAt]
-      .filter((part) => part !== '')
-      .join(' '),
+    title: documentName(pallet),
   };
 }
 

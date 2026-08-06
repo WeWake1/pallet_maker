@@ -7,6 +7,7 @@ import type { Rates } from '../costing/rates.js';
 import { palletToDxf } from '../dxf/drawing.js';
 import { analysePallet } from '../geometry/layout.js';
 import { PalletLayoutError } from '../geometry/types.js';
+import { contentDisposition, downloadName } from '../sheet/filename.js';
 import { exportPdfBuffer } from '../sheet/pdf.js';
 import { renderSheet } from '../sheet/sheet.js';
 import { renderSheetSvg } from '../sheet/svgSheet.js';
@@ -134,9 +135,10 @@ export function createApp(db: Db, options: AppOptions = {}): Express {
     if (errors.length > 0) throw new PalletLayoutError(errors);
 
     const pdf = await exportPdfBuffer(renderSheet(pallet, layout));
-    const name = `${pallet.palletCode || 'pallet'}-${pallet.updatedAt}.pdf`;
     fresh(res);
-    res.type('pdf').setHeader('Content-Disposition', `inline; filename="${name}"`);
+    res
+      .type('pdf')
+      .setHeader('Content-Disposition', contentDisposition(downloadName(pallet, 'pdf'), 'inline'));
     res.send(pdf);
   }));
 
@@ -149,9 +151,13 @@ export function createApp(db: Db, options: AppOptions = {}): Express {
     const errors = layout.issues.filter((issue) => issue.severity === 'error');
     if (errors.length > 0) throw new PalletLayoutError(errors);
 
-    const name = `${pallet.palletCode || 'pallet'}-${pallet.updatedAt}.svg`;
     fresh(res);
-    res.type('image/svg+xml').setHeader('Content-Disposition', `attachment; filename="${name}"`);
+    res
+      .type('image/svg+xml')
+      .setHeader(
+        'Content-Disposition',
+        contentDisposition(downloadName(pallet, 'svg'), 'attachment'),
+      );
     res.send(renderSheetSvg(pallet, layout));
   }));
 
@@ -166,11 +172,13 @@ export function createApp(db: Db, options: AppOptions = {}): Express {
     const errors = layout.issues.filter((issue) => issue.severity === 'error');
     if (errors.length > 0) throw new PalletLayoutError(errors);
 
-    const name = `${pallet.palletCode || 'pallet'}-${pallet.updatedAt}.dxf`;
     fresh(res);
     res
       .type('application/dxf')
-      .setHeader('Content-Disposition', `attachment; filename="${name}"`);
+      .setHeader(
+        'Content-Disposition',
+        contentDisposition(downloadName(pallet, 'dxf'), 'attachment'),
+      );
     res.send(palletToDxf(layout));
   }));
 

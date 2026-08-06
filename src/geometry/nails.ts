@@ -172,6 +172,15 @@ function cornerCrossings(crossings: NailCrossing[]): boolean[] {
   return crossings.map((_, i) => atEdge(cx[i]!, cx) && atEdge(cy[i]!, cy));
 }
 
+/** The layers of each course of timber, in the order they were given. */
+function byLevel(layers: LayerLayout[]): LayerLayout[][] {
+  const levels: LayerLayout[][] = [];
+  for (const layer of layers) {
+    (levels[layer.level] ??= []).push(layer);
+  }
+  return levels.filter((level) => level !== undefined);
+}
+
 /**
  * @param placements the crossings the user has clicked. Anything not listed
  * takes the default.
@@ -185,59 +194,69 @@ export function computeNails(
   const crossings: NailCrossing[] = [];
   const issues: LayoutIssue[] = [];
 
-  for (let i = 0; i + 1 < layers.length; i++) {
-    const upper = layers[i]!;
-    const lower = layers[i + 1]!;
+  // A joint is between two courses of timber, not between two layers. A deck
+  // whose boards run two ways is several layers at one height, and every one of
+  // them is nailed to the course below — not to each other. See Layer.
+  const levels = byLevel(layers);
+
+  for (let i = 0; i + 1 < levels.length; i++) {
+    const upperLevel = levels[i]!;
+    const lowerLevel = levels[i + 1]!;
     // The topmost joint is nailed from above and the lowest from below. On a
     // two layer pallet the one joint is both, and above is what you see.
-    const face = i === 0 ? 'top' : i + 1 === layers.length - 1 ? 'bottom' : null;
-
-    const uppers = pieces.filter((piece) => piece.layerId === upper.layerId);
-    const lowers = pieces.filter((piece) => piece.layerId === lower.layerId);
+    const face = i === 0 ? 'top' : i + 1 === levels.length - 1 ? 'bottom' : null;
 
     const found: NailCrossing[] = [];
-    for (const a of uppers) {
-      for (const b of lowers) {
-        const x0 = Math.max(a.x, b.x);
-        const x1 = Math.min(a.x + a.dx, b.x + b.dx);
-        const y0 = Math.max(a.y, b.y);
-        const y1 = Math.min(a.y + a.dy, b.y + b.dy);
-        if (x1 - x0 <= EPSILON || y1 - y0 <= EPSILON) continue;
-        found.push({
-          face: face ?? 'top',
-          upperLayerId: upper.layerId,
-          upperSource: a.source,
-          upperKind: upper.kind,
-          lowerLayerId: lower.layerId,
-          lowerSource: b.source,
-          lowerKind: lower.kind,
-          x0,
-          y0,
-          x1,
-          y1,
-          z: face === 'bottom' ? b.z : a.z + a.dz,
-          count: DEFAULT_NAIL_COUNT,
-          defaultCount: DEFAULT_NAIL_COUNT,
-          manual: false,
-        });
-      }
-    }
+    for (const upper of upperLevel) {
+      for (const lower of lowerLevel) {
+        const uppers = pieces.filter((piece) => piece.layerId === upper.layerId);
+        const lowers = pieces.filter((piece) => piece.layerId === lower.layerId);
 
-    if (found.length === 0) {
-      if (face) {
-        issues.push({
-          severity: 'warning',
-          code: 'no_crossings',
-          layerId: upper.layerId,
-          layerKind: upper.kind,
-          message: `${describe(upper)} never crosses ${describe(lower)}, so it has nothing to nail to`,
-        });
+        const between: NailCrossing[] = [];
+        for (const a of uppers) {
+          for (const b of lowers) {
+            const x0 = Math.max(a.x, b.x);
+            const x1 = Math.min(a.x + a.dx, b.x + b.dx);
+            const y0 = Math.max(a.y, b.y);
+            const y1 = Math.min(a.y + a.dy, b.y + b.dy);
+            if (x1 - x0 <= EPSILON || y1 - y0 <= EPSILON) continue;
+            between.push({
+              face: face ?? 'top',
+              upperLayerId: upper.layerId,
+              upperSource: a.source,
+              upperKind: upper.kind,
+              lowerLayerId: lower.layerId,
+              lowerSource: b.source,
+              lowerKind: lower.kind,
+              x0,
+              y0,
+              x1,
+              y1,
+              z: face === 'bottom' ? b.z : a.z + a.dz,
+              count: DEFAULT_NAIL_COUNT,
+              defaultCount: DEFAULT_NAIL_COUNT,
+              manual: false,
+            });
+          }
+        }
+
+        // Said per layer pair rather than per level, so the warning names the
+        // group of boards that has nothing under it.
+        if (between.length === 0 && face) {
+          issues.push({
+            severity: 'warning',
+            code: 'no_crossings',
+            layerId: upper.layerId,
+            layerKind: upper.kind,
+            message: `${describe(upper)} never crosses ${describe(lower)}, so it has nothing to nail to`,
+          });
+        }
+        found.push(...between);
       }
-      continue;
     }
 
     // An internal joint is under timber: it is neither drawn nor clickable.
-    if (!face) continue;
+    if (!face || found.length === 0) continue;
 
     const corners = cornerCrossings(found);
     found.forEach((crossing, index) => {

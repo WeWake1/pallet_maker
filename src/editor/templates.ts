@@ -63,6 +63,9 @@ export function newLayer(
     id: newId(),
     kind,
     order,
+    // A new layer goes under the rest, not alongside the last one. Sharing a
+    // level is asked for on the layer once it is there.
+    sameLevelAsPrev: false,
     spanMm: null,
     offsetMm: 0,
     runSpanMm: null,
