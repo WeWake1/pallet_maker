@@ -116,7 +116,10 @@ export const PalletSchema = z.object({
   clientId: z.string().min(1),
   clientName: z.string().min(1),
   clientPartNo: z.string().min(1).optional(),
-  palletName: z.string().min(1),
+  // Optional, for the same reason as the code above: a design is often only a
+  // size until someone settles on what to call it, and the sheet prints that
+  // size in the name's place until then. See sheetContent.
+  palletName: z.string().default(''),
 
   overallLength: positiveMm,
   overallWidth: positiveMm,

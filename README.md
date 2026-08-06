@@ -48,7 +48,7 @@ npm run sheet -- fixtures/wing-both-decks.json --out out # the spec sheet, HTML 
 npm run sheet -- fixtures/wing-both-decks.json --html-only
 npm run sheet -- fixtures/wing-both-decks.json --svg       # the same sheet as one SVG
 npm run dxf -- fixtures/wing-both-decks.json --out out    # R12 DXF
-npm run brand                                            # re-embed the logo and font after artwork changes
+npm run brand                                            # re-embed the company font after it changes
 npm run costing -- fixtures/block-1000x800.json           # timber volume and cost
 npm run guide                                            # the user guide, HTML and PDF
 ```
@@ -161,17 +161,27 @@ and tracking are all in `WATERMARK` in
 [src/sheet/layout.ts](src/sheet/layout.ts), and both renderers read them, so the
 printed sheet and the SVG can never drift apart.
 
-Both travel *inside* the document, as base64 data URIs in
-[src/brand/assets.ts](src/brand/assets.ts). A sheet is handed to the printer, and
-to the browser, as one self-contained string with no base URL to resolve a file
-path against, so a linked logo would simply not be there.
-[tests/branding.test.ts](tests/branding.test.ts) checks every `url()` on the
-sheet is a data URI, because one that was not would be a sheet that prints
-differently on a machine without the file.
+Both travel *inside* the document, and by different means.
 
-`npm run brand` regenerates that module from the artwork in the project root.
-Run it only when the artwork changes; the output is committed and the originals
-are not needed to build or serve the tool.
+The **font** is base64 in [src/brand/assets.ts](src/brand/assets.ts), generated
+by `npm run brand` from the file in the project root. A sheet is handed to the
+printer, and to the browser, as one self-contained string with no base URL to
+resolve a file path against, so a linked face would simply not be there.
+[tests/branding.test.ts](tests/branding.test.ts) checks every `url()` on the
+sheet is a data URI.
+
+The **logo is traced to geometry** in [src/brand/logo.ts](src/brand/logo.ts):
+a triangle, the stem of a P, and a bowl that is a half-*ellipse* — 194 across
+against 175.5 down — which is why it is measured off the artwork rather than
+drawn from memory. Two `<path>`s, a few hundred bytes against fifty kilobytes of
+base64, sharp at any size, and nothing raster left anywhere in the outputs:
+[tests/pdf.test.ts](tests/pdf.test.ts) is back to asserting the PDF contains no
+image XObject at all. The trace was checked against the PNG by compositing both
+over white and comparing pixels — 0.33% differ, and those are the antialiased
+edges.
+
+**If the artwork ever changes, `logo.ts` has to be re-measured by hand.** Nothing
+reads the PNG at build time.
 
 The watermark costs the drawings nothing, since it lies over the page rather
 than taking a band of its own. The logo costs 7 mm: the footer is that much
@@ -206,13 +216,44 @@ and the two are for different things.
 It is the same page, not just the drawing: header, the written column, the five
 views and the logo. SVG has no text layout of its own, so
 [src/sheet/svgSheet.ts](src/sheet/svgSheet.ts) places every box on the same
-millimetre grid the printed sheet is built on. The five views nest inside it
-unchanged, exactly as the printed sheet embeds them.
+millimetre grid the printed sheet is built on.
 
-Two things to know. Canva's SVG import is a Pro feature, so on a free plan use
-the PDF or a PNG exported from the SVG. And the company font is embedded as an
-`@font-face` inside the file, which browsers and drawing programs honour but
-Canva does not — the company name may come through in a substitute face there.
+#### It has to stay takeable-apart
+
+**Every mark on it is a basic shape or a run of text, and that is the whole
+point.** A page-layout program parses a subset of SVG, and on meeting anything
+outside that subset the usual behaviour is not to fail but to give up and
+flatten the page to a picture — at which point the file is a worse PNG than a
+PNG. The first version of this export did exactly that, and the four things
+responsible were:
+
+| Was | Now |
+|---|---|
+| Five nested `<svg>` roots, one per view | Each view is a `<g>`, placed with a translate — `SvgDocument.fragment` |
+| A `<style>` block carrying the font as `@font-face` | No stylesheet; faces are named on each run |
+| Three `<clipPath>`s | The data column stops rather than clips; the ghost layers are worked out as rectangle overlaps |
+| An `<image>` holding the logo as base64 PNG | The logo is traced to two `<path>`s in [src/brand/logo.ts](src/brand/logo.ts) |
+
+The file went from 200 kB to 73 kB in the process, and every board is now its
+own element that can be picked up and moved.
+[tests/branding.test.ts](tests/branding.test.ts) fails if any of the four comes
+back, and checks the whole file is nothing but `circle`, `g`, `line`, `path`,
+`polygon`, `rect`, `svg`, `text` and `title`.
+
+One deliberate difference from the printed sheet. Where a bearer shows through
+the deck, the PDF declares a clip and the SVG draws the overlap rectangles
+instead. A clip cuts the ghost's outline; an overlap rectangle is stroked all
+the way round, so it gains an edge on the two sides where the board cut it —
+except those are the board's own edges, which already carry a stroke three times
+heavier. Measured across every fixture, top and bottom views: at most **0.14% of
+pixels differ at all, none by more than 32/255**. The PDF is untouched.
+
+Two things to know about Canva specifically. Its SVG import is a Pro feature, so
+on a free plan use the PDF — Canva converts PDF to editable elements too, and
+this one is true vector. And the SVG carries no embedded font, so the company
+name in the watermark comes through in whatever sans is available; it is sized
+for that fallback (`WATERMARK.svgFontSize`, measured, not guessed) rather than
+for ITC Anna, so it still runs corner to corner instead of off the page.
 
 ## The design library
 

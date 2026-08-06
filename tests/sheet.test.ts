@@ -5,6 +5,7 @@ import { packLanes, Scene, TIER } from '../src/render/scene.js';
 import type { DimSpec, DimTier } from '../src/render/scene.js';
 import { renderView } from '../src/render/views.js';
 import { componentTable, totalPieces } from '../src/sheet/components.js';
+import { sheetContent } from '../src/sheet/content.js';
 import { DRAWING, mmToPx, PAGE, SHEET } from '../src/sheet/layout.js';
 import { renderSheet } from '../src/sheet/sheet.js';
 import { loadFixture } from './helpers.js';
@@ -102,7 +103,10 @@ describe('the sheet', () => {
       // Once as the drawn caption; the <title> element is the accessible name.
       expect([...html.matchAll(new RegExp(`<text[^>]*>${title}</text>`, 'g'))]).toHaveLength(1);
     }
-    expect([...html.matchAll(/<svg/g)]).toHaveLength(5);
+    // Six drawings inline on the sheet: the five views, and the logo in the
+    // corner, which is vector too rather than a picture of itself.
+    expect([...html.matchAll(/<svg/g)]).toHaveLength(6);
+    expect([...html.matchAll(/<svg[^>]*class="logo"/g)]).toHaveLength(1);
   });
 
   it('lays the views out the way a drawing office reads them', () => {
@@ -233,7 +237,8 @@ describe('the sheet', () => {
       const fixture = loadFixture(name);
       const sheet = renderSheet(fixture, computeLayout(fixture));
       expect(sheet).toContain('</html>');
-      expect([...sheet.matchAll(/<svg/g)]).toHaveLength(5);
+      // The five views, plus the logo in the corner.
+      expect([...sheet.matchAll(/<svg/g)]).toHaveLength(6);
     }
   });
 });
@@ -301,6 +306,47 @@ describe('an attribute the design does not state', () => {
     };
     expect(() => parsePallet(bare)).not.toThrow();
     expect(renderSheet(bare, layout)).toContain('</html>');
+  });
+});
+
+/**
+ * A design is often only a size for a while, so it is allowed to have no name —
+ * but the middle of the header is what the sheet is of, and that cell must never
+ * come out blank.
+ */
+describe('a design with no name', () => {
+  const pallet = loadFixture('block-1000x800');
+  const layout = computeLayout(pallet);
+  const headingOf = (patch: Partial<typeof pallet>) =>
+    sheetContent({ ...pallet, ...patch }, layout).heading;
+
+  it('is saveable', () => {
+    expect(() => parsePallet({ ...pallet, palletName: '' })).not.toThrow();
+    expect(parsePallet({ ...pallet, palletName: '' }).palletName).toBe('');
+  });
+
+  it('heads the sheet with its overall size, and puts the code underneath', () => {
+    const heading = headingOf({ palletName: '', palletCode: 'AP-001' });
+    expect(heading.palletName).toBe(sheetContent(pallet, layout).size);
+    expect(heading.subtitle).toBe('AP-001');
+  });
+
+  it('leaves the second line off when there is no code either', () => {
+    const heading = headingOf({ palletName: '', palletCode: '' });
+    expect(heading.palletName).toContain('1000');
+    expect(heading.subtitle).toBe('');
+  });
+
+  it('still prints, and names itself by whatever it does have', () => {
+    const bare = { ...pallet, palletName: '', palletCode: '' };
+    expect(renderSheet(bare, layout)).toContain('</html>');
+    expect(sheetContent(bare, layout).title).toBe(pallet.updatedAt);
+  });
+
+  it('changes nothing for a design that has a name', () => {
+    const heading = headingOf({ palletCode: 'AP-001' });
+    expect(heading.palletName).toBe(pallet.palletName);
+    expect(heading.subtitle).toBe(`AP-001 · ${sheetContent(pallet, layout).size}`);
   });
 });
 

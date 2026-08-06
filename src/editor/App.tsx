@@ -764,8 +764,14 @@ function Editor({
                   onChange={(value) => patch({ clientPartNo: value === '' ? undefined : value })}
                 />
               </Field>
-              <Field label="Pallet name">
-                <TextInput value={pallet.palletName} onChange={(palletName) => patch({ palletName })} />
+              {/* Optional as well: unnamed, the sheet heads itself with the
+                  overall size and the dashboard reads "Untitled". */}
+              <Field label="Pallet name (optional)">
+                <TextInput
+                  value={pallet.palletName}
+                  onChange={(palletName) => patch({ palletName })}
+                  placeholder="1000 x 800"
+                />
               </Field>
             </div>
 

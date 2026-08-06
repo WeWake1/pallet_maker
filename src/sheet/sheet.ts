@@ -1,4 +1,5 @@
-import { brandFontFace, BRAND_FONT_STACK, COMPANY_NAME, LOGO_DATA_URI } from '../brand/brand.js';
+import { brandFontFace, BRAND_FONT_STACK, COMPANY_NAME } from '../brand/brand.js';
+import { LOGO_ASPECT, logoSvg } from '../brand/logo.js';
 import type { Layout } from '../geometry/types.js';
 import { renderIsometric } from '../render/isoView.js';
 import { mmLabel } from '../render/scene.js';
@@ -24,8 +25,17 @@ export interface SheetOptions {
   greyscale?: boolean;
 }
 
-/** The five views, each rendered to the exact pixel size of its cell. */
-export function sheetViews(layout: Layout, greyscale = false): Record<string, string> {
+/**
+ * The five views, each rendered to the exact pixel size of its cell.
+ *
+ * `fragment` gives each one back as a `<g>` with no nested `<svg>` and no
+ * `<clipPath>`, for the SVG sheet — see `SvgDocument.fragment`.
+ */
+export function sheetViews(
+  layout: Layout,
+  greyscale = false,
+  fragment = false,
+): Record<string, string> {
   const plan = {
     fitWidth: mmToPx(DRAWING.pairCellWidth),
     fitHeight: mmToPx(DRAWING.planRowHeight),
@@ -39,12 +49,13 @@ export function sheetViews(layout: Layout, greyscale = false): Record<string, st
     fitHeight: mmToPx(DRAWING.isoRowHeight),
   };
 
+  const common = { greyscale, fragment, idPrefix: 'sheet' };
   return {
-    top: renderView(layout, 'top', { ...plan, greyscale, idPrefix: 'sheet' }),
-    bottom: renderView(layout, 'bottom', { ...plan, greyscale, idPrefix: 'sheet' }),
-    side: renderView(layout, 'side', { ...elevation, greyscale, idPrefix: 'sheet' }),
-    end: renderView(layout, 'end', { ...elevation, greyscale, idPrefix: 'sheet' }),
-    iso: renderIsometric(layout, { ...iso, greyscale, idPrefix: 'sheet' }),
+    top: renderView(layout, 'top', { ...plan, ...common }),
+    bottom: renderView(layout, 'bottom', { ...plan, ...common }),
+    side: renderView(layout, 'side', { ...elevation, ...common }),
+    end: renderView(layout, 'end', { ...elevation, ...common }),
+    iso: renderIsometric(layout, { ...iso, ...common }),
   };
 }
 
@@ -104,7 +115,7 @@ export function renderSheet(pallet: Pallet, layout: Layout, options: SheetOption
            belongs on a drawing. -->
       <div class="footer">
         <p class="projection">${esc(PROJECTION_NOTE)}</p>
-        <img class="logo" src="${LOGO_DATA_URI}" alt="${esc(COMPANY_NAME)}">
+        ${logoSvg({ width: `${LOGO.height * LOGO_ASPECT}mm`, height: `${LOGO.height}mm`, title: COMPANY_NAME })}
       </div>
     </section>
   </div>
@@ -351,9 +362,7 @@ function styles(): string {
     position: absolute;
     right: 0;
     bottom: 0;
-    height: ${LOGO.height}mm;
-    max-width: ${LOGO.maxWidth}mm;
-    object-fit: contain;
+    display: block;
   }
   `;
 }

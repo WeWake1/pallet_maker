@@ -74,8 +74,9 @@ export interface SheetHeading {
   clientName: string;
   /** Empty when the client has not given the design a number of their own. */
   clientPartNo: string;
+  /** The design's name, or its overall size where it has not been named. */
   palletName: string;
-  /** The code and the overall size, or the size alone where there is no code. */
+  /** The code and the overall size, or whichever of the two is left over. */
   subtitle: string;
   date: string;
   note: string;
@@ -108,13 +109,22 @@ export function sheetContent(pallet: Pallet, layout: Layout): SheetContent {
   const size = `${mmLabel(layout.overallLength)} × ${mmLabel(layout.overallWidth)} × ${mmLabel(layout.overallHeight)}`;
   // A design without a code is a normal design, so the line under the name is
   // the size alone rather than the size behind a dangling separator.
-  const subtitle = pallet.palletCode ? `${pallet.palletCode} · ${size}` : size;
+  //
+  // A design without a name is normal too, and the middle of the header is the
+  // one cell that must not come out blank. Unnamed, the size moves up into the
+  // name's line and the code takes the line underneath, so the sheet still says
+  // what it is drawing.
+  const named = pallet.palletName !== '';
+  const heading = named ? pallet.palletName : size;
+  const subtitle = named
+    ? (pallet.palletCode ? `${pallet.palletCode} · ${size}` : size)
+    : pallet.palletCode;
 
   return {
     heading: {
       clientName: pallet.clientName,
       clientPartNo: pallet.clientPartNo ?? '',
-      palletName: pallet.palletName,
+      palletName: heading,
       subtitle,
       date: pallet.updatedAt,
       note: pallet.note ?? '',

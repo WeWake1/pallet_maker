@@ -50,10 +50,9 @@ describe.skipIf(browser === null)('PDF export', () => {
     // Fonts embedded means the text is text.
     expect(text).toMatch(/\/Type\s*\/Font/);
 
-    // The logo in the corner is the only raster on the page: one image, plus
-    // the soft mask its transparency needs. The drawings are SVG and have to
-    // stay that way, so anything beyond those two would mean something in the
-    // pipeline had rasterised one of them.
-    expect([...text.matchAll(/\/Subtype\s*\/Image/g)].length).toBeLessThanOrEqual(2);
+    // No image XObject at all. Every mark on the sheet is a shape or a letter,
+    // the logo included — it is two paths, not a PNG — so anything here would
+    // mean something in the pipeline had rasterised part of the drawing.
+    expect(text).not.toMatch(/\/Subtype\s*\/Image/);
   }, 60_000);
 });

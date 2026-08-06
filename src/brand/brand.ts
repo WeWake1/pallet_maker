@@ -1,4 +1,4 @@
-import { BRAND_FONT_DATA_URI, LOGO_DATA_URI } from './assets.js';
+import { BRAND_FONT_DATA_URI } from './assets.js';
 
 /**
  * Who the sheet comes from.
@@ -8,8 +8,10 @@ import { BRAND_FONT_DATA_URI, LOGO_DATA_URI } from './assets.js';
  * in the bottom right corner, which is where a title block's owner belongs on a
  * drawing.
  *
- * Both travel inside the document as data URIs — see `build.ts` — because the
- * sheet is rendered with no base URL to resolve a file path against.
+ * The face travels inside the document as a data URI — see `build.ts` — because
+ * the sheet is rendered with no base URL to resolve a file path against. The
+ * mark travels as geometry, in `logo.ts`, for the same reason and one more:
+ * nothing raster survives a page-layout program taking the sheet apart.
  */
 
 export const COMPANY_NAME = 'Ambica Patterns India Pvt Ltd';
@@ -32,5 +34,3 @@ export function brandFontFace(): string {
     font-style: normal;
   }`;
 }
-
-export { LOGO_DATA_URI };

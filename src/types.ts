@@ -226,7 +226,10 @@ export interface Pallet {
    */
   clientName: string;
   clientPartNo?: string;
-  /** e.g. "1000 x 800" */
+  /**
+   * e.g. "1000 x 800". Empty where the design has not been named; the sheet
+   * heading and the dashboard fall back to the overall size and "Untitled".
+   */
   palletName: string;
 
   overallLength: number;

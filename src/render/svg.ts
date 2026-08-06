@@ -72,6 +72,29 @@ export interface SvgDocument {
   /** Keeps ids unique when several views are inlined in one HTML document. */
   idPrefix?: string;
   title?: string;
+  /**
+   * Emit a `<g>` rather than an `<svg>`, for a view that is being placed inside
+   * a larger drawing.
+   *
+   * A nested `<svg>` is correct and every browser draws it, but it is the first
+   * thing a page-layout program gives up on — and a program that gives up on
+   * one element tends to flatten the whole page to a picture rather than fail.
+   * A `<g>` is the same drawing with nothing to give up on.
+   *
+   * The size travels on `data-width` and `data-height` so that whoever places
+   * the fragment can still centre it: a `<g>` has no width of its own, and the
+   * scale it was laid out at is not knowable from the outside.
+   */
+  fragment?: boolean;
+}
+
+/**
+ * The natural size a fragment was drawn at, read back off its `<g>`.
+ * Returns null for anything that is not one of our fragments.
+ */
+export function fragmentSize(fragment: string): { width: number; height: number } | null {
+  const found = /^<g[^>]*\sdata-width="([\d.]+)"[^>]*\sdata-height="([\d.]+)"/.exec(fragment);
+  return found ? { width: Number(found[1]), height: Number(found[2]) } : null;
 }
 
 export function svgDocument(doc: SvgDocument): string {
@@ -84,6 +107,19 @@ export function svgDocument(doc: SvgDocument): string {
   const content = doc.greyscale
     ? group({ filter: `url(#${greyId})` }, [doc.body])
     : doc.body;
+
+  // A fragment carries no background: it is being placed on a page that has one
+  // already, and five white rectangles would be five things to delete.
+  if (doc.fragment === true) {
+    return (
+      `<g data-width="${fmt(doc.width)}" data-height="${fmt(doc.height)}">` +
+      titleEl +
+      defs +
+      content +
+      `</g>`
+    );
+  }
+
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" width="${fmt(doc.width)}" height="${fmt(doc.height)}"` +
     ` viewBox="0 0 ${fmt(doc.width)} ${fmt(doc.height)}">` +

@@ -1,7 +1,8 @@
-import { brandFontFace, BRAND_FONT_STACK, COMPANY_NAME, LOGO_DATA_URI } from '../brand/brand.js';
+import { COMPANY_NAME } from '../brand/brand.js';
+import { LOGO_ASPECT, LOGO_BOX, logoPaths } from '../brand/logo.js';
 import type { Layout } from '../geometry/types.js';
 import { mmLabel } from '../render/scene.js';
-import { el, esc, fmt, line, rect, text } from '../render/svg.js';
+import { el, esc, fmt, fragmentSize, line, rect, text } from '../render/svg.js';
 import type { Pallet } from '../types.js';
 import type { ComponentRow, Pair, SheetContent } from './content.js';
 import { PROJECTION_NOTE, sheetContent } from './content.js';
@@ -20,6 +21,13 @@ import { sheetViews } from './sheet.js';
  * two never say different things. How it is set out is written out by hand
  * here, because SVG has no text layout of its own: every box is placed, and the
  * measurements below are the millimetre grid the printed sheet is built on.
+ *
+ * **Everything here is a shape or a letter, and nothing else.** No nested
+ * `<svg>`, no `<clipPath>`, no `<style>`, no `<image>` — the four things a
+ * page-layout program is most likely to meet and give up on, and giving up
+ * means flattening the whole page to a picture rather than failing. Keep it
+ * that way: a file nothing can take apart is a file that may as well be a PNG.
+ * `tests/branding.test.ts` holds the line.
  */
 
 /** Points to pixels, the unit the drawing views are already rendered in. */
@@ -61,7 +69,7 @@ export function renderSheetSvg(
   options: SvgSheetOptions = {},
 ): string {
   const content = sheetContent(pallet, layout);
-  const views = sheetViews(layout, options.greyscale === true);
+  const views = sheetViews(layout, options.greyscale === true, true);
 
   const body = [
     headerBand(content),
@@ -74,11 +82,15 @@ export function renderSheetSvg(
   ].join('');
 
   return (
-    `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"` +
+    `<svg xmlns="http://www.w3.org/2000/svg"` +
     ` width="${fmt(px(PAGE.width))}" height="${fmt(px(PAGE.height))}"` +
     ` viewBox="0 0 ${fmt(px(PAGE.width))} ${fmt(px(PAGE.height))}">` +
     el('title', {}, esc(content.title)) +
-    `<style>${brandFontFace()}</style>` +
+    // No <style>, and so no embedded @font-face: a stylesheet inside an SVG is
+    // one more thing to choke on, and the readers that would honour the font
+    // are the ones that could open the PDF instead. Faces are named on each
+    // run, and anything without them substitutes, which is what Canva does with
+    // an embedded face anyway.
     rect(0, 0, px(PAGE.width), px(PAGE.height), { fill: '#ffffff' }) +
     body +
     `</svg>`
@@ -95,10 +107,11 @@ function watermark(): string {
     'g',
     { transform: `rotate(-${WATERMARK.angle.toFixed(2)} ${fmt(cx)} ${fmt(cy)})` },
     label(PAGE.width / 2, PAGE.height / 2, COMPANY_NAME, {
-      size: WATERMARK.fontSize,
+      // Sized for the sans this will actually be set in — see WATERMARK.
+      size: WATERMARK.svgFontSize,
       anchor: 'middle',
-      family: BRAND_FONT_STACK,
-      'letter-spacing': fmt(pt(WATERMARK.fontSize) * WATERMARK.tracking),
+      family: BODY_FONT,
+      'letter-spacing': fmt(pt(WATERMARK.svgFontSize) * WATERMARK.tracking),
       fill: INK,
       opacity: WATERMARK.opacity,
       // Centred on the diagonal rather than sitting on it, which is what the
@@ -137,9 +150,10 @@ function headerBand(content: SheetContent): string {
 /**
  * The written side, block after block down the column.
  *
- * Clipped, the same way the printed column is: a design with more components
- * than the page holds is a design whose table has to be shortened, and a sheet
- * that silently ran off the bottom would be worse than one that stops.
+ * The printed column hides what will not fit; this one stops emitting it. Same
+ * result, and no `<clipPath>` — which is the point, since a reader that cannot
+ * clip would otherwise flatten the page. Stopping is also the more honest of
+ * the two: nothing is drawn off the page and then hidden.
  */
 function dataColumn(content: SheetContent): string {
   const left = PAGE.padding;
@@ -150,6 +164,7 @@ function dataColumn(content: SheetContent): string {
   const parts: string[] = [];
 
   const heading = (name: string): void => {
+    if (y + ROW.blockHeading > bottom) return;
     parts.push(
       label(left, y + 3, name.toUpperCase(), {
         size: 9,
@@ -162,35 +177,32 @@ function dataColumn(content: SheetContent): string {
   };
 
   heading('Overall');
-  y = pairs(parts, content.overall, left, y);
+  y = pairs(parts, content.overall, left, y, bottom);
 
   y += ROW.blockGap;
   heading('Components');
-  y = componentsTable(parts, content.components, left, y);
+  y = componentsTable(parts, content.components, left, y, bottom);
 
   if (content.nails) {
     y += ROW.blockGap;
     heading('Nails');
-    y = nailsTable(parts, content.nails, left, y);
+    y = nailsTable(parts, content.nails, left, y, bottom);
   }
 
   y += ROW.blockGap;
   heading('Load and material');
-  y = pairs(parts, content.material, left, y);
+  y = pairs(parts, content.material, left, y, bottom);
   if (content.notes !== '') {
     y += 1.4;
     for (const wrapped of wrap(content.notes, 62)) {
+      if (y + 3.6 > bottom) break;
       y += 3.6;
       parts.push(label(left, y, wrapped, { size: 9, fill: MUTED }));
     }
   }
 
-  const clipId = 'sheet-data-clip';
   return (
-    `<defs><clipPath id="${clipId}">` +
-    rect(px(left), px(top), px(DATA_INNER), px(bottom - top)) +
-    `</clipPath></defs>` +
-    el('g', { 'clip-path': `url(#${clipId})` }, parts.join('')) +
+    parts.join('') +
     // The rule between the written side and the drawings.
     line(
       px(left + SHEET.dataWidth),
@@ -203,9 +215,10 @@ function dataColumn(content: SheetContent): string {
 }
 
 /** Label on the left, value in the second column, one row each. */
-function pairs(parts: string[], rows: Pair[], left: number, from: number): number {
+function pairs(parts: string[], rows: Pair[], left: number, from: number, bottom: number): number {
   let y = from;
   for (const [name, value] of rows) {
+    if (y + ROW.pair > bottom) break;
     y += ROW.pair;
     parts.push(label(left, y - 1.4, name, { size: 9.5, fill: '#444444' }));
     parts.push(label(left + 38, y - 1.4, value, { size: 9.5 }));
@@ -222,11 +235,13 @@ function componentsTable(
   rows: ComponentRow[],
   left: number,
   from: number,
+  bottom: number,
 ): number {
   const widths = [12, DATA_INNER - 70, 46, 12];
   const x = columnEdges(left, widths);
 
   let y = from;
+  if (y + ROW.componentHead + ROW.component > bottom) return y;
   parts.push(
     ...ruledRow(x, y, ROW.componentHead, HEAD_FILL),
     ...cells(x, y + ROW.componentHead - 1.7, [
@@ -239,6 +254,7 @@ function componentsTable(
   y += ROW.componentHead;
 
   for (const row of rows) {
+    if (y + ROW.component > bottom) break;
     const baseline = y + ROW.component - 1.9;
     parts.push(...ruledRow(x, y, ROW.component, null));
     parts.push(
@@ -287,11 +303,13 @@ function nailsTable(
   nails: NonNullable<SheetContent['nails']>,
   left: number,
   from: number,
+  bottom: number,
 ): number {
   const widths = [44, DATA_INNER - 79, 17.5, 17.5];
   const x = columnEdges(left, widths);
 
   let y = from;
+  if (y + ROW.nailHead + 2 * ROW.nail > bottom) return y;
   parts.push(
     ...ruledRow(x, y, ROW.nailHead, HEAD_FILL),
     ...cells(x, y + ROW.nailHead - 1.6, [
@@ -304,6 +322,9 @@ function nailsTable(
   y += ROW.nailHead;
 
   for (const nail of nails.rows) {
+    // The total row below has to fit as well: a schedule that stops without one
+    // would read as a schedule that adds up to nothing.
+    if (y + 2 * ROW.nail > bottom) break;
     const baseline = y + ROW.nail - 1.6;
     parts.push(...ruledRow(x, y, ROW.nail, null));
     parts.push(
@@ -352,24 +373,18 @@ function drawingColumn(views: Record<string, string>): string {
 }
 
 /**
- * One rendered view, centred in its cell.
+ * One rendered view, moved into its cell.
  *
- * A view arrives as a complete `<svg>` with its own size and viewBox, which
- * nests inside this one unchanged — so the drawing is embedded exactly as the
- * printed sheet embeds it, at natural size, with its stroke weights intact.
+ * A view arrives as a `<g>` drawn at its natural size from the origin, so
+ * placing it is a translate and nothing else — no nested viewport, no scaling,
+ * and the stroke weights land exactly as the printed sheet's do.
  */
 function place(view: string, left: number, top: number, width: number, height: number): string {
-  const size = svgSize(view);
+  const size = fragmentSize(view);
+  if (!size) throw new Error('A view was not rendered as a sized fragment');
   const x = px(left) + (px(width) - size.width) / 2;
   const y = px(top) + (px(height) - size.height) / 2;
   return el('g', { transform: `translate(${fmt(x)} ${fmt(y)})` }, view);
-}
-
-/** The natural size a view was rendered at, off its own root element. */
-function svgSize(view: string): { width: number; height: number } {
-  const found = /^<svg[^>]*?\swidth="([\d.]+)"[^>]*?\sheight="([\d.]+)"/.exec(view);
-  if (!found) throw new Error('A rendered view did not start with a sized <svg> element');
-  return { width: Number(found[1]), height: Number(found[2]) };
 }
 
 /** The projection note across the middle, the mark in the corner. */
@@ -379,7 +394,7 @@ function footer(): string {
   const centre = left + DRAWING.width / 2;
 
   // Nearly square, so the height is what is set and the width follows.
-  const logoWidth = Math.min(LOGO.maxWidth, LOGO.height * 1.143);
+  const logoWidth = Math.min(LOGO.maxWidth, LOGO.height * LOGO_ASPECT);
 
   return (
     label(centre, bottom - SHEET.footerHeight / 2 + 1, PROJECTION_NOTE, {
@@ -387,16 +402,18 @@ function footer(): string {
       anchor: 'middle',
       fill: MUTED,
     }) +
-    el('image', {
-      x: fmt(px(PAGE.padding + SHEET.contentWidth - logoWidth)),
-      y: fmt(px(bottom - LOGO.height)),
-      width: fmt(px(logoWidth)),
-      height: fmt(px(LOGO.height)),
-      href: LOGO_DATA_URI,
-      // Readers that predate SVG 2 only know the namespaced form.
-      'xlink:href': LOGO_DATA_URI,
-      preserveAspectRatio: 'xMaxYMax meet',
-    })
+    // Two plain paths, scaled out of the artwork's own 1460 x 1278 box. Not an
+    // <image>: a base64 PNG is exactly the kind of thing that makes a reader
+    // give up and flatten the page.
+    el(
+      'g',
+      {
+        transform:
+          `translate(${fmt(px(PAGE.padding + SHEET.contentWidth - logoWidth))} ${fmt(px(bottom - LOGO.height))})` +
+          ` scale(${fmt(px(logoWidth) / LOGO_BOX.width)})`,
+      },
+      logoPaths(),
+    )
   );
 }
 

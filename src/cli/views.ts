@@ -95,10 +95,10 @@ function contactSheet(
     )
     .join('');
 
-  // A pallet code is optional, so the heading is the name alone without one.
-  const heading = pallet.palletCode
-    ? `${pallet.palletCode} — ${pallet.palletName}`
-    : pallet.palletName;
+  // Both the code and the name are optional, so the heading is whichever parts
+  // there are, and 'Untitled' where there is neither.
+  const heading =
+    [pallet.palletCode, pallet.palletName].filter((part) => part !== '').join(' — ') || 'Untitled';
 
   return `<!doctype html>
 <html lang="en">

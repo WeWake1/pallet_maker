@@ -26,6 +26,8 @@ export interface IsoOptions {
   /** Draw the view name under the drawing. Default true. */
   title?: boolean;
   idPrefix?: string;
+  /** Draw as a `<g>` rather than an `<svg>`. See `SvgDocument.fragment`. */
+  fragment?: boolean;
 }
 
 const MARGIN = 10;
@@ -50,6 +52,7 @@ export function renderIsometric(layout: Layout, options: IsoOptions = {}): strin
       body: '',
       idPrefix,
       title: ISO_TITLE,
+      fragment: options.fragment === true,
     });
   }
 
@@ -118,5 +121,6 @@ export function renderIsometric(layout: Layout, options: IsoOptions = {}): strin
     greyscale: options.greyscale === true,
     idPrefix,
     title: ISO_TITLE,
+    fragment: options.fragment === true,
   });
 }
