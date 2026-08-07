@@ -4,11 +4,12 @@ import type { Layout } from '../geometry/types.js';
 import { renderIsometric } from '../render/isoView.js';
 import { mmLabel } from '../render/scene.js';
 import { esc } from '../render/svg.js';
-import { renderView } from '../render/views.js';
+import { measureView, renderView, sharedScale } from '../render/views.js';
+import type { ViewKind } from '../render/project.js';
 import type { Pallet } from '../types.js';
 import type { ComponentRow, NailRow, Pair, SheetContent } from './content.js';
 import { PROJECTION_NOTE, sheetContent } from './content.js';
-import { DRAWING, LOGO, mmToPx, PAGE, SHEET, WATERMARK } from './layout.js';
+import { DRAWING, LOGO, mmToPx, PAGE, PX_PER_MM, SHEET, WATERMARK } from './layout.js';
 
 /**
  * The specification sheet, as HTML for a browser to print. What is on it is
@@ -25,43 +26,131 @@ export interface SheetOptions {
   greyscale?: boolean;
 }
 
+/** A row height as CSS wants it: enough precision for the printer, no more. */
+const fmtMm = (mm: number): string => String(Math.round(mm * 100) / 100);
+
+/** The three drawing rows, in mm, and the scale the flat views agreed on. */
+export interface DrawingRows {
+  plan: number;
+  elevation: number;
+  iso: number;
+  /** px per mm, shared by all four flat views. */
+  scale: number;
+}
+
 /**
- * The five views, each rendered to the exact pixel size of its cell.
+ * How deep each row has to be, and the one scale the flat views are drawn at.
+ *
+ * Views on a drawing share a scale — that is what makes them one drawing rather
+ * than four pictures of the same pallet. So the scale is settled first, across
+ * all four at once, and the rows are then made as deep as the views come out.
+ *
+ * The two are not independent, so it takes a pass or two. The first asks what
+ * the cell width allows, which is the most any of them could be drawn at, and on
+ * an ordinary pallet that is the answer. A deep footprint is the awkward case:
+ * the plans are then square enough to take the page, and the two rows, each
+ * sized to its own views, can overrun the drawing area between them without
+ * either one overrunning its own budget.
+ *
+ * So when they do, the plans are handed what is left after the elevations have
+ * had theirs, which binds the plans by height and pulls the shared scale — and
+ * the elevations with it — down until the three rows fit.
+ */
+export function drawingRows(layout: Layout): DrawingRows {
+  const flat = DRAWING.rowsHeight - DRAWING.minIsoRowHeight;
+
+  let plans = flat;
+  let rows = measure(layout, plans, flat);
+
+  for (let pass = 0; pass < 4 && rows.plan + rows.elevation > flat; pass++) {
+    // Never below a quarter of the area: a plan squeezed past that is no longer
+    // a drawing anyone can read, and the isometric can give the rest back.
+    const next = Math.max(flat - rows.elevation, flat / 4);
+    if (next >= plans) break;
+    plans = next;
+    rows = measure(layout, plans, flat);
+  }
+
+  return { ...rows, iso: DRAWING.rowsHeight - rows.plan - rows.elevation };
+}
+
+/** The flat views at the widest scale all four can share in the room given. */
+function measure(
+  layout: Layout,
+  planBudget: number,
+  elevationBudget: number,
+): { plan: number; elevation: number; scale: number } {
+  const cell = (budget: number) => ({
+    fitWidth: mmToPx(DRAWING.pairCellWidth),
+    fitHeight: mmToPx(budget),
+  });
+  const options: Record<ViewKind, ReturnType<typeof cell>> = {
+    top: cell(planBudget),
+    bottom: cell(planBudget),
+    side: cell(elevationBudget),
+    end: cell(elevationBudget),
+  };
+
+  const views = (['top', 'bottom', 'side', 'end'] as const).map((view) => ({
+    view,
+    options: options[view],
+  }));
+  const maxScale = sharedScale(layout, views);
+
+  const height = (view: ViewKind): number =>
+    measureView(layout, view, { ...options[view], maxScale }).height / PX_PER_MM;
+
+  return {
+    plan: Math.max(height('top'), height('bottom')),
+    elevation: Math.max(height('side'), height('end')),
+    scale: maxScale,
+  };
+}
+
+/**
+ * The five views, each rendered to fit its row.
+ *
+ * The four flat views are drawn to the one shared scale, so a length is the same
+ * length wherever it appears: the pallet's height measures the same in the side
+ * and end elevations, and its footprint the same under the plans as across them.
+ * A view narrower than its cell — the end elevation, which is the short way
+ * across the pallet — is centred in it by the sheet. The isometric is a picture
+ * rather than a projection and keeps a scale of its own.
  *
  * `fragment` gives each one back as a `<g>` with no nested `<svg>` and no
  * `<clipPath>`, for the SVG sheet — see `SvgDocument.fragment`.
  */
 export function sheetViews(
   layout: Layout,
+  rows: DrawingRows,
   greyscale = false,
   fragment = false,
 ): Record<string, string> {
-  const plan = {
+  const common = {
+    greyscale,
+    fragment,
+    idPrefix: 'sheet',
     fitWidth: mmToPx(DRAWING.pairCellWidth),
-    fitHeight: mmToPx(DRAWING.planRowHeight),
-  };
-  const elevation = {
-    fitWidth: mmToPx(DRAWING.pairCellWidth),
-    fitHeight: mmToPx(DRAWING.elevationRowHeight),
+    scale: rows.scale,
   };
   const iso = {
     fitWidth: mmToPx(DRAWING.width),
-    fitHeight: mmToPx(DRAWING.isoRowHeight),
+    fitHeight: mmToPx(rows.iso),
   };
 
-  const common = { greyscale, fragment, idPrefix: 'sheet' };
   return {
-    top: renderView(layout, 'top', { ...plan, ...common }),
-    bottom: renderView(layout, 'bottom', { ...plan, ...common }),
-    side: renderView(layout, 'side', { ...elevation, ...common }),
-    end: renderView(layout, 'end', { ...elevation, ...common }),
-    iso: renderIsometric(layout, { ...iso, ...common }),
+    top: renderView(layout, 'top', common),
+    bottom: renderView(layout, 'bottom', common),
+    side: renderView(layout, 'side', common),
+    end: renderView(layout, 'end', common),
+    iso: renderIsometric(layout, { ...iso, greyscale, fragment, idPrefix: 'sheet' }),
   };
 }
 
 export function renderSheet(pallet: Pallet, layout: Layout, options: SheetOptions = {}): string {
   const content = sheetContent(pallet, layout);
-  const views = sheetViews(layout, options.greyscale === true);
+  const rows = drawingRows(layout);
+  const views = sheetViews(layout, rows, options.greyscale === true);
   const { heading } = content;
 
   return `<!doctype html>
@@ -69,7 +158,7 @@ export function renderSheet(pallet: Pallet, layout: Layout, options: SheetOption
 <head>
 <meta charset="utf-8">
 <title>${esc(content.title)}</title>
-<style>${styles()}</style>
+<style>${styles(rows)}</style>
 </head>
 <body>
 <div class="sheet">
@@ -199,7 +288,7 @@ function block(heading: string, body: string, modifier = ''): string {
   return `<div class="${cls}"><h2>${esc(heading)}</h2>${body}</div>`;
 }
 
-function styles(): string {
+function styles(rows: DrawingRows): string {
   return `
   @page { size: ${PAGE.width}mm ${PAGE.height}mm; margin: 0; }
   ${brandFontFace()}
@@ -328,9 +417,10 @@ function styles(): string {
 
   .drawing { flex: 1; display: flex; flex-direction: column; min-width: 0; }
   .row { display: flex; gap: ${SHEET.columnGap}mm; margin-bottom: ${SHEET.rowGap}mm; }
-  .row.plan { height: ${DRAWING.planRowHeight}mm; }
-  .row.elevation { height: ${DRAWING.elevationRowHeight}mm; }
-  .row.iso { height: ${DRAWING.isoRowHeight}mm; }
+  /* Deep enough for the views this pallet produced — see drawingRows. */
+  .row.plan { height: ${fmtMm(rows.plan)}mm; }
+  .row.elevation { height: ${fmtMm(rows.elevation)}mm; }
+  .row.iso { height: ${fmtMm(rows.iso)}mm; }
   .row figure {
     margin: 0;
     flex: 1;

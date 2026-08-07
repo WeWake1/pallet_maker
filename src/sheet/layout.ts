@@ -91,11 +91,16 @@ const drawingHeight =
  * The two plans on the first row, the two elevations on the second, the
  * isometric across the full width on the third.
  *
- * The rows are not the same height because the views are not the same shape. A
- * plan is about as deep as it is wide and wants the height; an elevation is a
- * long thin band that would only sit in the middle of a tall row with air above
- * and below it. What the elevations do not need goes to the isometric, which is
- * the picture of the finished pallet and reads better large.
+ * The rows are not the same height, and their heights are not fixed here. The
+ * four flat views are drawn to one shared scale — see `drawingRows` — and how
+ * deep a row has to be is then whatever that scale makes it: a plan is about as
+ * deep as it is wide and wants the height, an elevation is a long thin band that
+ * would only sit in a tall row with air above and below it. Setting the rows
+ * first and fitting each view to its row separately is what made the same
+ * pallet height print at two sizes across the side and end elevations.
+ *
+ * What the flat views do not need goes to the isometric, which is the picture of
+ * the finished pallet and reads better large.
  */
 const rowsHeight = drawingHeight - 2 * SHEET.rowGap;
 
@@ -103,7 +108,12 @@ export const DRAWING = {
   width: drawingWidth,
   height: drawingHeight,
   pairCellWidth: (drawingWidth - SHEET.columnGap) / 2,
-  planRowHeight: rowsHeight * 0.36,
-  elevationRowHeight: rowsHeight * 0.2,
-  isoRowHeight: rowsHeight * 0.44,
+  /** The three rows together, the gaps between them taken out. */
+  rowsHeight,
+  /**
+   * The isometric's floor. A deep footprint drawn at a generous shared scale
+   * would otherwise take the plan row down the page and leave the picture of
+   * the finished pallet a strip; past this the flat views give way instead.
+   */
+  minIsoRowHeight: rowsHeight * 0.34,
 } as const;

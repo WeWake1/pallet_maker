@@ -7,7 +7,8 @@ import type { Pallet } from '../types.js';
 import type { ComponentRow, Pair, SheetContent } from './content.js';
 import { PROJECTION_NOTE, sheetContent } from './content.js';
 import { DRAWING, LOGO, PAGE, PX_PER_MM, SHEET, WATERMARK } from './layout.js';
-import { sheetViews } from './sheet.js';
+import { drawingRows, sheetViews } from './sheet.js';
+import type { DrawingRows } from './sheet.js';
 
 /**
  * The same specification sheet, as one SVG.
@@ -69,12 +70,13 @@ export function renderSheetSvg(
   options: SvgSheetOptions = {},
 ): string {
   const content = sheetContent(pallet, layout);
-  const views = sheetViews(layout, options.greyscale === true, true);
+  const rows = drawingRows(layout);
+  const views = sheetViews(layout, rows, options.greyscale === true, true);
 
   const body = [
     headerBand(content),
     dataColumn(content),
-    drawingColumn(views),
+    drawingColumn(views, rows),
     footer(),
     // Last, so it lies over the drawings. Each view carries a white background
     // of its own and a watermark beneath them would show only in the gaps.
@@ -350,7 +352,7 @@ function nailsTable(
 
 /* -------------------------------------------------------- drawing column */
 
-function drawingColumn(views: Record<string, string>): string {
+function drawingColumn(views: Record<string, string>, rows: DrawingRows): string {
   const left = PAGE.padding + SHEET.dataWidth + SHEET.columnGap;
   const top = PAGE.padding + SHEET.headerHeight + SHEET.headerGap;
   const half = DRAWING.pairCellWidth;
@@ -358,16 +360,16 @@ function drawingColumn(views: Record<string, string>): string {
 
   let y = top;
   const parts = [
-    place(views.top!, left, y, half, DRAWING.planRowHeight),
-    place(views.bottom!, second, y, half, DRAWING.planRowHeight),
+    place(views.top!, left, y, half, rows.plan),
+    place(views.bottom!, second, y, half, rows.plan),
   ];
-  y += DRAWING.planRowHeight + SHEET.rowGap;
+  y += rows.plan + SHEET.rowGap;
   parts.push(
-    place(views.side!, left, y, half, DRAWING.elevationRowHeight),
-    place(views.end!, second, y, half, DRAWING.elevationRowHeight),
+    place(views.side!, left, y, half, rows.elevation),
+    place(views.end!, second, y, half, rows.elevation),
   );
-  y += DRAWING.elevationRowHeight + SHEET.rowGap;
-  parts.push(place(views.iso!, left, y, DRAWING.width, DRAWING.isoRowHeight));
+  y += rows.elevation + SHEET.rowGap;
+  parts.push(place(views.iso!, left, y, DRAWING.width, rows.iso));
 
   return parts.join('');
 }

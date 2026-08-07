@@ -47,6 +47,12 @@ export interface SceneOptions {
   fitHeight?: number;
   /** Force a scale in px per mm. Wins over both of the above. */
   scale?: number;
+  /**
+   * Ceiling on the scale in px per mm. The view still shrinks to fit its box if
+   * it has to, but never grows past this. What lets several views share one
+   * scale — see `sharedScale` — without any of them bursting its cell.
+   */
+  maxScale?: number;
   title?: boolean;
 }
 
@@ -108,8 +114,8 @@ export class Scene {
         ? room(options.fitHeight, this.margins.top + this.margins.bottom)
         : (options.targetHeight ?? 340);
 
-    this.scale =
-      options.scale ?? Math.min(targetWidth / frame.uSpan, targetHeight / frame.vSpan);
+    const fitted = Math.min(targetWidth / frame.uSpan, targetHeight / frame.vSpan);
+    this.scale = options.scale ?? Math.min(fitted, options.maxScale ?? Infinity);
 
     this.left = this.margins.left;
     this.top = this.margins.top;

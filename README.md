@@ -102,14 +102,19 @@ along one axis — and the result is topologically sorted.
 
 Lengths in the SVG are CSS pixels, so a view embedded at its natural size puts 1
 unit at 1/96 inch on paper and the stroke weights above land as drawn. Pass
-`scale` to force one scale across several views.
+`scale` to force one scale across several views, or `maxScale` to cap it while
+still letting a view shrink to fit; `sharedScale` and `measureView` answer what a
+set of views can agree on, and what each comes out as, without drawing any of
+them.
 
 ## The sheet
 
-A4 landscape, two columns: data on the left, drawings on the right. Every box on
-it is fixed in millimetres ([src/sheet/layout.ts](src/sheet/layout.ts)), and each
-view is rendered to the exact pixel size of its cell rather than scaled to fit,
-so the stroke weights land on paper as drawn.
+A4 landscape, two columns: data on the left, drawings on the right. The page and
+the columns are fixed in millimetres
+([src/sheet/layout.ts](src/sheet/layout.ts)); the depth of the three drawing rows
+is not, and comes off the pallet being drawn — see below. Every view is rendered
+to the pixel size it will occupy rather than scaled to fit, so the stroke weights
+land on paper as drawn.
 
 **What the sheet says is settled once**, in
 [src/sheet/content.ts](src/sheet/content.ts), with nothing in it about how any of
@@ -127,16 +132,26 @@ are on every sheet whatever the design.
 
 The drawings run top and bottom view on the first row, side and end view on the
 second, isometric across the full width on the third: plans with plans,
-elevations with elevations, and the finished pallet closing the sheet. The rows
-are deliberately unequal. An elevation is a long thin band that would sit in the
-middle of a tall row with air above and below it, so it takes a fifth of the
-height and the isometric takes what is left.
+elevations with elevations, and the finished pallet closing the sheet.
 
-Each view fits its own cell rather than sharing one scale across the sheet. A
-shared scale would size everything off the top view, and the side view — 1000
-long against 156 tall — would then use a fifth of the row it is given.
+**The four flat views share one scale**, so a length is the same length wherever
+it appears. Fitting each view to its own cell instead is what made the same
+pallet print two different heights: the end elevation is the short way across the
+pallet, and in a cell as wide as the side elevation's it came out half again as
+large. A drawing that measures one thing two ways is read as a drawing of
+something built wrong.
 
-Dimension lanes are packed to avoid collisions. A view cell is about 90 by 62 mm,
+The rows follow from that scale rather than being set before it
+([`drawingRows`](src/sheet/sheet.ts)). The scale is settled first, across all
+four views at once and as large as the cell width allows; each row is then made
+as deep as its views turned out to be. A plan is about as deep as it is wide and
+takes most of the height, an elevation is a long thin band and takes little, and
+the isometric takes what is left — with a floor under it, so that a deep
+footprint pulls the shared scale down instead of squeezing the picture of the
+finished pallet into a strip. A view narrower than its cell, which the end
+elevation always is, is centred in it.
+
+Dimension lanes are packed to avoid collisions. A view cell is about 78 mm across,
 so two callouts on neighbouring boards will print on top of each other unless
 they are given separate lanes. Since lanes decide the margins, the margins decide
 the scale and the scale decides what collides, `renderView` iterates until the

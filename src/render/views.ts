@@ -28,6 +28,8 @@ export interface ViewOptions {
   fitHeight?: number;
   /** Force a scale in px per mm, so several views can share one. */
   scale?: number;
+  /** Ceiling on the scale in px per mm. See `sharedScale`. */
+  maxScale?: number;
   /** Wrap the drawing in a desaturating filter, for the greyscale check. */
   greyscale?: boolean;
   /** Draw the view name under the drawing. Default true. */
@@ -102,6 +104,67 @@ export function renderView(layout: Layout, view: ViewKind, options: ViewOptions 
     title: VIEW_TITLE[view],
     fragment: flat,
   });
+}
+
+export interface ViewMeasure {
+  /** px per mm. */
+  scale: number;
+  /** The whole view, its dimension lanes and title included, in px. */
+  width: number;
+  height: number;
+}
+
+/**
+ * What this view would come out as, without drawing it.
+ *
+ * Cheap enough to call for the answer alone: it lays the dimension lanes out and
+ * throws the drawing away. The sheet asks twice — once to find a scale every
+ * view can share, once to find how much room the rows then need.
+ */
+export function measureView(
+  layout: Layout,
+  view: ViewKind,
+  options: ViewOptions = {},
+): ViewMeasure {
+  const frame = viewFrame(layout, view);
+  const dims = buildDimensions(layout, view, projectPieces(layout, view));
+  const { scene } = layOut(frame, dims, options);
+  return { scale: scene.scale, width: scene.width, height: scene.height };
+}
+
+/**
+ * One scale that every one of these views can be drawn at inside its own cell.
+ *
+ * Views on a sheet are drawn to the same scale — that is what makes them one
+ * drawing rather than five pictures of the same object. Left to themselves they
+ * do not: each is fitted to its cell alone, so the end elevation, being the
+ * short way across the pallet, comes out at half again the side elevation's
+ * scale and the pallet's one height prints as two different heights. The eye
+ * reads that as an error in the pallet, which is exactly what a drawing must
+ * never do.
+ *
+ * So: the smallest of the scales, since a view can always be drawn smaller than
+ * its cell but never larger. Capping a view can push its labels together and
+ * cost it a dimension lane, which eats into the room left for the drawing, so
+ * the answer is taken again with the cap in hand until it stops moving.
+ */
+export function sharedScale(
+  layout: Layout,
+  views: Array<{ view: ViewKind; options: ViewOptions }>,
+): number {
+  let scale = Infinity;
+
+  for (let pass = 0; pass < 3; pass++) {
+    const next = views.reduce(
+      (min, { view, options }) =>
+        Math.min(min, measureView(layout, view, { ...options, maxScale: scale }).scale),
+      Infinity,
+    );
+    if (next >= scale) break;
+    scale = next;
+  }
+
+  return scale;
 }
 
 /**
