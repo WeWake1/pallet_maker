@@ -7,11 +7,13 @@ import type { Rates } from '../costing/rates.js';
 import { palletToDxf } from '../dxf/drawing.js';
 import { analysePallet } from '../geometry/layout.js';
 import { PalletLayoutError } from '../geometry/types.js';
+import { libraryFileName, parseLibrary } from '../library.js';
 import { contentDisposition, downloadName } from '../sheet/filename.js';
 import { exportPdfBuffer } from '../sheet/pdf.js';
 import { renderSheet } from '../sheet/sheet.js';
 import { renderSheetSvg } from '../sheet/svgSheet.js';
 import type { Db } from './db.js';
+import { exportLibrary, importDesign, importLibrary } from './library.js';
 import {
   ClientNotFoundError,
   ClientRepository,
@@ -36,7 +38,10 @@ export function createApp(db: Db, options: AppOptions = {}): Express {
   const app = express();
   const pallets = new PalletRepository(db);
   const clients = new ClientRepository(db);
-  app.use(express.json({ limit: '4mb' }));
+  // Generous, because a whole library being imported arrives as one body and a
+  // few hundred designs is a few megabytes of it. Nothing reaches this server
+  // from outside the machine, so there is nothing for a tighter limit to guard.
+  app.use(express.json({ limit: '64mb' }));
 
   // Express 5 types a route parameter as possibly absent; on these routes it
   // never is, because the path would not have matched.
@@ -97,6 +102,20 @@ export function createApp(db: Db, options: AppOptions = {}): Express {
     res.json(pallets.get(idOf(req)));
   }));
 
+  /**
+   * One design from a file, as a new design of the named client's. This is the
+   * other half of the download below: a design mailed over, or taken off a
+   * backup, arriving in the library without anything having to be open.
+   */
+  app.post('/api/pallets/import', wrap((req, res) => {
+    const body = req.body as { pallet?: unknown; clientId?: unknown };
+    if (typeof body.clientId !== 'string') {
+      res.status(400).json({ error: 'Which client the design is for has to be said' });
+      return;
+    }
+    res.status(201).json(importDesign(body.pallet, body.clientId, pallets, clients));
+  }));
+
   app.post('/api/pallets', wrap((req, res) => {
     res.status(201).json(pallets.save(req.body, clients));
   }));
@@ -118,6 +137,25 @@ export function createApp(db: Db, options: AppOptions = {}): Express {
   app.delete('/api/pallets/:id', wrap((req, res) => {
     pallets.delete(idOf(req));
     res.status(204).end();
+  }));
+
+  /**
+   * The design itself, as the document the store holds.
+   *
+   * The PDF is what the design looks like; this is the design. It is the only
+   * output that can be read back in and worked on, which is what makes it the
+   * one worth keeping a copy of.
+   */
+  app.get('/api/pallets/:id/design.json', wrap((req, res) => {
+    const pallet = pallets.get(idOf(req));
+    fresh(res);
+    res
+      .type('application/json')
+      .setHeader(
+        'Content-Disposition',
+        contentDisposition(downloadName(pallet, 'json'), 'attachment'),
+      );
+    res.send(JSON.stringify(pallet, null, 2));
   }));
 
   app.get('/api/pallets/:id/sheet.html', wrap((req, res) => {
@@ -180,6 +218,37 @@ export function createApp(db: Db, options: AppOptions = {}): Express {
         contentDisposition(downloadName(pallet, 'dxf'), 'attachment'),
       );
     res.send(palletToDxf(layout));
+  }));
+
+  /**
+   * The whole library as one file: every client, every design.
+   *
+   * The store is a database on this machine and nothing else can read it. This
+   * is the same designs in a form that can go in a Drive folder, onto a stick,
+   * or to another computer — and the only copy of them that survives this one
+   * dying.
+   */
+  app.get('/api/library.json', wrap((_req, res) => {
+    const library = exportLibrary(pallets, clients);
+    fresh(res);
+    res
+      .type('application/json')
+      .setHeader(
+        'Content-Disposition',
+        contentDisposition(libraryFileName(library.exportedAt), 'attachment'),
+      );
+    res.send(JSON.stringify(library, null, 2));
+  }));
+
+  /**
+   * A library file read back in. Adds what is missing; by default it overwrites
+   * nothing, and says how many designs it left alone so that overwriting them
+   * can be asked for knowing the number.
+   */
+  app.post('/api/library/import', wrap((req, res) => {
+    const body = req.body as { library?: unknown; mode?: unknown };
+    const mode = body.mode === 'replace' ? 'replace' : 'skip';
+    res.json(importLibrary(db, parseLibrary(body.library), pallets, clients, mode));
   }));
 
   if (options.staticDir && existsSync(options.staticDir)) {

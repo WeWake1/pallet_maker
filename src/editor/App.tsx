@@ -102,6 +102,11 @@ function usableDrafts(sections: ClientDesigns[]): Draft[] {
   return kept;
 }
 
+/** "1 design", "3 designs". Counts get read out loud after an import. */
+function count(n: number, thing: string): string {
+  return `${n} ${thing}${n === 1 ? '' : 's'}`;
+}
+
 /**
  * Two screens: the dashboard of clients and their designs, and the editor for
  * one of them. The dashboard is home; opening a card gives the editor the whole
@@ -113,7 +118,11 @@ export function App() {
   const [rates, setRates] = useState<Rates | null>(null);
   const [open, setOpen] = useState<OpenDesign | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  // What an import did. An import that quietly succeeds looks the same as one
+  // that quietly did nothing, and the counts are the only difference.
+  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const libraryFile = useRef<HTMLInputElement>(null);
 
   const clients = useMemo(() => sections.map((section) => section.client), [sections]);
 
@@ -128,6 +137,7 @@ export function App() {
     async <T,>(work: () => Promise<T>): Promise<T | undefined> => {
       setBusy(true);
       setProblem(null);
+      setNotice(null);
       try {
         const result = await work();
         await refresh();
@@ -210,7 +220,72 @@ export function App() {
     onSheet: (id) => {
       window.open(api.sheetUrl(id), '_blank');
     },
+    onExport: (id) => {
+      window.open(api.designUrl(id), '_blank');
+    },
   };
+
+  /**
+   * A design from a file, as a new design of that client's.
+   *
+   * It is opened afterwards, as a copy is, because an imported design arrives
+   * named whatever it was called wherever it came from — and that is exactly
+   * the thing most likely to need changing.
+   */
+  const importDesign = (clientId: string, file: File) =>
+    void attempt(async () => {
+      const added = await api.importDesign(JSON.parse(await file.text()), clientId);
+      setOpen({ pallet: added, saved: added });
+      return added;
+    });
+
+  /**
+   * A library file read back in.
+   *
+   * Nothing is overwritten on the first pass. Designs the library already holds
+   * are counted and left alone, and only then is replacing them offered — with
+   * the number said out loud, because the answer is different for restoring
+   * your own backup and for merging somebody else's file.
+   */
+  const importLibrary = (file: File) =>
+    void attempt(async () => {
+      const library = JSON.parse(await file.text()) as unknown;
+      const report = await api.importLibrary(library, 'skip');
+
+      const added =
+        report.designsAdded === 0 && report.clientsAdded === 0
+          ? 'Nothing in that file was new.'
+          : `Added ${count(report.designsAdded, 'design')}${
+              report.clientsAdded > 0 ? ` and ${count(report.clientsAdded, 'new client')}` : ''
+            }.`;
+
+      if (report.designsSkipped === 0) {
+        setNotice(added);
+        return report;
+      }
+
+      const one = report.designsSkipped === 1;
+      const already = `${count(report.designsSkipped, 'design')} ${
+        one ? 'was' : 'were'
+      } already in your library and ${one ? 'was' : 'were'} left alone.`;
+
+      if (
+        !window.confirm(
+          `${added}\n\n${already}\n\nReplace ${
+            one ? 'it' : 'them'
+          } with the version in the file? Whatever is here now would be overwritten and cannot be got back.`,
+        )
+      ) {
+        setNotice(`${added} ${already}`);
+        return report;
+      }
+
+      const replaced = await api.importLibrary(library, 'replace');
+      setNotice(
+        `${added} ${count(replaced.designsReplaced, 'design')} overwritten from the file.`,
+      );
+      return replaced;
+    });
 
   /**
    * A new design starts in the editor only. It reaches the dashboard when it is
@@ -230,6 +305,20 @@ export function App() {
       {problem && (
         <div className="border-b border-red-200 bg-red-50 px-3 py-1.5 text-xs text-red-700">
           {problem}
+        </div>
+      )}
+
+      {notice && (
+        <div className="flex items-center gap-2 border-b border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs text-emerald-800">
+          <span>{notice}</span>
+          <button
+            type="button"
+            onClick={() => setNotice(null)}
+            className="ml-auto rounded px-1 leading-none hover:bg-emerald-100"
+            title="Dismiss"
+          >
+            ×
+          </button>
         </div>
       )}
 
@@ -254,6 +343,43 @@ export function App() {
         <>
           <header className="flex items-center gap-2 border-b border-slate-300 bg-white px-3 py-2">
             <h1 className="text-sm font-semibold">Pallet spec</h1>
+
+            {/* The library in and out of a file. Everything else on this screen
+                acts on one design; these two are the whole of it, and are the
+                only copy of it that survives this computer. */}
+            <div className="ml-auto flex gap-1">
+              <Button
+                disabled={busy}
+                onClick={() => window.open(api.libraryUrl(), '_blank')}
+                title={
+                  'Download every client and design as one file. Keep it somewhere ' +
+                  'other than this computer — it is the only copy that survives this one.'
+                }
+              >
+                Export library
+              </Button>
+              <Button
+                disabled={busy}
+                onClick={() => libraryFile.current?.click()}
+                title={
+                  'Read a library file back in. Designs already here are left alone ' +
+                  'unless you say otherwise.'
+                }
+              >
+                Import library
+              </Button>
+              <input
+                ref={libraryFile}
+                type="file"
+                accept="application/json,.json"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) importLibrary(file);
+                  event.target.value = '';
+                }}
+              />
+            </div>
           </header>
           <Dashboard
             sections={sections}
@@ -266,6 +392,7 @@ export function App() {
             onAddClient={(name) => void attempt(() => api.addClient(name))}
             onRenameClient={(id, name) => void attempt(() => api.renameClient(id, name))}
             onRemoveClient={(id) => void attempt(() => api.removeClient(id))}
+            onImportDesign={importDesign}
           />
         </>
       )}

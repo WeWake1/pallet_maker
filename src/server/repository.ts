@@ -84,10 +84,23 @@ export class ClientRepository {
     return toClient(row);
   }
 
+  /**
+   * The client of that name, whoever's spelling of it is used. Names are the
+   * only thing two copies of the library agree on — ids are made on whichever
+   * machine the client was first entered on — so this is what an import matches
+   * against to avoid entering the same customer twice.
+   */
+  findByName(name: string): Client | undefined {
+    const row = this.db
+      .prepare<[string], ClientRow>('SELECT * FROM clients WHERE name = ? COLLATE NOCASE')
+      .get(name.trim());
+    return row ? toClient(row) : undefined;
+  }
+
   create(name: string): Client {
     const client: Client = { id: newId(), name: name.trim(), createdAt: today() };
     if (client.name === '') throw new Error('A client needs a name');
-    if (this.named(client.name)) throw new DuplicateClientError(client.name);
+    if (this.findByName(client.name)) throw new DuplicateClientError(client.name);
     this.db
       .prepare('INSERT INTO clients (id, name, created_at) VALUES (?, ?, ?)')
       .run(client.id, client.name, client.createdAt);
@@ -103,7 +116,7 @@ export class ClientRepository {
     const client = this.get(id);
     const next = name.trim();
     if (next === '') throw new Error('A client needs a name');
-    const clash = this.named(next);
+    const clash = this.findByName(next);
     if (clash && clash.id !== id) throw new DuplicateClientError(next);
 
     this.db.transaction(() => {
@@ -126,13 +139,6 @@ export class ClientRepository {
   delete(id: string): void {
     this.get(id);
     this.db.prepare('DELETE FROM clients WHERE id = ?').run(id);
-  }
-
-  private named(name: string): Client | undefined {
-    const row = this.db
-      .prepare<[string], ClientRow>('SELECT * FROM clients WHERE name = ? COLLATE NOCASE')
-      .get(name);
-    return row ? toClient(row) : undefined;
   }
 }
 
@@ -182,6 +188,18 @@ export class PalletRepository {
     return parsePallet(JSON.parse(row.doc));
   }
 
+  /**
+   * Every design in full, for writing the library out to a file. The dashboard
+   * wants summaries and gets `list`; this is the documents themselves, which is
+   * the only thing an export can be made of.
+   */
+  all(): Pallet[] {
+    return this.db
+      .prepare<[], PalletRow>('SELECT * FROM pallets ORDER BY pallet_code, pallet_name')
+      .all()
+      .map((row) => parsePallet(JSON.parse(row.doc)));
+  }
+
   has(id: string): boolean {
     return (
       this.db
@@ -198,13 +216,25 @@ export class PalletRepository {
    * from the document, so neither can be stale or wrong about itself.
    */
   save(input: Pallet, clients: ClientRepository): Pallet {
-    const submitted = parsePallet(input);
+    return this.write({ ...parsePallet(input), updatedAt: today() }, clients);
+  }
+
+  /**
+   * Write a design exactly as it came, keeping the date it carries.
+   *
+   * Only an import does this. Every other write is somebody editing, and is
+   * stamped with today because that is what the date on a design means. A
+   * design read back out of a backup was not edited today, and stamping it
+   * would lose the one fact the dashboard sorts on and the sheet prints — how
+   * old the design actually is.
+   */
+  restore(input: Pallet, clients: ClientRepository): Pallet {
+    return this.write(parsePallet(input), clients);
+  }
+
+  private write(submitted: Pallet, clients: ClientRepository): Pallet {
     const client = clients.get(submitted.clientId);
-    const pallet: Pallet = {
-      ...submitted,
-      clientName: client.name,
-      updatedAt: today(),
-    };
+    const pallet: Pallet = { ...submitted, clientName: client.name };
 
     this.db
       .prepare(

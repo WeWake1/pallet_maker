@@ -194,7 +194,12 @@ export function parseClient(input: unknown): Client {
   return parsed(ClientSchema.safeParse(input), 'client');
 }
 
-function parsed<T>(result: z.SafeParseReturnType<unknown, T>, what: string): T {
+/**
+ * A parse result, or a readable error naming every field that was wrong.
+ * Exported so that anything else with a document to check reports a failure the
+ * same way — a file that will not open has to say what is wrong with it.
+ */
+export function parsed<T>(result: z.SafeParseReturnType<unknown, T>, what: string): T {
   if (!result.success) {
     const lines = result.error.issues
       .map((issue) => `  - ${issue.path.join('.') || '(root)'}: ${issue.message}`)

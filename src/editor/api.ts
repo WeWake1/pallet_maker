@@ -1,4 +1,5 @@
 import type { Rates } from '../costing/rates.js';
+import type { ImportMode, ImportReport } from '../library.js';
 import type { ClientDesigns, PalletSummary } from '../server/repository.js';
 import type { Client, Pallet } from '../types.js';
 
@@ -34,11 +35,30 @@ export const api = {
   duplicate: (id: string) => call<Pallet>(`/api/pallets/${id}/duplicate`, { method: 'POST' }),
   remove: (id: string) => call<void>(`/api/pallets/${id}`, { method: 'DELETE' }),
   rates: () => call<Rates>('/api/rates'),
+
+  /** One design from a file, as a new design of that client's. */
+  importDesign: (pallet: unknown, clientId: string) =>
+    call<Pallet>('/api/pallets/import', {
+      method: 'POST',
+      body: JSON.stringify({ pallet, clientId }),
+    }),
+  /** A library file read back in. `skip` leaves designs already held alone. */
+  importLibrary: (library: unknown, mode: ImportMode = 'skip') =>
+    call<ImportReport>('/api/library/import', {
+      method: 'POST',
+      body: JSON.stringify({ library, mode }),
+    }),
+
   sheetUrl: (id: string) => `/api/pallets/${id}/sheet.pdf`,
   dxfUrl: (id: string) => `/api/pallets/${id}/drawing.dxf`,
   // The whole sheet as vector, for taking into a drawing or page-layout
   // program. Downloads rather than opens.
   svgUrl: (id: string) => `/api/pallets/${id}/sheet.svg`,
+  // The design itself rather than a picture of it: the only download that can
+  // be opened again and worked on.
+  designUrl: (id: string) => `/api/pallets/${id}/design.json`,
+  // Every client and every design, as one file to keep somewhere else.
+  libraryUrl: () => '/api/library.json',
 };
 
 export type { Client, ClientDesigns, PalletSummary };

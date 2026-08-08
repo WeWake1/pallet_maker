@@ -439,7 +439,37 @@ Every start copies the database into `data/backups/` and keeps the last twenty
 not a file copy that could catch a half-written page.
 
 That protects against this program spoiling the file. It does nothing about a
-disk fault, so copy the `data` folder somewhere else now and then.
+disk fault, so copy the `data` folder somewhere else now and then — or export
+the library, below, which is the same designs in a form anything can read.
+
+### Designs in and out of files
+
+The database is a file only this program can read, on one machine. Designs leave
+it as JSON, which is the document itself rather than a picture of it — the only
+output that can be opened again and worked on. A PDF cannot: it is a printout
+and a dead end.
+
+**One design.** `JSON` on its card, or Export in the editor, writes
+`<design> - <client> - <date>.json`. `Import` on a client's row reads one back
+as a **new** design of theirs. It is given a new id on the way in, so a file
+from somewhere else can never overwrite a design already held, and whose it is
+gets settled by whoever imports it rather than by what the file says.
+
+**Everything.** `Export library` writes `pallet-library-<date>.json`: every
+client, every design, dates and all. That one file is the whole business record
+in a form that fits in a Drive folder or on a stick, and is what to keep
+somewhere other than this computer.
+
+`Import library` reads one back. Designs keep their ids on the way out, so
+importing the same file twice does nothing the second time, and a library
+restored onto an empty machine comes back as exactly what it was rather than as
+copies of it. **Nothing is overwritten**: designs already held are counted and
+left alone, and only then is replacing them offered, with the number said out
+loud. Clients are matched by name, because the same customer entered by hand on
+two machines has one name and two ids.
+
+The format is in [src/library.ts](src/library.ts) and what it does to the store
+is in [src/server/library.ts](src/server/library.ts).
 
 ## Keeping designs safe across a change to this program
 

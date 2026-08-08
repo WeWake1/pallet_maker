@@ -291,4 +291,68 @@ describe('the API', () => {
     expect((await call('DELETE', `/api/clients/${id}`)).status).toBe(204);
     expect((await call('GET', `/api/pallets/${design.id}`)).status).toBe(404);
   });
+
+  // The design itself rather than a picture of it: the only download that can
+  // be opened again and worked on, and so the only one worth keeping.
+  it('downloads a design as the document it is', async () => {
+    const design = fixture('AP-120');
+    await call('POST', '/api/pallets', design);
+
+    const response = await fetch(`${base}/api/pallets/${design.id}/design.json`);
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-disposition')).toContain('attachment');
+    expect(response.headers.get('content-disposition')).toContain('.json');
+    expect(((await response.json()) as Pallet).palletCode).toBe('AP-120');
+  });
+
+  it('imports a design as a new one of the named client’s', async () => {
+    const design = fixture('AP-121');
+    await call('POST', '/api/pallets', design);
+
+    const imported = await call('POST', '/api/pallets/import', { pallet: design, clientId });
+    expect(imported.status).toBe(201);
+
+    // A new design, not a claim on the one already held under that id.
+    const added = imported.body as Pallet;
+    expect(added.id).not.toBe(design.id);
+    expect((await call('GET', `/api/pallets/${design.id}`)).status).toBe(200);
+  });
+
+  it('refuses an import that does not say whose design it is', async () => {
+    expect((await call('POST', '/api/pallets/import', { pallet: fixture('AP-122') })).status).toBe(
+      400,
+    );
+    expect(
+      (await call('POST', '/api/pallets/import', { pallet: { no: 'good' }, clientId })).status,
+    ).toBe(400);
+  });
+
+  it('downloads the whole library as one file', async () => {
+    const response = await fetch(`${base}/api/library.json`);
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-disposition')).toContain('pallet-library-');
+
+    const library = (await response.json()) as { clients: unknown[]; designs: unknown[] };
+    expect(library.clients.length).toBeGreaterThan(0);
+    expect(library.designs.length).toBeGreaterThan(0);
+  });
+
+  /**
+   * Reading back what this same store wrote. Nothing is new and nothing is
+   * overwritten, which is what makes an import run twice by accident harmless.
+   */
+  it('reads a library file back in without overwriting anything', async () => {
+    const library = await (await fetch(`${base}/api/library.json`)).json();
+
+    const response = await call('POST', '/api/library/import', { library });
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ designsAdded: 0, designsReplaced: 0 });
+    expect((response.body as { designsSkipped: number }).designsSkipped).toBeGreaterThan(0);
+  });
+
+  it('refuses a file that is not a library', async () => {
+    const response = await call('POST', '/api/library/import', { library: { designs: [] } });
+    expect(response.status).toBe(400);
+    expect((response.body as { error: string }).error).toContain('Invalid library');
+  });
 });

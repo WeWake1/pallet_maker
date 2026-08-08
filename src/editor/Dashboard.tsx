@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { ClientDesigns, PalletSummary } from './api.js';
 import { draftAge } from './drafts.js';
 import type { Draft } from './drafts.js';
@@ -16,9 +16,9 @@ import { Button } from './ui.jsx';
  * one; without that the only copy of an afternoon's work would be somewhere
  * nothing on this screen could reach.
  *
- * A card carries the three things most often wanted of a design that is not
- * being changed — its sheet, a copy of it, and its removal — so that none of
- * them needs the editor opened first.
+ * A card carries what is most often wanted of a design that is not being
+ * changed — its sheet, a copy of it, the design itself as a file, and its
+ * removal — so that none of them needs the editor opened first.
  */
 
 /**
@@ -40,6 +40,8 @@ export interface DesignActions {
   onDuplicate: (id: string) => void;
   onDelete: (design: PalletSummary) => void;
   onSheet: (id: string) => void;
+  /** Download the design itself, as a file that can be opened again. */
+  onExport: (id: string) => void;
 }
 
 /** True where the design answers to what has been typed in the search box. */
@@ -93,6 +95,7 @@ export function Dashboard({
   onAddClient,
   onRenameClient,
   onRemoveClient,
+  onImportDesign,
 }: {
   sections: ClientDesigns[];
   drafts: Draft[];
@@ -104,6 +107,7 @@ export function Dashboard({
   onAddClient: (name: string) => void;
   onRenameClient: (id: string, name: string) => void;
   onRemoveClient: (id: string) => void;
+  onImportDesign: (clientId: string, file: File) => void;
 }) {
   const [adding, setAdding] = useState(false);
   const [search, setSearch] = useState('');
@@ -211,6 +215,7 @@ export function Dashboard({
                 onCreate={onCreate}
                 onRename={onRenameClient}
                 onRemove={onRemoveClient}
+                onImportDesign={onImportDesign}
               />
             ))}
           </div>
@@ -233,6 +238,7 @@ function ClientSection({
   onCreate,
   onRename,
   onRemove,
+  onImportDesign,
 }: {
   section: ClientDesigns;
   drafts: Draft[];
@@ -246,9 +252,11 @@ function ClientSection({
   onCreate: (clientId: string) => void;
   onRename: (id: string, name: string) => void;
   onRemove: (id: string) => void;
+  onImportDesign: (clientId: string, file: File) => void;
 }) {
   const { client, designs } = section;
   const [renaming, setRenaming] = useState(false);
+  const designFile = useRef<HTMLInputElement>(null);
 
   const unsaved = new Set(drafts.map((draft) => draft.pallet.id));
   // A design the store never had. Its draft is the only copy of it anywhere.
@@ -279,6 +287,29 @@ function ClientSection({
                 screen that is not showing all of it. */}
             {!searching && (
               <div className="ml-auto flex gap-1">
+                {/* Importing belongs to a client rather than to the library as a
+                    whole, because whose design it is has to be settled by the
+                    person importing it — the file cannot be trusted to say. */}
+                <Button
+                  disabled={busy}
+                  onClick={() => designFile.current?.click()}
+                  title={`Add a design from a .json file to ${client.name}`}
+                >
+                  Import
+                </Button>
+                <input
+                  ref={designFile}
+                  type="file"
+                  accept="application/json,.json"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) onImportDesign(client.id, file);
+                    // Cleared so that the same file picked twice running still
+                    // counts as a change and still imports.
+                    event.target.value = '';
+                  }}
+                />
                 <Button disabled={busy} onClick={() => setRenaming(true)} title="Rename this client">
                   Rename
                 </Button>
@@ -413,17 +444,18 @@ function DesignCard({
       >
         <span className="truncate text-sm font-medium text-slate-800">{name}</span>
         <span className="truncate text-xs text-slate-500">{design.palletCode || 'no code'}</span>
-        {unsaved && (
-          <span className="mt-auto text-[11px] font-medium text-amber-700">unsaved changes</span>
-        )}
+        {/* The date reads with the design rather than with the buttons: it is
+            something the card says, not something the card does, and the row
+            below has only as much room as four actions need. */}
+        <span className="mt-auto flex items-center gap-1.5 text-[11px]">
+          <span className="whitespace-nowrap tabular-nums text-slate-400">{design.updatedAt}</span>
+          {unsaved && <span className="font-medium text-amber-700">unsaved</span>}
+        </span>
       </button>
 
-      {/* The date, and what is most often wanted of a design that is not being
-          changed: its sheet, a copy of it, or its removal. */}
-      <div className="flex items-center gap-0.5 px-1.5 pb-1">
-        <span className="mr-auto pl-1 text-[11px] tabular-nums text-slate-400">
-          {design.updatedAt}
-        </span>
+      {/* What is most often wanted of a design that is not being changed: its
+          sheet, a copy of it, the design itself as a file, or its removal. */}
+      <div className="flex items-center justify-end gap-0.5 px-1.5 pb-1">
         <CardAction
           label="PDF"
           title={`Open the sheet for ${name}`}
@@ -438,6 +470,15 @@ function DesignCard({
           }
           disabled={busy}
           onClick={() => actions.onDuplicate(design.id)}
+        />
+        <CardAction
+          label="JSON"
+          title={
+            `Download ${name} as a file. Unlike the PDF this is the design ` +
+            'itself, so it can be imported again here or on another computer.'
+          }
+          disabled={busy}
+          onClick={() => actions.onExport(design.id)}
         />
         <CardAction
           label="×"
