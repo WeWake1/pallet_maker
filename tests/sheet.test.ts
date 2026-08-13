@@ -159,12 +159,16 @@ describe('the sheet', () => {
       };
     };
 
+    // To within the 2dp the SVG rounds its coordinates to.
+    const drawnAt = (mm: number) => ({
+      toBe: (px: number) => expect(Math.abs(px - mm * rows.scale)).toBeLessThan(0.05),
+    });
     // The pallet's one height, drawn once.
-    expect(drawn(svgs.side!).height).toBeCloseTo(layout.overallHeight * rows.scale, 6);
-    expect(drawn(svgs.end!).height).toBeCloseTo(layout.overallHeight * rows.scale, 6);
+    drawnAt(layout.overallHeight).toBe(drawn(svgs.side!).height);
+    drawnAt(layout.overallHeight).toBe(drawn(svgs.end!).height);
     // Its one length, drawn once.
-    expect(drawn(svgs.top!).width).toBeCloseTo(layout.overallLength * rows.scale, 6);
-    expect(drawn(svgs.side!).width).toBeCloseTo(layout.overallLength * rows.scale, 6);
+    drawnAt(layout.overallLength).toBe(drawn(svgs.top!).width);
+    drawnAt(layout.overallLength).toBe(drawn(svgs.side!).width);
     // And the end elevation comes out the narrower of the two, as the pallet is.
     expect(drawn(svgs.end!).width).toBeLessThan(drawn(svgs.side!).width);
   });
@@ -177,20 +181,35 @@ describe('the sheet', () => {
     expect(rows.plan).toBeGreaterThan(rows.elevation);
     // The isometric is never squeezed out by a deep footprint.
     expect(rows.iso).toBeGreaterThanOrEqual(DRAWING.minIsoRowHeight - 1e-6);
-    // And every view is inside the row it was measured for.
-    for (const [view, room] of [
-      ['top', rows.plan],
-      ['bottom', rows.plan],
-      ['side', rows.elevation],
-      ['end', rows.elevation],
+    // And every view is inside the cell it was measured for.
+    for (const [view, room, cell] of [
+      ['top', rows.plan, rows.cells.plan[0]!],
+      ['bottom', rows.plan, rows.cells.plan[1]!],
+      ['side', rows.elevation, rows.cells.elevation[0]!],
+      ['end', rows.elevation, rows.cells.elevation[1]!],
     ] as const) {
-      const drawn = measureView(layout, view, {
-        fitWidth: mmToPx(DRAWING.pairCellWidth),
-        scale: rows.scale,
-      });
-      expect(drawn.width).toBeLessThanOrEqual(mmToPx(DRAWING.pairCellWidth) + 1);
+      const drawn = measureView(layout, view, { scale: rows.scale });
+      expect(drawn.width).toBeLessThanOrEqual(mmToPx(cell) + 1);
       expect(drawn.height).toBeLessThanOrEqual(mmToPx(room) + 1);
     }
+  });
+
+  /**
+   * A row is divided by what its views need, not down the middle. The plans
+   * carry board spacings down one side and an overall dimension down the other;
+   * the elevations carry far less, and used to leave that width unused while the
+   * lanes on the plans held the shared scale down.
+   */
+  it('divides each row by what its views need', () => {
+    const rows = drawingRows(layout);
+    for (const row of ['plan', 'elevation'] as const) {
+      const cells = rows.cells[row];
+      // The cells and the gap between them fill the drawing column exactly.
+      expect(cells.reduce((a, b) => a + b, 0) + SHEET.columnGap).toBeCloseTo(DRAWING.width, 6);
+    }
+    // The end elevation is the short way across the pallet and carries the same
+    // lanes as the side, so it is given the smaller cell of its row.
+    expect(rows.cells.elevation[1]!).toBeLessThan(rows.cells.elevation[0]!);
   });
 
   it('keeps every id unique across the five inlined views', () => {
@@ -205,15 +224,20 @@ describe('the sheet', () => {
     );
     expect(sizes).toHaveLength(5);
     const rows = drawingRows(layout);
-    const pairWidth = mmToPx(DRAWING.pairCellWidth);
-    // The isometric is the only view on a full-width row; the four flat views
-    // share the two pair rows, and the deeper of those bounds them all.
-    const tallestPairRow = mmToPx(Math.max(rows.plan, rows.elevation));
-    for (const size of sizes) {
-      expect(size.width).toBeLessThanOrEqual(mmToPx(DRAWING.width) + 1);
-      const cellHeight = size.width > pairWidth ? mmToPx(rows.iso) : tallestPairRow;
-      expect(size.height).toBeLessThanOrEqual(cellHeight + 1);
-    }
+    // In the order the sheet lays them out: the two plans, the two elevations,
+    // then the isometric alone on a full-width row.
+    const cells = [
+      { width: rows.cells.plan[0]!, height: rows.plan },
+      { width: rows.cells.plan[1]!, height: rows.plan },
+      { width: rows.cells.elevation[0]!, height: rows.elevation },
+      { width: rows.cells.elevation[1]!, height: rows.elevation },
+      { width: DRAWING.width, height: rows.iso },
+    ];
+    sizes.forEach((size, i) => {
+      const cell = cells[i]!;
+      expect(size.width).toBeLessThanOrEqual(mmToPx(cell.width) + 1);
+      expect(size.height).toBeLessThanOrEqual(mmToPx(cell.height) + 1);
+    });
   });
 
   it('states the projection and the units once, under the drawings', () => {
@@ -456,10 +480,7 @@ describe('dimension lanes', () => {
 
   it('does not collide any two labels in a real view', () => {
     const layout = computeLayout(loadFixture('two-top-widths'));
-    const svg = renderView(layout, 'top', {
-      fitWidth: mmToPx(DRAWING.pairCellWidth),
-      scale: drawingRows(layout).scale,
-    });
+    const svg = renderView(layout, 'top', { scale: drawingRows(layout).scale });
     // Rotated labels carry their centre in the transform, upright ones in x/y.
     const placed = [...svg.matchAll(/<text x="([\d.-]+)" y="([\d.-]+)"[^>]*>([^<]+)</g)].map(
       (m) => ({ x: Number(m[1]), y: Number(m[2]), label: m[3]! }),
@@ -523,10 +544,7 @@ describe('the sheet fits its page', () => {
         ['side', rows.elevation],
         ['end', rows.elevation],
       ] as const) {
-        const drawn = measureView(layout, view, {
-          fitWidth: mmToPx(DRAWING.pairCellWidth),
-          scale: rows.scale,
-        });
+        const drawn = measureView(layout, view, { scale: rows.scale });
         expect(drawn.height).toBeLessThanOrEqual(mmToPx(room) + 1);
       }
     }

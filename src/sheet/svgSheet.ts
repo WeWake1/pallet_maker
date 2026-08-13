@@ -355,19 +355,24 @@ function nailsTable(
 function drawingColumn(views: Record<string, string>, rows: DrawingRows): string {
   const left = PAGE.padding + SHEET.dataWidth + SHEET.columnGap;
   const top = PAGE.padding + SHEET.headerHeight + SHEET.headerGap;
-  const half = DRAWING.pairCellWidth;
-  const second = left + half + SHEET.columnGap;
+
+  /** One row of views, each in the cell `drawingRows` measured out for it. */
+  const row = (names: string[], cells: number[], y: number, height: number): string => {
+    let x = left;
+    return names
+      .map((name, i) => {
+        const cell = cells[i]!;
+        const placed = place(views[name]!, x, y, cell, height);
+        x += cell + SHEET.columnGap;
+        return placed;
+      })
+      .join('');
+  };
 
   let y = top;
-  const parts = [
-    place(views.top!, left, y, half, rows.plan),
-    place(views.bottom!, second, y, half, rows.plan),
-  ];
+  const parts = [row(['top', 'bottom'], rows.cells.plan, y, rows.plan)];
   y += rows.plan + SHEET.rowGap;
-  parts.push(
-    place(views.side!, left, y, half, rows.elevation),
-    place(views.end!, second, y, half, rows.elevation),
-  );
+  parts.push(row(['side', 'end'], rows.cells.elevation, y, rows.elevation));
   y += rows.elevation + SHEET.rowGap;
   parts.push(place(views.iso!, left, y, DRAWING.width, rows.iso));
 

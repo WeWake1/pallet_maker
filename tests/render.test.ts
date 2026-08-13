@@ -324,3 +324,59 @@ describe('the SVG itself', () => {
     }
   });
 });
+
+/**
+ * The caption belongs to the drawing, not to the box the drawing came in. A
+ * view's dimension lanes are not the same depth on both sides — two detail lanes
+ * on the left against one overall lane on the right is ordinary — so a caption
+ * centred in the box sits visibly off the drawing it names.
+ */
+describe('view captions', () => {
+  const layout = computeLayout(loadFixture('block-1000x800'));
+
+  /** Where the drawing sits in the view: the extent of its stroked pieces. */
+  function drawing(svg: string): { left: number; right: number; centre: number } {
+    const rects = [
+      ...svg.matchAll(
+        /<rect x="([\d.-]+)" y="([\d.-]+)" width="([\d.]+)" height="([\d.]+)"[^>]*stroke="/g,
+      ),
+    ].map((m) => ({ x: Number(m[1]), w: Number(m[3]) }));
+    const left = Math.min(...rects.map((r) => r.x));
+    const right = Math.max(...rects.map((r) => r.x + r.w));
+    return { left, right, centre: (left + right) / 2 };
+  }
+
+  function caption(svg: string, label: string): { x: number; y: number } {
+    const m = new RegExp(`<text x="([\\d.-]+)" y="([\\d.-]+)"[^>]*>${label}</text>`).exec(svg);
+    if (!m) throw new Error(`no caption "${label}"`);
+    return { x: Number(m[1]), y: Number(m[2]) };
+  }
+
+  it('centres the name on the drawing, not on the view box', () => {
+    const offBoxCentre: number[] = [];
+    for (const view of ALL_VIEWS) {
+      const svg = renderView(layout, view);
+      const width = Number(/<svg[^>]*width="([\d.]+)"/.exec(svg)![1]);
+      const at = caption(svg, `${view.toUpperCase()} VIEW`);
+      expect(at.x).toBeCloseTo(drawing(svg).centre, 6);
+      offBoxCentre.push(Math.abs(at.x - width / 2));
+    }
+    // The two are the same place only when a view's lanes happen to balance. At
+    // least one of the four does not, or this test proves nothing: the side
+    // elevation carries its height on one side and nothing on the other.
+    expect(Math.max(...offBoxCentre)).toBeGreaterThan(1);
+  });
+
+  it('captions the plans above and the elevations below', () => {
+    for (const view of ALL_VIEWS) {
+      const svg = renderView(layout, view);
+      const at = caption(svg, `${view.toUpperCase()} VIEW`);
+      const box = drawing(svg);
+      const height = Number(/<svg[^>]*height="([\d.]+)"/.exec(svg)![1]);
+      const above = view === 'top' || view === 'bottom';
+      expect(at.y < height / 2).toBe(above);
+      // Clear of the drawing either way, never over it.
+      expect(at.x).toBeGreaterThanOrEqual(box.left - height);
+    }
+  });
+});

@@ -4,7 +4,8 @@ import type { Layout } from '../geometry/types.js';
 import { renderIsometric } from '../render/isoView.js';
 import { mmLabel } from '../render/scene.js';
 import { esc } from '../render/svg.js';
-import { measureView, renderView, sharedScale } from '../render/views.js';
+import { measureView, renderView } from '../render/views.js';
+import type { ViewMeasure } from '../render/views.js';
 import type { ViewKind } from '../render/project.js';
 import type { Pallet } from '../types.js';
 import type { ComponentRow, NailRow, Pair, SheetContent } from './content.js';
@@ -26,8 +27,27 @@ export interface SheetOptions {
   greyscale?: boolean;
 }
 
-/** A row height as CSS wants it: enough precision for the printer, no more. */
-const fmtMm = (mm: number): string => String(Math.round(mm * 100) / 100);
+/** A length as CSS wants it: enough precision for the printer, no more. */
+const fmtMm = (mm: number): string => mm.toFixed(2);
+
+/** One rule per cell, fixing its width so the printed sheet divides its rows
+ *  exactly as the SVG sheet does. */
+function cellWidths(rows: DrawingRows): string {
+  return (['plan', 'elevation'] as const)
+    .flatMap((row) =>
+      rows.cells[row].map(
+        (width, i) =>
+          `  .row.${row} figure:nth-child(${i + 1}) { flex: 0 0 ${fmtMm(width)}mm; }`,
+      ),
+    )
+    .join('\n');
+}
+
+/** The two views of a row, in the order they are placed. */
+const PAIRS = {
+  plan: ['top', 'bottom'],
+  elevation: ['side', 'end'],
+} as const satisfies Record<string, readonly ViewKind[]>;
 
 /** The three drawing rows, in mm, and the scale the flat views agreed on. */
 export interface DrawingRows {
@@ -36,25 +56,30 @@ export interface DrawingRows {
   iso: number;
   /** px per mm, shared by all four flat views. */
   scale: number;
+  /** Cell widths in mm, in the order the views are placed along the row. */
+  cells: Record<keyof typeof PAIRS, number[]>;
 }
 
 /**
- * How deep each row has to be, and the one scale the flat views are drawn at.
+ * How deep each row has to be, how its width is divided, and the one scale the
+ * flat views are drawn at.
  *
  * Views on a drawing share a scale — that is what makes them one drawing rather
  * than four pictures of the same pallet. So the scale is settled first, across
  * all four at once, and the rows are then made as deep as the views come out.
  *
- * The two are not independent, so it takes a pass or two. The first asks what
- * the cell width allows, which is the most any of them could be drawn at, and on
- * an ordinary pallet that is the answer. A deep footprint is the awkward case:
- * the plans are then square enough to take the page, and the two rows, each
- * sized to its own views, can overrun the drawing area between them without
- * either one overrunning its own budget.
+ * **A row is fitted as a row**, not as two equal cells. The two views of a pair
+ * do not cost the same: a plan carrying board spacings down one side and an
+ * overall dimension down the other spends a third of its width on lanes, while
+ * an elevation spends a seventh. Splitting the row down the middle sets the
+ * shared scale by whichever view has the most lanes and wastes what the other
+ * one did not need — so the drawings are given the row's width less what all the
+ * lanes on it cost, and the cells then follow the views rather than the reverse.
  *
- * So when they do, the plans are handed what is left after the elevations have
- * had theirs, which binds the plans by height and pulls the shared scale — and
- * the elevations with it — down until the three rows fit.
+ * The rest is a fixed point, since the lanes decide the width left for the
+ * drawing and the scale decides how many lanes there are. It settles in a pass
+ * or two, and is checked rather than trusted: the last step proves the row fits
+ * at the scale returned.
  */
 export function drawingRows(layout: Layout): DrawingRows {
   const flat = DRAWING.rowsHeight - DRAWING.minIsoRowHeight;
@@ -79,32 +104,81 @@ function measure(
   layout: Layout,
   planBudget: number,
   elevationBudget: number,
-): { plan: number; elevation: number; scale: number } {
-  const cell = (budget: number) => ({
-    fitWidth: mmToPx(DRAWING.pairCellWidth),
-    fitHeight: mmToPx(budget),
-  });
-  const options: Record<ViewKind, ReturnType<typeof cell>> = {
-    top: cell(planBudget),
-    bottom: cell(planBudget),
-    side: cell(elevationBudget),
-    end: cell(elevationBudget),
-  };
+): Omit<DrawingRows, 'iso'> {
+  const budgets = { plan: planBudget, elevation: elevationBudget };
+  const scale = Math.min(
+    rowScale(layout, PAIRS.plan, budgets.plan),
+    rowScale(layout, PAIRS.elevation, budgets.elevation),
+  );
 
-  const views = (['top', 'bottom', 'side', 'end'] as const).map((view) => ({
-    view,
-    options: options[view],
-  }));
-  const maxScale = sharedScale(layout, views);
-
-  const height = (view: ViewKind): number =>
-    measureView(layout, view, { ...options[view], maxScale }).height / PX_PER_MM;
+  const measured = (views: readonly ViewKind[]) =>
+    views.map((view) => measureView(layout, view, { scale }));
+  const plan = measured(PAIRS.plan);
+  const elevation = measured(PAIRS.elevation);
+  const deepest = (views: ViewMeasure[]) =>
+    Math.max(...views.map((m) => m.height)) / PX_PER_MM;
 
   return {
-    plan: Math.max(height('top'), height('bottom')),
-    elevation: Math.max(height('side'), height('end')),
-    scale: maxScale,
+    plan: deepest(plan),
+    elevation: deepest(elevation),
+    scale,
+    cells: { plan: share(plan), elevation: share(elevation) },
   };
+}
+
+/**
+ * The row's width, divided between its views in proportion to what each needs.
+ *
+ * Proportional and not exact, so the slack a row has left over is spread rather
+ * than pooled at one end; and since the widths sum to no more than the row, no
+ * view is ever given less than it asked for.
+ */
+function share(views: ViewMeasure[]): number[] {
+  const room = DRAWING.width - SHEET.columnGap * (views.length - 1);
+  const asked = views.reduce((sum, m) => sum + m.width, 0);
+  return views.map((m) => (room * m.width) / asked);
+}
+
+/**
+ * The widest scale the views of one row can share, side by side across it.
+ *
+ * A fixed point: the lanes set what the drawings may have, and what the drawings
+ * are given sets the lanes. It is approached from below and then proved, because
+ * a scale that merely stopped moving is not the same as one the row fits at.
+ */
+function rowScale(layout: Layout, views: readonly ViewKind[], budget: number): number {
+  const room = mmToPx(DRAWING.width) - mmToPx(SHEET.columnGap) * (views.length - 1);
+  const height = mmToPx(budget);
+
+  let scale = 0;
+  for (let pass = 0; pass < 6; pass++) {
+    // The first pass has no scale to measure at, so it asks what each view would
+    // do on its own; after that, what it does at the scale on the table.
+    const measured = views.map((view) =>
+      measureView(layout, view, pass === 0 ? { fitWidth: room, fitHeight: height } : { scale }),
+    );
+
+    const chrome = measured.reduce((sum, m) => sum + m.chromeX, 0);
+    const drawings = measured.reduce((sum, m) => sum + m.uSpan, 0);
+    const byWidth = Math.max(room - chrome, 1) / drawings;
+    const byHeight = Math.min(
+      ...measured.map((m) => Math.max(height - m.chromeY, 1) / m.vSpan),
+    );
+    const next = Math.min(byWidth, byHeight);
+
+    // Settled, or settled enough that another pass would only chase rounding.
+    if (Math.abs(next - scale) < 1e-6) return next;
+    scale = next;
+  }
+
+  // Did not settle — the lane count is flipping between two scales. Take the
+  // scale that the row is measured to fit at rather than the one it converged
+  // towards, so the drawings never overrun the page.
+  const measured = views.map((view) => measureView(layout, view, { scale }));
+  const over = measured.reduce((sum, m) => sum + m.width, 0) - room;
+  if (over <= 0) return scale;
+  const drawings = measured.reduce((sum, m) => sum + m.uSpan, 0);
+  return Math.max(scale - over / drawings, 1e-4);
 }
 
 /**
@@ -126,13 +200,7 @@ export function sheetViews(
   greyscale = false,
   fragment = false,
 ): Record<string, string> {
-  const common = {
-    greyscale,
-    fragment,
-    idPrefix: 'sheet',
-    fitWidth: mmToPx(DRAWING.pairCellWidth),
-    scale: rows.scale,
-  };
+  const common = { greyscale, fragment, idPrefix: 'sheet', scale: rows.scale };
   const iso = {
     fitWidth: mmToPx(DRAWING.width),
     fitHeight: mmToPx(rows.iso),
@@ -421,6 +489,8 @@ function styles(rows: DrawingRows): string {
   .row.plan { height: ${fmtMm(rows.plan)}mm; }
   .row.elevation { height: ${fmtMm(rows.elevation)}mm; }
   .row.iso { height: ${fmtMm(rows.iso)}mm; }
+  /* A cell is as wide as its view needs, not half the row — see drawingRows. */
+${cellWidths(rows)}
   .row figure {
     margin: 0;
     flex: 1;

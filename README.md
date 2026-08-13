@@ -141,21 +141,32 @@ pallet, and in a cell as wide as the side elevation's it came out half again as
 large. A drawing that measures one thing two ways is read as a drawing of
 something built wrong.
 
-The rows follow from that scale rather than being set before it
-([`drawingRows`](src/sheet/sheet.ts)). The scale is settled first, across all
-four views at once and as large as the cell width allows; each row is then made
-as deep as its views turned out to be. A plan is about as deep as it is wide and
-takes most of the height, an elevation is a long thin band and takes little, and
-the isometric takes what is left — with a floor under it, so that a deep
-footprint pulls the shared scale down instead of squeezing the picture of the
-finished pallet into a strip. A view narrower than its cell, which the end
-elevation always is, is centred in it.
+**The rows follow from that scale rather than being set before it**
+([`drawingRows`](src/sheet/sheet.ts)), in both directions. Each row is fitted as
+a row: the two views on it are given the width of the drawing column less what
+all the dimension lanes on that row cost, and the cells are then divided in
+proportion to what each view asked for. Splitting a row down the middle instead
+sets the shared scale by whichever view carries the most lanes — a plan spends
+about a third of its width on them, an elevation a seventh — and wastes what the
+other one did not need; fitting the row whole is worth 6–13% of scale across the
+fixtures, for free.
 
-Dimension lanes are packed to avoid collisions. A view cell is about 78 mm across,
-so two callouts on neighbouring boards will print on top of each other unless
-they are given separate lanes. Since lanes decide the margins, the margins decide
-the scale and the scale decides what collides, `renderView` iterates until the
-lanes stop moving.
+Each row is then made as deep as its views turned out to be. A plan is about as
+deep as it is wide and takes most of the height, an elevation is a long thin band
+and takes little, and the isometric takes what is left — with a floor under it,
+so that a deep footprint pulls the shared scale down instead of squeezing the
+picture of the finished pallet into a strip. A view narrower than its cell is
+centred in it.
+
+The plans are captioned above and the elevations and isometric below, and every
+caption is centred on its drawing rather than on the view's box — a view's lanes
+are not the same depth on both sides, so the two are different places.
+
+Dimension lanes are packed to avoid collisions. A view cell is 55–90 mm across
+depending on what the row's other view needed, so two callouts on neighbouring
+boards will print on top of each other unless they are given separate lanes.
+Since lanes decide the margins, the margins decide the scale and the scale
+decides what collides, `renderView` iterates until the lanes stop moving.
 
 ### Branding
 

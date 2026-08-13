@@ -112,7 +112,8 @@ export function renderIsometric(layout: Layout, options: IsoOptions = {}): strin
   const body =
     group({ 'shape-rendering': 'geometricPrecision' }, pieces) +
     nails +
-    (showTitle ? renderTitle(width, height, ISO_TITLE) : '');
+    // Margins are even here, so the box's centre is the drawing's centre.
+    (showTitle ? renderTitle(width / 2, height - 6, ISO_TITLE) : '');
 
   return svgDocument({
     width,

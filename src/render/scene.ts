@@ -54,14 +54,30 @@ export interface SceneOptions {
    */
   maxScale?: number;
   title?: boolean;
+  /**
+   * Put the view name over the drawing rather than under it. The plans are
+   * captioned above, the elevations and the isometric below, so the two rows of
+   * a pair read as a pair rather than as four loose drawings.
+   */
+  titleAbove?: boolean;
 }
 
 const EDGE_MARGIN = 9;
 export const TITLE_SPACE = TITLE_FONT_SIZE + 5;
 
-/** The view name, centred under the drawing. */
-export function renderTitle(width: number, height: number, label: string): string {
-  return text(width / 2, height - 6, label, {
+/** How much of the title band is clear space, between the name and the drawing. */
+const TITLE_PAD = 5;
+
+/**
+ * The view name, on the centre line of the drawing.
+ *
+ * Centred on the drawing and not on the view's box, which is a different thing:
+ * a view's dimension lanes are not the same depth on both sides — an overall
+ * dimension on the right and two detail lanes on the left is ordinary — so a
+ * caption centred in the box sits visibly off the drawing it names.
+ */
+export function renderTitle(centreX: number, baselineY: number, label: string): string {
+  return text(centreX, baselineY, label, {
     'text-anchor': 'middle',
     'font-family': FONT_FAMILY,
     'font-size': TITLE_FONT_SIZE,
@@ -78,6 +94,7 @@ export class Scene {
   readonly top: number;
   readonly uSpan: number;
   readonly vSpan: number;
+  readonly titleAbove: boolean;
   private readonly margins: Record<Side, number>;
 
   constructor(
@@ -95,11 +112,13 @@ export class Scene {
       return count === 0 ? EDGE_MARGIN : FIRST_LANE + (count - 1) * LANE_PITCH + LANE_TAIL;
     };
 
+    const titleSpace = options.title === false ? 0 : TITLE_SPACE;
+    this.titleAbove = options.titleAbove === true;
     this.margins = {
       left: margin('left'),
       right: margin('right'),
-      top: margin('top'),
-      bottom: margin('bottom') + (options.title === false ? 0 : TITLE_SPACE),
+      top: margin('top') + (this.titleAbove ? titleSpace : 0),
+      bottom: margin('bottom') + (this.titleAbove ? 0 : titleSpace),
     };
 
     // Margins are fixed by the dimension lanes and do not depend on the scale,
@@ -121,6 +140,16 @@ export class Scene {
     this.top = this.margins.top;
     this.width = this.margins.left + frame.uSpan * this.scale + this.margins.right;
     this.height = this.margins.top + frame.vSpan * this.scale + this.margins.bottom;
+  }
+
+  /** The drawing's own centre line, which is not the centre of the box. */
+  get centreX(): number {
+    return this.left + (this.uSpan * this.scale) / 2;
+  }
+
+  /** Where the view name sits: clear of the drawing, inside the title band. */
+  get titleBaseline(): number {
+    return this.titleAbove ? TITLE_FONT_SIZE : this.height - TITLE_PAD - 1;
   }
 
   px(u: number): number {

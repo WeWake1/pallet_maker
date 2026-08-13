@@ -91,13 +91,15 @@ const drawingHeight =
  * The two plans on the first row, the two elevations on the second, the
  * isometric across the full width on the third.
  *
- * The rows are not the same height, and their heights are not fixed here. The
- * four flat views are drawn to one shared scale — see `drawingRows` — and how
- * deep a row has to be is then whatever that scale makes it: a plan is about as
- * deep as it is wide and wants the height, an elevation is a long thin band that
- * would only sit in a tall row with air above and below it. Setting the rows
- * first and fitting each view to its row separately is what made the same
- * pallet height print at two sizes across the side and end elevations.
+ * Neither the depth of a row nor the division of its width is fixed here; both
+ * come off the pallet, in `drawingRows`. The four flat views are drawn to one
+ * shared scale, and how deep a row has to be is then whatever that scale makes
+ * it: a plan is about as deep as it is wide and wants the height, an elevation
+ * is a long thin band that would only sit in a tall row with air above and below
+ * it. Fitting each view to a fixed cell instead is what made the same pallet
+ * height print at two sizes across the side and end elevations, and splitting a
+ * row down the middle then set the scale by whichever view carried the most
+ * dimension lanes.
  *
  * What the flat views do not need goes to the isometric, which is the picture of
  * the finished pallet and reads better large.
@@ -107,7 +109,6 @@ const rowsHeight = drawingHeight - 2 * SHEET.rowGap;
 export const DRAWING = {
   width: drawingWidth,
   height: drawingHeight,
-  pairCellWidth: (drawingWidth - SHEET.columnGap) / 2,
   /** The three rows together, the gaps between them taken out. */
   rowsHeight,
   /**

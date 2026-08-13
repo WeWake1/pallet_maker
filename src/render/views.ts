@@ -32,8 +32,10 @@ export interface ViewOptions {
   maxScale?: number;
   /** Wrap the drawing in a desaturating filter, for the greyscale check. */
   greyscale?: boolean;
-  /** Draw the view name under the drawing. Default true. */
+  /** Draw the view name beside the drawing. Default true. */
   title?: boolean;
+  /** Override which side the name goes on. Defaults per view — see `titleAbove`. */
+  titleAbove?: boolean;
   /**
    * Prefix for the ids this view defines. Several views are inlined in one HTML
    * document on the sheet, and ids have to stay unique across all of them.
@@ -69,10 +71,19 @@ export interface ViewOptions {
 
 const TOLERANCE = 1e-6;
 
+/**
+ * The options a view is actually laid out with. Applied in one place, so that
+ * what `measureView` predicts and what `renderView` draws cannot come apart.
+ */
+function withDefaults(view: ViewKind, options: ViewOptions): ViewOptions {
+  return { ...options, titleAbove: options.titleAbove ?? titleAbove(view) };
+}
+
 export function renderView(layout: Layout, view: ViewKind, options: ViewOptions = {}): string {
   const frame = viewFrame(layout, view);
   const projected = projectPieces(layout, view);
-  const { dims, scene } = layOut(frame, buildDimensions(layout, view, projected), options);
+  const settings = withDefaults(view, options);
+  const { dims, scene } = layOut(frame, buildDimensions(layout, view, projected), settings);
   const idPrefix = `${options.idPrefix ?? 'view'}-${view}`;
 
   const emphasis = options.emphasis === 'screen' ? SCREEN_EMPHASIS : PRINT_EMPHASIS;
@@ -112,6 +123,17 @@ export interface ViewMeasure {
   /** The whole view, its dimension lanes and title included, in px. */
   width: number;
   height: number;
+  /**
+   * What the view costs beyond the drawing itself: the dimension lanes on both
+   * sides, and the title band. Set by the lane packing rather than by the scale,
+   * so it is what has to come off a row's width before the drawings can be
+   * given the rest.
+   */
+  chromeX: number;
+  chromeY: number;
+  /** The pallet the view draws, in mm: across the page, and down it. */
+  uSpan: number;
+  vSpan: number;
 }
 
 /**
@@ -128,8 +150,16 @@ export function measureView(
 ): ViewMeasure {
   const frame = viewFrame(layout, view);
   const dims = buildDimensions(layout, view, projectPieces(layout, view));
-  const { scene } = layOut(frame, dims, options);
-  return { scale: scene.scale, width: scene.width, height: scene.height };
+  const { scene } = layOut(frame, dims, withDefaults(view, options));
+  return {
+    scale: scene.scale,
+    width: scene.width,
+    height: scene.height,
+    chromeX: scene.width - frame.uSpan * scene.scale,
+    chromeY: scene.height - frame.vSpan * scene.scale,
+    uSpan: frame.uSpan,
+    vSpan: frame.vSpan,
+  };
 }
 
 /**
@@ -417,7 +447,19 @@ function drawNailTargets(scene: Scene, layout: Layout, view: ViewKind): string {
 }
 
 function drawTitle(scene: Scene, view: ViewKind): string {
-  return renderTitle(scene.width, scene.height, VIEW_TITLE[view]);
+  return renderTitle(scene.centreX, scene.titleBaseline, VIEW_TITLE[view]);
+}
+
+/**
+ * Which side of a view its name goes on.
+ *
+ * The plans are captioned above and the elevations below, so on the sheet the
+ * two captions of a row sit against the row's outer edges and the four drawings
+ * are grouped between them. The isometric, which closes the sheet, is named
+ * underneath as the plans' opposite number.
+ */
+export function titleAbove(view: ViewKind): boolean {
+  return view === 'top' || view === 'bottom';
 }
 
 /**
