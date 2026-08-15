@@ -122,22 +122,28 @@ export const DEFAULT_NAILS: NailSpec[] = [
 ];
 
 /**
- * A whole plain 1000 x 800 block pallet to start from.
+ * A whole plain 1200 x 800 block pallet to start from.
  *
  * Nearly every design is a variation on this one, so a new pallet starts as a
  * complete pallet and the work is changing numbers rather than building a stack
- * of empty layers before anything can be seen.
+ * of empty layers before anything can be seen. The library bears that out: of
+ * the designs drawn so far, nearly nine in ten are block 4-way and four fifths
+ * have exactly these four layers.
+ *
+ * The size is the one thing it does not bear out — it is typed afresh on almost
+ * every design — so it is set to the commonest one rather than to a round
+ * number, which makes it right more often and no harder to change.
  */
 export function newPallet(client: { id: string; name: string }): Pallet {
   const { id: clientId, name: clientName } = client;
   const species = 'pine';
-  const extent = { overallLength: 1000, overallWidth: 800 };
+  const extent = { overallLength: 1200, overallWidth: 800 };
   return {
     id: newId(),
     palletCode: '',
     clientId,
     clientName,
-    palletName: '1000 x 800',
+    palletName: '1200 x 800',
     overallLength: extent.overallLength,
     overallWidth: extent.overallWidth,
     overallHeight: 0,
@@ -156,5 +162,49 @@ export function newPallet(client: { id: string; name: string }): Pallet {
       newLayer('block', 3, species, extent),
       newLayer('bottom_deck', 4, species, extent, 3),
     ],
+  };
+}
+
+/**
+ * Nothing built yet: the size and the timber, and no layers at all.
+ *
+ * For the design that is not a variation on anything — a one-off, or a shape
+ * the examples do not cover — where starting from a block pallet means deleting
+ * four layers before the real work begins.
+ *
+ * The overall size stays at 1200 x 800 rather than dropping to nothing, because
+ * a layer added to a pallet with no size gets boards no length at all. It is a
+ * placeholder to be typed over, and every layer added after it is typed over
+ * takes the new size. The species stays for the same reason: it is what a new
+ * layer's timber is taken from.
+ *
+ * A pallet with no layers cannot be saved or printed — the schema asks for at
+ * least one — so this opens saying what it still needs, which is the honest
+ * description of a design nobody has built yet.
+ */
+export function emptyPallet(client: { id: string; name: string }): Pallet {
+  const { id: clientId, name: clientName } = client;
+  return {
+    id: newId(),
+    palletCode: '',
+    clientId,
+    clientName,
+    palletName: '',
+    overallLength: 1200,
+    overallWidth: 800,
+    overallHeight: 0,
+    // Nothing is assumed about what this pallet is. Every one of these is
+    // offered as "not stated", and that is what nobody having said yet means.
+    palletType: '',
+    deckType: '',
+    entry: '',
+    species: 'pine',
+    planing: '',
+    // The default schedule names the joints of a block pallet, and this is not
+    // one yet.
+    nails: [],
+    nailPlacements: [],
+    updatedAt: today(),
+    layers: [],
   };
 }

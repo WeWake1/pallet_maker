@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import type { ClientDesigns, PalletSummary } from './api.js';
 import { draftAge } from './drafts.js';
 import type { Draft } from './drafts.js';
-import { Button } from './ui.jsx';
+import { Button, Menu, MenuItem } from './ui.jsx';
 
 /**
  * The design library: every client in turn, each with their designs as cards.
@@ -133,15 +133,15 @@ export function Dashboard({
   return (
     <div className="min-h-0 flex-1 overflow-y-auto bg-slate-100">
       <div className="mx-auto max-w-6xl p-5">
-        <div className="mb-4 flex flex-wrap items-center gap-3">
-          <h2 className="text-lg font-semibold text-slate-800">Designs</h2>
-          <span className="text-xs text-slate-500">
+        <div className="mb-5 flex flex-wrap items-center gap-3">
+          <h2 className="text-title font-semibold text-ink">Designs</h2>
+          <span className="text-label text-ink-faint">
             {searching
               ? `${total} matching`
               : `${total} across ${shown.length} ${shown.length === 1 ? 'client' : 'clients'}`}
           </span>
           {drafts.length > 0 && !searching && (
-            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-micro font-medium text-amber-800">
               {drafts.length} with unsaved work
             </span>
           )}
@@ -155,14 +155,17 @@ export function Dashboard({
               onKeyDown={(event) => {
                 if (event.key === 'Escape') setSearch('');
               }}
-              className="w-56 rounded border border-slate-300 bg-white px-2 py-1 text-sm
-                         focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-56 rounded-md border border-line bg-card px-2.5 py-1.5 text-ui shadow-xs
+                         transition-colors placeholder:text-slate-400
+                         focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-ring/30"
             />
             <select
               value={order}
               onChange={(event) => setOrder(event.target.value as SortOrder)}
               title="How designs are ordered within each client"
-              className="rounded border border-slate-300 bg-white px-1.5 py-1 text-sm"
+              aria-label="How designs are ordered within each client"
+              className="rounded-md border border-line bg-card px-2 py-1.5 text-ui shadow-xs
+                         focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-ring/30"
             >
               {SORTS.map(([value, label]) => (
                 <option key={value} value={value}>
@@ -188,13 +191,43 @@ export function Dashboard({
         </div>
 
         {sections.length === 0 ? (
-          <p className="rounded border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
-            No clients yet. Add one to start a design.
-          </p>
+          /*
+            The first thing anyone sees, and it used to be one sentence and a
+            button in the far corner. Someone who has never used this does not
+            know that a design belongs to a client, or that the client comes
+            first — so say it, and put the way of doing it right here.
+          */
+          <div className="rounded-card border border-line bg-card p-10 text-center shadow-card">
+            <h3 className="text-title font-semibold text-ink">Nothing here yet</h3>
+            <p className="mx-auto mt-2 max-w-md text-ui leading-relaxed text-ink-soft">
+              Every design belongs to a client, so a client comes first. Add one and you can start
+              a design straight away — it opens as a complete 1200 × 800 pallet, ready to have its
+              numbers changed.
+            </p>
+            <div className="mt-5 flex justify-center">
+              {adding ? (
+                <NameEntry
+                  placeholder="Client name"
+                  onCancel={() => setAdding(false)}
+                  onSubmit={(name) => {
+                    onAddClient(name);
+                    setAdding(false);
+                  }}
+                />
+              ) : (
+                <Button tone="primary" disabled={busy} onClick={() => setAdding(true)}>
+                  Add your first client
+                </Button>
+              )}
+            </div>
+          </div>
         ) : shown.length === 0 ? (
-          <p className="rounded border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
-            Nothing matches “{search.trim()}”.
-          </p>
+          <div className="rounded-card border border-dashed border-line bg-card p-10 text-center shadow-card">
+            <p className="text-ui text-ink-soft">Nothing matches “{search.trim()}”.</p>
+            <div className="mt-4 flex justify-center">
+              <Button onClick={() => setSearch('')}>Clear search</Button>
+            </div>
+          </div>
         ) : (
           <div className="space-y-6">
             {shown.map((section) => (
@@ -264,7 +297,7 @@ function ClientSection({
 
   return (
     <section>
-      <header className="mb-2 flex items-center gap-2 border-b border-slate-300 pb-1.5">
+      <header className="mb-3 flex items-center gap-2 border-b border-line pb-2">
         {renaming ? (
           <NameEntry
             initial={client.name}
@@ -277,8 +310,8 @@ function ClientSection({
           />
         ) : (
           <>
-            <h3 className="text-sm font-semibold text-slate-800">{client.name}</h3>
-            <span className="text-xs text-slate-400">
+            <h3 className="text-key font-semibold text-ink">{client.name}</h3>
+            <span className="text-label text-ink-faint">
               {designs.length} {designs.length === 1 ? 'design' : 'designs'}
             </span>
             {/* Deleting a client takes their designs with them, and while a
@@ -368,12 +401,19 @@ function ClientSection({
             disabled={busy}
             onClick={() => onCreate(client.id)}
             title={`New design for ${client.name}`}
-            className="flex h-28 w-44 flex-col items-center justify-center rounded border-2 border-dashed
-                       border-slate-300 bg-white text-slate-400 hover:border-blue-400 hover:text-blue-500
-                       disabled:opacity-40"
+            className="flex h-28 w-44 flex-col items-center justify-center rounded-card border-2 border-dashed
+                       border-line bg-card px-3 text-center text-ink-faint transition-colors
+                       hover:border-accent hover:bg-blue-50/40 hover:text-accent disabled:opacity-40"
           >
             <span className="text-2xl leading-none">+</span>
-            <span className="mt-1 text-xs">New design</span>
+            <span className="mt-1 text-label font-medium">New design</span>
+            {/* A new design is not an empty one, and someone who has not seen
+                that yet has no reason to expect it. */}
+            {designs.length === 0 && (
+              <span className="mt-1 text-micro leading-tight text-ink-faint">
+                starts as a complete 1200 × 800 pallet
+              </span>
+            )}
           </button>
         )}
       </div>
@@ -382,40 +422,14 @@ function ClientSection({
 }
 
 /**
- * A small square button in the card's action row. Deliberately plain and always
- * visible: a control that only appears on hover is one nobody finds, and this
- * screen is read as much as it is pointed at.
+ * One design in the library.
+ *
+ * The face of the card is what the card says — name, code, date — and opening
+ * it is the whole of what the card does when it is clicked. The four other
+ * things worth doing to a design without opening it went behind ⋯: as four
+ * 11-pixel words in a row they were the loudest thing on a screen of dozens of
+ * cards, and `PDF Copy JSON ×` says nothing about what any of them produces.
  */
-function CardAction({
-  label,
-  title,
-  danger,
-  disabled,
-  onClick,
-}: {
-  label: string;
-  title: string;
-  danger?: boolean;
-  disabled?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      title={title}
-      disabled={disabled}
-      onClick={onClick}
-      className={`rounded px-1 py-0.5 text-[11px] leading-none disabled:opacity-40 ${
-        danger
-          ? 'text-slate-400 hover:bg-red-50 hover:text-red-600'
-          : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700'
-      }`}
-    >
-      {label}
-    </button>
-  );
-}
-
 function DesignCard({
   design,
   unsaved,
@@ -432,22 +446,22 @@ function DesignCard({
 
   return (
     <div
-      className={`flex h-28 w-44 flex-col rounded border bg-white hover:shadow-sm ${
-        unsaved ? 'border-amber-400' : 'border-slate-300'
-      }`}
+      className={`group relative flex h-28 w-44 flex-col rounded-card border bg-card shadow-card
+                  transition-all hover:-translate-y-0.5 hover:shadow-raised ${
+                    unsaved ? 'border-amber-400' : 'border-line'
+                  }`}
     >
       <button
         type="button"
         onClick={() => actions.onOpen(design.id)}
         title={unsaved ? 'Has changes that were never saved. Opening it picks them up.' : `Open ${name}`}
-        className="flex min-h-0 flex-1 flex-col p-2.5 pb-0 text-left"
+        className="flex min-h-0 flex-1 flex-col rounded-card p-3 pb-2 pr-8 text-left"
       >
-        <span className="truncate text-sm font-medium text-slate-800">{name}</span>
-        <span className="truncate text-xs text-slate-500">{design.palletCode || 'no code'}</span>
+        <span className="truncate text-ui font-semibold text-ink">{name}</span>
+        <span className="truncate text-label text-ink-faint">{design.palletCode || 'no code'}</span>
         {/* The date reads with the design rather than with the buttons: it is
-            something the card says, not something the card does, and the row
-            below has only as much room as four actions need. */}
-        <span className="mt-auto flex items-center gap-1.5 text-[11px]">
+            something the card says, not something the card does. */}
+        <span className="mt-auto flex items-center gap-1.5 text-micro">
           <span className="whitespace-nowrap tabular-nums text-slate-400">{design.updatedAt}</span>
           {unsaved && <span className="font-medium text-amber-700">unsaved</span>}
         </span>
@@ -455,43 +469,55 @@ function DesignCard({
 
       {/* What is most often wanted of a design that is not being changed: its
           sheet, a copy of it, the design itself as a file, or its removal. */}
-      <div className="flex items-center justify-end gap-0.5 px-1.5 pb-1">
-        <CardAction
-          label="PDF"
-          title={`Open the sheet for ${name}`}
-          disabled={busy}
-          onClick={() => actions.onSheet(design.id)}
-        />
-        <CardAction
-          label="Copy"
-          title={
-            'A copy, opened as a new design. This is how an old design is kept ' +
-            'before reworking it — name one of the two “… (old)”.'
-          }
-          disabled={busy}
-          onClick={() => actions.onDuplicate(design.id)}
-        />
-        <CardAction
-          label="JSON"
-          title={
-            `Download ${name} as a file. Unlike the PDF this is the design ` +
-            'itself, so it can be imported again here or on another computer.'
-          }
-          disabled={busy}
-          onClick={() => actions.onExport(design.id)}
-        />
-        <CardAction
-          label="×"
-          title={`Delete ${name}`}
-          danger
-          disabled={busy}
-          onClick={() => {
-            // Saving overwrites and nothing keeps a previous version, so a
-            // deleted design is gone. Name it, so the wrong card is not the
-            // one confirmed.
-            if (window.confirm(`Delete ${name}? This cannot be undone.`)) actions.onDelete(design);
-          }}
-        />
+      <div className="absolute right-1 top-1">
+        <Menu label="⋯" tone="subtle" align="right" width="sm" disabled={busy} title={`More for ${name}`}>
+          {(close) => (
+            <>
+              <MenuItem
+                onClick={() => {
+                  close();
+                  actions.onSheet(design.id);
+                }}
+                note="The sheet, ready to print"
+              >
+                Open the PDF
+              </MenuItem>
+              <MenuItem
+                onClick={() => {
+                  close();
+                  actions.onDuplicate(design.id);
+                }}
+                note="Kept as it is; the copy is what gets reworked"
+              >
+                Duplicate
+              </MenuItem>
+              <MenuItem
+                onClick={() => {
+                  close();
+                  actions.onExport(design.id);
+                }}
+                note="The design itself, to import elsewhere"
+              >
+                Download as file
+              </MenuItem>
+              <MenuItem
+                tone="danger"
+                onClick={() => {
+                  close();
+                  // Saving overwrites and nothing keeps a previous version, so a
+                  // deleted design is gone. Name it, so the wrong card is not the
+                  // one confirmed.
+                  if (window.confirm(`Delete ${name}? This cannot be undone.`)) {
+                    actions.onDelete(design);
+                  }
+                }}
+                note="Cannot be undone"
+              >
+                Delete
+              </MenuItem>
+            </>
+          )}
+        </Menu>
       </div>
     </div>
   );
@@ -513,20 +539,21 @@ function DraftCard({
 }) {
   const { pallet } = draft;
   return (
-    <div className="relative flex h-28 w-44 flex-col rounded border border-dashed border-amber-400 bg-amber-50 hover:shadow-sm">
-      <button type="button" onClick={onOpen} className="flex flex-1 flex-col p-2.5 text-left">
-        <span className="truncate pr-5 text-sm font-medium text-slate-800">
+    <div className="relative flex h-28 w-44 flex-col rounded-card border border-dashed border-amber-400 bg-amber-50 shadow-card transition-all hover:-translate-y-0.5 hover:shadow-raised">
+      <button type="button" onClick={onOpen} className="flex flex-1 flex-col rounded-card p-3 text-left">
+        <span className="truncate pr-5 text-ui font-semibold text-ink">
           {pallet.palletName || 'Untitled'}
         </span>
-        <span className="truncate text-xs text-slate-500">{pallet.palletCode || 'no code'}</span>
-        <span className="mt-auto text-[11px] text-amber-700">never saved</span>
-        <span className="text-[11px] text-slate-500">edited {draftAge(draft.at)}</span>
+        <span className="truncate text-label text-ink-faint">{pallet.palletCode || 'no code'}</span>
+        <span className="mt-auto text-micro font-medium text-amber-700">never saved</span>
+        <span className="text-micro text-ink-faint">edited {draftAge(draft.at)}</span>
       </button>
       <button
         type="button"
         onClick={onDiscard}
+        aria-label="Discard this recovered design"
         title="Discard this recovered design"
-        className="absolute right-1 top-1 rounded px-1 text-sm leading-none text-slate-400 hover:bg-amber-100 hover:text-red-600"
+        className="absolute right-1 top-1 rounded px-1 text-ui leading-none text-slate-400 transition-colors hover:bg-amber-100 hover:text-red-600"
       >
         ×
       </button>
@@ -564,8 +591,8 @@ function NameEntry({
           if (event.key === 'Enter') submit();
           if (event.key === 'Escape') onCancel();
         }}
-        className="rounded border border-slate-300 bg-white px-1.5 py-1 text-sm
-                   focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        className="rounded-md border border-line bg-card px-2 py-1.5 text-ui shadow-xs
+                   focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-ring/30"
       />
       <Button tone="primary" onClick={submit}>
         Save

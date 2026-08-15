@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { shade } from '../render/theme.js';
 import type { LayerStyle } from '../render/theme.js';
@@ -8,18 +8,159 @@ import type { LoadKg } from '../types.js';
 /** Small form controls. Tailwind styles the editor chrome only. */
 
 const inputClass =
-  'w-full rounded border border-slate-300 bg-white px-1.5 py-1 text-sm text-slate-900 ' +
-  'focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 ' +
-  'disabled:bg-slate-100 disabled:text-slate-500';
+  'w-full rounded-md border border-line bg-card px-2 py-1.5 text-ui text-ink ' +
+  'transition-colors placeholder:text-slate-400 ' +
+  'focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-ring/30 ' +
+  'disabled:bg-ground disabled:text-ink-faint';
 
-export function Field({ label, children }: { label: string; children: ReactNode }) {
+/**
+ * Something that closes when the attention moves off it.
+ *
+ * A bubble opened by a click has two ways of being finished with: clicking
+ * somewhere else, and pressing Escape. Both have to work, or the thing stays on
+ * screen and has to be hunted down and clicked again.
+ */
+function useDismiss(open: boolean, close: () => void) {
+  const box = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const onDown = (event: MouseEvent) => {
+      if (!box.current?.contains(event.target as Node)) close();
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') close();
+    };
+
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open, close]);
+
+  return box;
+}
+
+/**
+ * One sentence saying what a word means, next to the word.
+ *
+ * The editor is full of terms from the trade — span, slack, nudge — that mean
+ * something exact to whoever has built pallets and nothing at all to whoever
+ * has not. Explaining them in a manual means being stuck at the moment of
+ * needing to know; explaining them here does not. The wording lives in
+ * hints.ts, so the same sentence appears here and in the help panel.
+ */
+export function Hint({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const box = useDismiss(open, () => setOpen(false));
+
   return (
-    <label className="block">
-      <span className="mb-0.5 block text-[11px] font-medium uppercase tracking-wide text-slate-500">
+    <span className="relative inline-flex" ref={box}>
+      <button
+        type="button"
+        // Hover says it too, for whoever is already reaching with the mouse.
+        title={text}
+        aria-label={`What this means: ${text}`}
+        aria-expanded={open}
+        onClick={(event) => {
+          // The caption is a <label>, so a click here would otherwise land in
+          // the field and lose the bubble to the same click that opened it.
+          event.preventDefault();
+          setOpen((current) => !current);
+        }}
+        className={
+          'flex h-3.5 w-3.5 items-center justify-center rounded-full border text-[9px] ' +
+          'font-semibold leading-none transition-colors ' +
+          (open
+            ? 'border-accent bg-accent text-white'
+            : 'border-slate-300 text-ink-faint hover:border-slate-400 hover:text-ink-soft')
+        }
+      >
+        i
+      </button>
+      {open && (
+        <span
+          role="tooltip"
+          className="absolute left-0 top-5 z-30 w-56 rounded-md border border-line bg-card p-2
+                     text-micro font-normal normal-case tracking-normal text-ink-soft shadow-raised"
+        >
+          {text}
+        </span>
+      )}
+    </span>
+  );
+}
+
+export function Field({
+  label,
+  hint,
+  id,
+  children,
+}: {
+  label: string;
+  /** One plain sentence on what the word means. See hints.ts. */
+  hint?: string;
+  /** What the problem list scrolls to when it names this field. */
+  id?: string;
+  children: ReactNode;
+}) {
+  return (
+    <label className="block" id={id}>
+      <span className="mb-1 flex items-center gap-1 text-label font-medium uppercase tracking-wide text-ink-faint">
         {label}
+        {hint && <Hint text={hint} />}
       </span>
       {children}
     </label>
+  );
+}
+
+/**
+ * A named group of fields inside a panel.
+ *
+ * Seventeen fields in a row of identical grids is a list to be read from the
+ * top every time something has to be found in it. Four named groups is four
+ * places to look, and the name says which one.
+ */
+export function SectionHeading({ children, note }: { children: ReactNode; note?: string }) {
+  return (
+    <div className="mb-2 flex items-baseline gap-2 border-b border-line-soft pb-1">
+      <h3 className="text-micro font-semibold uppercase tracking-wider text-ink-soft">{children}</h3>
+      {note && <span className="text-micro text-ink-faint">{note}</span>}
+    </div>
+  );
+}
+
+/** A value the design worked out for itself, shown where a field would be. */
+export function Readout({
+  label,
+  value,
+  hint,
+  tone = 'plain',
+}: {
+  label: string;
+  value: ReactNode;
+  hint?: string;
+  tone?: 'plain' | 'warn';
+}) {
+  return (
+    <div className="block">
+      <span className="mb-1 flex items-center gap-1 text-label font-medium uppercase tracking-wide text-ink-faint">
+        {label}
+        {hint && <Hint text={hint} />}
+      </span>
+      <div
+        className={
+          'rounded-md border border-dashed border-line bg-ground-soft px-2 py-1.5 text-ui tabular-nums ' +
+          (tone === 'warn' ? 'text-red-600' : 'text-ink-soft')
+        }
+      >
+        {value}
+      </div>
+    </div>
   );
 }
 
@@ -237,20 +378,24 @@ export function Check({
   checked,
   onChange,
   label,
+  /** Where the label is a column heading elsewhere, and the box needs its own. */
+  hiddenLabel,
   disabled,
 }: {
   checked: boolean;
   onChange: (checked: boolean) => void;
   label: string;
+  hiddenLabel?: string;
   disabled?: boolean;
 }) {
   return (
-    <label className="flex items-center gap-1.5 text-sm text-slate-700">
+    <label className="flex items-center gap-1.5 text-ui text-slate-700">
       <input
         type="checkbox"
-        className="h-3.5 w-3.5 rounded border-slate-300"
+        className="h-3.5 w-3.5 rounded border-line accent-(--color-accent)"
         checked={checked}
         disabled={disabled}
+        aria-label={hiddenLabel}
         onChange={(event) => onChange(event.target.checked)}
       />
       {label}
@@ -262,30 +407,144 @@ export function Button({
   onClick,
   children,
   tone = 'plain',
+  size = 'md',
   disabled,
   title,
+  label,
 }: {
   onClick: () => void;
   children: ReactNode;
-  tone?: 'plain' | 'primary' | 'danger';
+  tone?: 'plain' | 'primary' | 'danger' | 'subtle';
+  size?: 'sm' | 'md';
   disabled?: boolean;
   title?: string;
+  /** Said aloud where the face of the button is an arrow or a cross. */
+  label?: string;
 }) {
   const tones = {
-    plain: 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50',
-    primary: 'border-blue-600 bg-blue-600 text-white hover:bg-blue-700',
-    danger: 'border-slate-300 bg-white text-red-600 hover:bg-red-50',
+    plain: 'border-line bg-card text-slate-700 shadow-xs hover:bg-ground-soft hover:border-slate-400',
+    primary: 'border-accent bg-accent text-white shadow-xs hover:bg-blue-700',
+    danger: 'border-line bg-card text-red-600 shadow-xs hover:bg-red-50 hover:border-red-300',
+    // The many small actions in tables and card corners, which should not each
+    // look like a decision to be made.
+    subtle: 'border-transparent bg-transparent text-ink-faint hover:bg-ground hover:text-ink-soft',
+  };
+  const sizes = {
+    sm: 'px-1.5 py-0.5 text-micro',
+    md: 'px-2.5 py-1 text-ui',
   };
   return (
     <button
       type="button"
       title={title}
+      aria-label={label}
       disabled={disabled}
       onClick={onClick}
-      className={`rounded border px-2 py-1 text-sm disabled:opacity-40 ${tones[tone]}`}
+      className={`rounded-md border font-medium transition-colors disabled:opacity-40
+                  disabled:shadow-none disabled:hover:bg-card ${sizes[size]} ${tones[tone]}`}
     >
       {children}
     </button>
+  );
+}
+
+/**
+ * A button that opens a short list of things it can do.
+ *
+ * The header had eleven controls competing on one row, four of them acronyms,
+ * and the explanation of what each produced was in a tooltip that had to be
+ * hovered to be found. A list has room to say what each one is for on the way
+ * past, and gives the row back to the two things done constantly: Save, and
+ * getting back to the library.
+ */
+export function Menu({
+  label,
+  title,
+  align = 'right',
+  /** Narrow where the thing it hangs off is small, as on a design card. */
+  width = 'md',
+  disabled,
+  tone = 'plain',
+  children,
+}: {
+  label: ReactNode;
+  title?: string;
+  align?: 'left' | 'right';
+  width?: 'sm' | 'md';
+  disabled?: boolean;
+  tone?: 'plain' | 'subtle';
+  /** Given a way to close, so choosing something puts the list away. */
+  children: (close: () => void) => ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const box = useDismiss(open, () => setOpen(false));
+
+  return (
+    <div className="relative" ref={box}>
+      <Button
+        tone={tone}
+        title={title}
+        disabled={disabled}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span aria-expanded={open} className="flex items-center gap-1">
+          {label}
+        </span>
+      </Button>
+      {open && (
+        <div
+          role="menu"
+          className={
+            'absolute top-full z-40 mt-1 overflow-hidden rounded-card border border-line ' +
+            'bg-card py-1 shadow-raised ' +
+            (width === 'sm' ? 'w-52 ' : 'w-64 ') +
+            (align === 'right' ? 'right-0' : 'left-0')
+          }
+        >
+          {children(() => setOpen(false))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** One line of a Menu: what it does, and underneath, what that is for. */
+export function MenuItem({
+  onClick,
+  children,
+  note,
+  disabled,
+  tone = 'plain',
+}: {
+  onClick: () => void;
+  children: ReactNode;
+  note?: string;
+  disabled?: boolean;
+  tone?: 'plain' | 'danger';
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      disabled={disabled}
+      onClick={onClick}
+      className={
+        'block w-full px-3 py-1.5 text-left transition-colors disabled:opacity-40 ' +
+        (disabled ? '' : 'hover:bg-ground ') +
+        (tone === 'danger' ? 'text-red-600' : 'text-ink')
+      }
+    >
+      <span className="block text-ui font-medium">{children}</span>
+      {note && <span className="mt-0.5 block text-micro text-ink-faint">{note}</span>}
+    </button>
+  );
+}
+
+export function MenuHeading({ children }: { children: ReactNode }) {
+  return (
+    <div className="mt-1 border-t border-line-soft px-3 pb-1 pt-2 text-micro font-semibold uppercase tracking-wider text-ink-faint first:mt-0 first:border-t-0 first:pt-1">
+      {children}
+    </div>
   );
 }
 
@@ -322,8 +581,10 @@ export function Disclosure({
     <div>
       <button
         type="button"
+        aria-expanded={open}
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-1.5 rounded px-1 py-1 text-left text-xs text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+        className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-label
+                   text-ink-faint transition-colors hover:bg-ground-soft hover:text-ink-soft"
       >
         <span className="text-[10px] text-slate-400">{open ? '▼' : '▶'}</span>
         {summary}
@@ -355,26 +616,33 @@ export function Panel({
   children,
   actions,
   accent,
+  /**
+   * Keep the tight padding. A stack of a dozen layer cards is read by
+   * scrolling, and room given to each one is room taken from how many are in
+   * sight at once. The panels there is only one of can afford to breathe.
+   */
+  dense,
 }: {
   title: string;
   children: ReactNode;
   actions?: ReactNode;
   accent?: LayerStyle;
+  dense?: boolean;
 }) {
   return (
     <section
-      className="overflow-hidden rounded-md border border-slate-200 bg-white"
+      className="overflow-hidden rounded-card border border-line-soft bg-card shadow-card"
       style={accent ? { borderLeftWidth: '5px', borderLeftColor: accent.stroke } : undefined}
     >
       <header
-        className="flex items-center justify-between gap-2 border-b border-slate-200 px-3 py-2"
+        className="flex items-center justify-between gap-2 border-b border-line-soft px-3 py-2"
         style={accent ? { background: accent.fill, borderBottomColor: accent.stroke } : undefined}
       >
         <h2
           className={
             accent
-              ? 'text-base font-bold tracking-tight'
-              : 'text-[11px] font-semibold uppercase tracking-wider text-slate-500'
+              ? 'text-key font-bold tracking-tight'
+              : 'text-micro font-semibold uppercase tracking-wider text-ink-faint'
           }
           style={accent ? { color: accentInk(accent) } : undefined}
         >
@@ -382,7 +650,7 @@ export function Panel({
         </h2>
         {actions}
       </header>
-      <div className="p-2.5">{children}</div>
+      <div className={dense ? 'p-2.5' : 'p-4'}>{children}</div>
     </section>
   );
 }
@@ -411,17 +679,17 @@ export function KeyFields({
 }) {
   return (
     <div
-      className="key-fields rounded-md border-2 bg-white p-2.5 shadow-sm"
+      className="key-fields rounded-card border-2 bg-card p-3 shadow-card"
       style={{ borderColor: accent?.stroke ?? '#94a3b8' }}
     >
-      <div className="mb-1.5 flex items-baseline gap-2">
+      <div className="mb-2 flex items-baseline gap-2">
         <span
-          className="text-[11px] font-bold uppercase tracking-wider"
+          className="text-micro font-bold uppercase tracking-wider"
           style={{ color: accent ? accentInk(accent) : '#475569' }}
         >
           {caption}
         </span>
-        {note && <span className="text-[11px] font-normal text-slate-500">{note}</span>}
+        {note && <span className="text-micro font-normal text-ink-faint">{note}</span>}
       </div>
       {children}
     </div>

@@ -74,7 +74,7 @@ ${page(`
 ${page(`
   <h2>Entering a pallet</h2>
   <p>
-    A new pallet starts as a complete 1000 × 800 block pallet, because nearly
+    A new pallet starts as a complete 1200 × 800 block pallet, because nearly
     every design is a variation on that one. You change what is different rather
     than building a pallet from nothing.
   </p>

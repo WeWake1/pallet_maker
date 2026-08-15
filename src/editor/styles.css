@@ -3,10 +3,79 @@
 /* Tailwind styles the editor chrome only. The spec sheet has its own styles
    and never sees any of this. */
 
+/*
+ * The words the chrome is written in.
+ *
+ * Every size and every grey in the editor used to be picked at the call site —
+ * a `text-[11px]` here, a `text-slate-500` there — which is how a screen ends up
+ * with four greys that mean nothing in particular and no size that means
+ * "heading". Naming them is what lets a tint be chosen for what it is for
+ * rather than for what number it is.
+ *
+ * Nothing here reaches the sheet: that is a separate document with its own
+ * colours in src/render/theme.ts.
+ */
+@theme {
+  /* The editor set no font at all and took whatever the browser had. */
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
+
+  /* Five steps, each with a job. Readouts and captions are the two that were
+     hard-coded in a dozen places; captions go up a pixel from 11 to 12, which
+     is the difference between glancing at a form and squinting at one. */
+  --text-micro: 0.6875rem; /* 11px — readouts, table heads, footnotes */
+  --text-micro--line-height: 1.45;
+  --text-label: 0.75rem; /* 12px — field captions */
+  --text-label--line-height: 1.4;
+  --text-ui: 0.875rem; /* 14px — controls and body */
+  --text-ui--line-height: 1.5;
+  --text-key: 0.9375rem; /* 15px — the boxed row a design is typed into */
+  --text-key--line-height: 1.4;
+  --text-title: 1.0625rem; /* 17px — a screen's own name */
+  --text-title--line-height: 1.3;
+
+  /* Ink, darkest to faintest. Slate, but said in terms of what it is for. */
+  --color-ink: var(--color-slate-900);
+  --color-ink-soft: var(--color-slate-600);
+  --color-ink-faint: var(--color-slate-500);
+
+  /* Rules and grounds. */
+  --color-line: var(--color-slate-300);
+  --color-line-soft: var(--color-slate-200);
+  --color-ground: var(--color-slate-100);
+  --color-ground-soft: var(--color-slate-50);
+  --color-card: #ffffff;
+
+  /* The one colour that is not grey: focus, and the button that saves. */
+  --color-accent: var(--color-blue-600);
+  --color-accent-ring: var(--color-blue-500);
+
+  --radius-card: 0.5rem;
+  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.06);
+  --shadow-raised: 0 8px 24px -6px rgb(15 23 42 / 0.18), 0 2px 6px rgb(15 23 42 / 0.08);
+}
+
 html,
 body,
 #root {
   height: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  color: var(--color-ink);
+}
+
+/*
+ * One focus ring for the whole editor, on whatever is reached by keyboard.
+ * `:focus-visible` rather than `:focus` so a mouse click does not leave a ring
+ * behind on every button it touches.
+ */
+:where(button, [role='button'], summary, a):focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+  border-radius: 0.25rem;
 }
 
 /* The boxed row on a layer card — see KeyFields in ui.tsx. It is the row that
@@ -14,11 +83,11 @@ body,
    settings around them. Here rather than as a prop on every control. */
 .key-fields input,
 .key-fields select {
-  font-size: 0.9375rem;
-  padding: 0.3rem 0.5rem;
+  font-size: var(--text-key);
+  padding: 0.35rem 0.55rem;
 }
 
 .key-fields label > span {
-  font-size: 0.75rem;
-  color: #334155;
+  font-size: var(--text-label);
+  color: var(--color-slate-700);
 }

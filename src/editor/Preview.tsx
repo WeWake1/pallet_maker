@@ -155,7 +155,7 @@ export function Preview({
         />
       )}
 
-      <div className="flex shrink-0 gap-1 border-t border-slate-200 bg-slate-50 px-2 py-1.5">
+      <div className="flex shrink-0 gap-1 border-t border-line-soft bg-ground-soft px-2 py-2">
         {MODES.map(([value, label]) => (
           <button
             key={value}
@@ -163,10 +163,10 @@ export function Preview({
             onClick={() => setMode(value)}
             aria-pressed={mode === value}
             className={
-              'flex-1 rounded px-2 py-1 text-xs ' +
+              'flex-1 rounded-md px-2 py-1 text-label font-medium transition-colors ' +
               (mode === value
-                ? 'bg-slate-800 text-white'
-                : 'bg-white text-slate-600 hover:bg-slate-200')
+                ? 'bg-slate-800 text-white shadow-xs'
+                : 'bg-card text-ink-soft shadow-xs hover:bg-ground')
             }
           >
             {label}
@@ -210,7 +210,7 @@ function FlatStage({
   return (
     <div
       className={
-        'flex flex-1 items-center justify-center overflow-auto bg-slate-50 p-3 ' +
+        'flex flex-1 items-center justify-center overflow-auto bg-ground-soft p-3 ' +
         (nailMode ? 'cursor-pointer' : '')
       }
       onClick={(event) => onSelect(event.target)}
@@ -246,22 +246,22 @@ function NailControls({
   const changed = layout.nailCrossings.filter((crossing) => crossing.manual).length;
 
   return (
-    <div className="flex shrink-0 items-center gap-2 border-t border-slate-200 bg-white px-2 py-1.5">
+    <div className="flex shrink-0 items-center gap-2 border-t border-line-soft bg-card px-2.5 py-2">
       <button
         type="button"
         onClick={onToggle}
         aria-pressed={on}
         className={
-          'rounded border px-2 py-0.5 text-xs ' +
+          'rounded-md border px-2 py-0.5 text-label font-medium transition-colors ' +
           (on
-            ? 'border-blue-600 bg-blue-600 text-white'
-            : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-100')
+            ? 'border-accent bg-accent text-white'
+            : 'border-line bg-card text-ink-soft shadow-xs hover:bg-ground')
         }
       >
         Place nails
       </button>
 
-      <span className="text-[11px] text-slate-500">
+      <span className="text-micro text-ink-faint">
         {on
           ? `click a crossing to step it 0 → 4 and round · ${dots} nails in this view`
           : `${dots} nails in this view`}
@@ -271,7 +271,7 @@ function NailControls({
         <button
           type="button"
           onClick={() => dispatch({ type: 'clearNailPlacements' })}
-          className="ml-auto rounded border border-slate-300 bg-white px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-100"
+          className="ml-auto rounded-md border border-line bg-card px-2 py-0.5 text-label text-ink-soft shadow-xs transition-colors hover:bg-ground"
           title="Put every crossing back to two on a diagonal, three at the corners"
         >
           Reset {changed}
@@ -336,7 +336,7 @@ function OrbitStage({
   return (
     <div
       ref={box}
-      className="flex-1 cursor-grab touch-none select-none overflow-hidden bg-slate-50 active:cursor-grabbing"
+      className="flex-1 cursor-grab touch-none select-none overflow-hidden bg-ground-soft active:cursor-grabbing"
       onPointerDown={(event) => {
         // The piece under the pointer is remembered now, because capturing the
         // pointer retargets every event after this one at the box itself.
@@ -383,36 +383,36 @@ function OrbitControls({
   onReset: () => void;
 }) {
   const arrow =
-    'flex h-6 w-7 items-center justify-center rounded border border-slate-300 bg-white ' +
-    'text-slate-600 hover:bg-slate-100';
+    'flex h-6 w-7 items-center justify-center rounded-md border border-line bg-card ' +
+    'text-ink-soft shadow-xs transition-colors hover:bg-ground';
 
   return (
-    <div className="flex shrink-0 items-center justify-center gap-3 border-t border-slate-200 bg-white px-2 py-1.5">
+    <div className="flex shrink-0 items-center justify-center gap-3 border-t border-line-soft bg-card px-2.5 py-2">
       <div className="flex items-center gap-1">
-        <button type="button" className={arrow} title="Turn left" onClick={() => onTurn(-STEP, 0)}>
+        <button type="button" className={arrow} title="Turn left" aria-label="Turn left" onClick={() => onTurn(-STEP, 0)}>
           ←
         </button>
         <div className="flex flex-col gap-1">
-          <button type="button" className={arrow} title="Tip up" onClick={() => onTurn(0, -STEP)}>
+          <button type="button" className={arrow} title="Tip up" aria-label="Tip up" onClick={() => onTurn(0, -STEP)}>
             ↑
           </button>
-          <button type="button" className={arrow} title="Tip down" onClick={() => onTurn(0, STEP)}>
+          <button type="button" className={arrow} title="Tip down" aria-label="Tip down" onClick={() => onTurn(0, STEP)}>
             ↓
           </button>
         </div>
-        <button type="button" className={arrow} title="Turn right" onClick={() => onTurn(STEP, 0)}>
+        <button type="button" className={arrow} title="Turn right" aria-label="Turn right" onClick={() => onTurn(STEP, 0)}>
           →
         </button>
       </div>
       <button
         type="button"
         onClick={onReset}
-        className="rounded border border-slate-300 bg-white px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-100"
+        className="rounded-md border border-line bg-card px-2 py-0.5 text-label text-ink-soft shadow-xs transition-colors hover:bg-ground"
         title="Back to the isometric the sheet prints"
       >
         Reset
       </button>
-      <span className="text-[11px] text-slate-400">drag to turn · wheel to zoom</span>
+      <span className="text-micro text-ink-faint">drag to turn · wheel to zoom</span>
     </div>
   );
 }

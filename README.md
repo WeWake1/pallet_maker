@@ -350,7 +350,7 @@ store now. Selecting a board is not a step at all, and neither is an edit that
 landed on nothing; recording either would mean pressing Undo and watching
 nothing happen.
 
-A new pallet starts as a whole plain 1000 × 800 block pallet rather than an
+A new pallet starts as a whole plain 1200 × 800 block pallet rather than an
 empty stack of layers. Nearly every design is a variation on that one, so the
 work is changing numbers rather than building a pallet before anything can be
 seen.

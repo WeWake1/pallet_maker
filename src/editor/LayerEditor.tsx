@@ -7,14 +7,17 @@ import type { LayerStyle } from '../render/theme.js';
 import type { BlockCell, Direction, Layer, LayerContent, SheetSpec, Slot } from '../types.js';
 import type { Action, Selection } from './state.js';
 import { MAX_GRID_SIDE, MAX_SLOTS, sameSource } from './state.js';
+import { HINTS } from './hints.js';
 import {
   Button,
   Check,
   Disclosure,
   Field,
+  Hint,
   KeyFields,
   NumberInput,
   Panel,
+  Readout,
   Select,
   TextInput,
 } from './ui.jsx';
@@ -110,17 +113,32 @@ export function LayerEditor({
 
   return (
     <Panel
+      dense
       title={KIND_LABEL.find(([kind]) => kind === layer.kind)?.[1] ?? layer.kind}
       accent={accent}
       actions={
         <div className="flex gap-1">
-          <Button onClick={() => dispatch({ type: 'moveLayer', layerId: layer.id, by: -1 })} title="Move up">
+          <Button
+            size="sm"
+            label="Move this layer up"
+            onClick={() => dispatch({ type: 'moveLayer', layerId: layer.id, by: -1 })}
+            title="Move up"
+          >
             ↑
           </Button>
-          <Button onClick={() => dispatch({ type: 'moveLayer', layerId: layer.id, by: 1 })} title="Move down">
+          <Button
+            size="sm"
+            label="Move this layer down"
+            onClick={() => dispatch({ type: 'moveLayer', layerId: layer.id, by: 1 })}
+            title="Move down"
+          >
             ↓
           </Button>
-          <Button tone="danger" onClick={() => dispatch({ type: 'removeLayer', layerId: layer.id })}>
+          <Button
+            size="sm"
+            tone="danger"
+            onClick={() => dispatch({ type: 'removeLayer', layerId: layer.id })}
+          >
             Remove
           </Button>
         </div>
@@ -149,24 +167,31 @@ export function LayerEditor({
             onChange={(direction) => dispatch({ type: 'patchLayer', layerId: layer.id, patch: { direction } })}
           />
         </Field>
-        <div className="flex items-end text-xs text-slate-500">
-          {spread ? (
-            <span className={spread.slack < 0 ? 'text-red-600' : ''}>
-              gap {mmLabel(spread.gap)} · slack {mmLabel(spread.slack)}
-            </span>
-          ) : computed?.rows ? (
-            <span>
-              rows {mmLabel(computed.rows.gap)} · cols {mmLabel(computed.cols?.gap ?? 0)}
-            </span>
-          ) : null}
-        </div>
+        {/* Worked out, not typed. Slack going negative is the layer being
+            over-full, which is the one number here that stops a sheet. */}
+        {spread ? (
+          <Readout
+            label="Spacing"
+            hint={spread.slack < 0 ? HINTS.slack : HINTS.gap}
+            tone={spread.slack < 0 ? 'warn' : 'plain'}
+            value={`gap ${mmLabel(spread.gap)} · slack ${mmLabel(spread.slack)}`}
+          />
+        ) : computed?.rows ? (
+          <Readout
+            label="Spacing"
+            hint={HINTS.gap}
+            value={`rows ${mmLabel(computed.rows.gap)} · cols ${mmLabel(computed.cols?.gap ?? 0)}`}
+          />
+        ) : (
+          <div />
+        )}
       </div>
 
       {/* A deck whose boards do not all run the same way is built as one layer
           per direction, marked to share a height rather than to stack. Not
           offered on the top layer, which has nothing above it. */}
       {!first && (
-        <div className="mt-2">
+        <div className="mt-2 flex items-center gap-1.5">
           <Check
             checked={layer.sameLevelAsPrev}
             label="Same level as the layer above — one course of timber, not stacked on it"
@@ -174,36 +199,39 @@ export function LayerEditor({
               dispatch({ type: 'patchLayer', layerId: layer.id, patch: { sameLevelAsPrev } })
             }
           />
+          <Hint text={HINTS.sameLevel} />
         </div>
       )}
 
       {layer.content.type !== 'grid' && (
         <div className="mt-2 grid grid-cols-4 gap-2">
-          <Field label="Span (mm)">
+          <Field label="Span (mm)" hint={HINTS.span}>
             <NumberInput
               value={layer.spanMm ?? 0}
               min={0}
+              placeholder="0 — full width"
               onChange={(value) =>
                 dispatch({ type: 'patchLayer', layerId: layer.id, patch: { spanMm: value > 0 ? value : null } })
               }
             />
           </Field>
-          <Field label="Offset (mm)">
+          <Field label="Offset (mm)" hint={HINTS.offset}>
             <NumberInput
               value={layer.offsetMm}
               onChange={(offsetMm) => dispatch({ type: 'patchLayer', layerId: layer.id, patch: { offsetMm } })}
             />
           </Field>
-          <Field label="Run span (mm)">
+          <Field label="Run span (mm)" hint={HINTS.runSpan}>
             <NumberInput
               value={layer.runSpanMm ?? 0}
               min={0}
+              placeholder="0 — full length"
               onChange={(value) =>
                 dispatch({ type: 'patchLayer', layerId: layer.id, patch: { runSpanMm: value > 0 ? value : null } })
               }
             />
           </Field>
-          <Field label="Run offset (mm)">
+          <Field label="Run offset (mm)" hint={HINTS.runOffset}>
             <NumberInput
               value={layer.runOffsetMm}
               onChange={(runOffsetMm) => dispatch({ type: 'patchLayer', layerId: layer.id, patch: { runOffsetMm } })}
@@ -223,7 +251,7 @@ export function LayerEditor({
           >
             Fit between the boards on this level
           </Button>
-          <span className="text-xs text-slate-500">
+          <span className="text-label text-ink-faint">
             run {fit.runSpanMm} from {fit.runOffsetMm}
           </span>
         </div>
@@ -344,17 +372,29 @@ function Slots({
         defaultOpen={sizeCount(sizes) > 1}
         openWhen={selectedHere}
       >
-        <table className="w-full text-sm">
+        <table className="w-full text-ui">
           <thead>
-            <tr className="text-[10px] uppercase tracking-wide text-slate-400">
+            <tr className="text-micro uppercase tracking-wide text-slate-400">
               <th className="w-8 text-left font-medium">#</th>
               <th className="text-left font-medium">Length</th>
               <th className="text-left font-medium">Width</th>
               <th className="text-left font-medium">Thick</th>
               <th className="text-left font-medium">Material</th>
-              <th className="text-left font-medium">Variant</th>
-              <th className="w-16 text-left font-medium">Nudge</th>
-              <th className="w-20 text-left font-medium">Joined</th>
+              <th className="text-left font-medium">
+                <span className="flex items-center gap-1">
+                  Variant <Hint text={HINTS.variant} />
+                </span>
+              </th>
+              <th className="w-16 text-left font-medium">
+                <span className="flex items-center gap-1">
+                  Nudge <Hint text={HINTS.nudge} />
+                </span>
+              </th>
+              <th className="w-20 text-left font-medium">
+                <span className="flex items-center gap-1">
+                  Joined <Hint text={HINTS.joined} />
+                </span>
+              </th>
               <th className="w-8" />
             </tr>
           </thead>
@@ -409,9 +449,9 @@ function SlotRow({
     <tr
       ref={row}
       onClick={() => dispatch({ type: 'select', selection: { layerId, source: { kind: 'slot', index } } })}
-      className={selected ? 'bg-blue-50 outline outline-1 outline-blue-400' : 'hover:bg-slate-50'}
+      className={selected ? 'bg-blue-50 outline-1 outline-blue-400' : 'hover:bg-ground-soft'}
     >
-      <td className="text-xs text-slate-400">{index + 1}</td>
+      <td className="text-label text-slate-400">{index + 1}</td>
       <td className="pr-1">
         <NumberInput value={slot.length} min={1} onChange={(length) => patch({ length })} />
       </td>
@@ -438,11 +478,17 @@ function SlotRow({
           checked={slot.joinedToPrev}
           disabled={index === 0}
           label=""
+          hiddenLabel={`Board ${index + 1} is joined to the board before it`}
           onChange={(joinedToPrev) => patch({ joinedToPrev })}
         />
       </td>
       <td>
-        <Button tone="danger" onClick={() => dispatch({ type: 'removeSlot', layerId, index })}>
+        <Button
+          size="sm"
+          tone="danger"
+          label={`Remove board ${index + 1}`}
+          onClick={() => dispatch({ type: 'removeSlot', layerId, index })}
+        >
           ×
         </Button>
       </td>
@@ -564,9 +610,9 @@ function Grid({
           summary={componentSummary('block', cellSizes)}
           defaultOpen={sizeCount(cellSizes) > 1}
         >
-          <table className="w-full text-sm">
+          <table className="w-full text-ui">
             <thead>
-              <tr className="text-[10px] uppercase tracking-wide text-slate-400">
+              <tr className="text-micro uppercase tracking-wide text-slate-400">
                 <th className="w-12 text-left font-medium">Cell</th>
                 <th className="text-left font-medium">Length</th>
                 <th className="text-left font-medium">Width</th>
@@ -582,7 +628,7 @@ function Grid({
                     dispatch({ type: 'patchCell', layerId: layer.id, row: r, col: c, patch });
                   return (
                     <tr key={`${r}-${c}`} className="hover:bg-slate-50">
-                      <td className="text-xs text-slate-400">
+                      <td className="text-label text-slate-400">
                         r{r + 1} c{c + 1}
                       </td>
                       <td className="pr-1">

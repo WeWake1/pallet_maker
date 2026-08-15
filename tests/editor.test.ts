@@ -109,7 +109,14 @@ describe('the form', () => {
     const slots = next.pallet.layers[0]!.content;
     if (slots.type !== 'sequence') throw new Error('expected boards');
     expect(slots.slots).toHaveLength(8);
-    expect(slots.slots[7]).toMatchObject({ width: 100, length: 1000, nudgeMm: 0 });
+    // The top deck runs along the length, so a board of it is that long. Read
+    // from the pallet rather than written out, because what is being checked is
+    // that the new board matches the others, not what the starting size is.
+    expect(slots.slots[7]).toMatchObject({
+      width: 100,
+      length: state.pallet.overallLength,
+      nudgeMm: 0,
+    });
   });
 
   /**
