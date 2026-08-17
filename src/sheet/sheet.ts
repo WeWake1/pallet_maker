@@ -8,9 +8,10 @@ import { measureView, renderView } from '../render/views.js';
 import type { ViewMeasure } from '../render/views.js';
 import type { ViewKind } from '../render/project.js';
 import type { Pallet } from '../types.js';
-import type { ComponentRow, NailRow, Pair, SheetContent } from './content.js';
+import type { ComponentRow, HandlingRow, NailRow, Pair, SheetContent } from './content.js';
 import { PROJECTION_NOTE, sheetContent } from './content.js';
-import { DRAWING, LOGO, mmToPx, PAGE, PX_PER_MM, SHEET, WATERMARK } from './layout.js';
+import { HANDLING_INK, handlingIconSvg, handlingMarkSvg } from './handling.js';
+import { DRAWING, HANDLING, LOGO, mmToPx, PAGE, PX_PER_MM, SHEET, WATERMARK } from './layout.js';
 
 /**
  * The specification sheet, as HTML for a browser to print. What is on it is
@@ -250,10 +251,16 @@ export function renderSheet(pallet: Pallet, layout: Layout, options: SheetOption
 
   <div class="body">
     <section class="data">
-      ${block('Overall', pairTable(content.overall))}
-      ${componentsBlock(content.components)}
-      ${nailsBlock(content.nails)}
-      ${block('Load and material', pairTable(content.material) + notesHtml(content.notes))}
+      <!-- Everything here flows down the column and is cut off where the column
+           ends; the handling block below holds the corner whatever happens
+           above it. See HANDLING in layout.ts. -->
+      <div class="flow">
+        ${block('Overall', pairTable(content.overall))}
+        ${componentsBlock(content.components)}
+        ${nailsBlock(content.nails)}
+        ${block('Load and material', pairTable(content.material) + notesHtml(content.notes))}
+      </div>
+      ${handlingBlock(content.handling)}
     </section>
 
     <section class="drawing">
@@ -320,6 +327,27 @@ function dimsCell(length: number, width: number, thickness: number): string {
   return [mmLabel(length), mmLabel(width), mmLabel(thickness)]
     .map((value) => `<span class="d">${value}</span>`)
     .join('<span class="x">×</span>');
+}
+
+/**
+ * What the pallet may be moved with: a tick or a cross, the machine drawn, and
+ * its name. Crossed rows go grey and keep their place, because the sheet has to
+ * be able to say no as plainly as it says yes.
+ */
+function handlingBlock(rows: HandlingRow[]): string {
+  const items = rows
+    .map((row) => {
+      const ink = row.allowed ? HANDLING_INK.allowed : HANDLING_INK.crossed;
+      return (
+        `<li class="${row.allowed ? 'yes' : 'no'}">` +
+        handlingMarkSvg(row.allowed, ink, `${HANDLING.markSize}mm`) +
+        handlingIconSvg(row.method, ink, `${HANDLING.iconSize}mm`) +
+        `<span>${esc(row.label)}</span>` +
+        `</li>`
+      );
+    })
+    .join('');
+  return `<div class="block handling"><h2>Handling</h2><ul>${items}</ul></div>`;
 }
 
 function nailsBlock(nails: SheetContent['nails']): string {
@@ -424,8 +452,17 @@ function styles(rows: DrawingRows): string {
     padding-right: ${SHEET.columnGap / 2}mm;
     display: flex;
     flex-direction: column;
-    gap: 3.2mm;
     overflow: hidden;
+  }
+  /* The blocks that grow with the design. They are cut off at the top of the
+     handling band rather than at the bottom of the page. */
+  .flow {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: ${HANDLING.gapAbove}mm;
   }
   .block h2 {
     font-size: 9pt;
@@ -482,6 +519,30 @@ function styles(rows: DrawingRows): string {
 
   .variant { color: #555; font-weight: 400; }
   .notes { font-size: 9pt; color: #333; margin: 1.4mm 0 0; }
+
+  /* The corner of the written side: what may be put under this pallet, and
+     what may not. Never squeezed and never scrolled off — see HANDLING. */
+  .handling {
+    flex: 0 0 auto;
+    padding-top: ${HANDLING.gapAbove}mm;
+  }
+  .handling ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(${HANDLING.columns}, 1fr);
+  }
+  .handling li {
+    display: flex;
+    align-items: center;
+    gap: ${HANDLING.gap}mm;
+    height: ${HANDLING.rowHeight}mm;
+    font-size: 9.5pt;
+    color: ${HANDLING_INK.allowed};
+  }
+  .handling li.no { color: ${HANDLING_INK.crossed}; }
+  .handling svg { display: block; flex: 0 0 auto; }
 
   .drawing { flex: 1; display: flex; flex-direction: column; min-width: 0; }
   .row { display: flex; gap: ${SHEET.columnGap}mm; margin-bottom: ${SHEET.rowGap}mm; }

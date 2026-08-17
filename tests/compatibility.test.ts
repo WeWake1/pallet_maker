@@ -90,6 +90,7 @@ const absent = {
     'species',
     'staticLoadKg',
     'dynamicLoadKg',
+    'handling',
     'nails',
     'nailPlacements',
     'notes',

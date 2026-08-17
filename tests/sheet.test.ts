@@ -7,8 +7,10 @@ import { measureView, renderView } from '../src/render/views.js';
 import { componentTable, totalPieces } from '../src/sheet/components.js';
 import { sheetContent } from '../src/sheet/content.js';
 import { contentDisposition, downloadName } from '../src/sheet/filename.js';
-import { DRAWING, mmToPx, PAGE, SHEET } from '../src/sheet/layout.js';
+import { DRAWING, HANDLING, handlingHeight, mmToPx, PAGE, SHEET } from '../src/sheet/layout.js';
 import { drawingRows, renderSheet, sheetViews } from '../src/sheet/sheet.js';
+import { renderSheetSvg } from '../src/sheet/svgSheet.js';
+import { HANDLING_METHODS } from '../src/types.js';
 import { loadFixture } from './helpers.js';
 
 /**
@@ -105,8 +107,9 @@ describe('the sheet', () => {
       expect([...html.matchAll(new RegExp(`<text[^>]*>${title}</text>`, 'g'))]).toHaveLength(1);
     }
     // Six drawings inline on the sheet: the five views, and the logo in the
-    // corner, which is vector too rather than a picture of itself.
-    expect([...html.matchAll(/<svg/g)]).toHaveLength(6);
+    // corner, which is vector too rather than a picture of itself. The
+    // handling block adds a mark and an icon for each method it prints.
+    expect([...html.matchAll(/<svg/g)]).toHaveLength(6 + 2 * HANDLING_METHODS.length);
     expect([...html.matchAll(/<svg[^>]*class="logo"/g)]).toHaveLength(1);
   });
 
@@ -338,8 +341,9 @@ describe('the sheet', () => {
       const fixture = loadFixture(name);
       const sheet = renderSheet(fixture, computeLayout(fixture));
       expect(sheet).toContain('</html>');
-      // The five views, plus the logo in the corner.
-      expect([...sheet.matchAll(/<svg/g)]).toHaveLength(6);
+      // The five views, the logo in the corner, and the handling block's mark
+      // and icon per method.
+      expect([...sheet.matchAll(/<svg/g)]).toHaveLength(6 + 2 * HANDLING_METHODS.length);
     }
   });
 });
@@ -602,5 +606,105 @@ describe('the name a sheet downloads as', () => {
     const header = contentDisposition('Palé - Café Ltd - 2026-08-06.pdf', 'inline');
     expect(header).toContain('inline; filename="Pal_ - Caf_ Ltd - 2026-08-06.pdf"');
     expect(header).toContain("filename*=UTF-8''Pal%C3%A9%20-%20Caf%C3%A9%20Ltd%20-%202026-08-06.pdf");
+  });
+});
+
+/**
+ * What the pallet may be moved with, in the bottom left corner.
+ *
+ * The block is not the three-state kind the rows above it are. It is a yes or a
+ * no per method, every method is on every sheet, and a no prints as plainly as a
+ * yes — which is the whole reason it is there. A pallet that must not be slung
+ * says so on the sheet or it gets slung.
+ */
+describe('the handling block', () => {
+  const pallet = loadFixture('block-1000x800');
+  const layout = computeLayout(pallet);
+  const html = renderSheet(pallet, layout);
+  const svg = renderSheetSvg(pallet, layout);
+
+  /** The `<li>` classes, in the order they print: yes for a tick, no for a cross. */
+  const marks = (page: string): string[] =>
+    [...page.matchAll(/<li class="(yes|no)">/g)].map((found) => found[1]!);
+
+  it('names every method on every sheet, whatever the design allows', () => {
+    // The printed sheet sets its headings in capitals with CSS; the SVG has no
+    // stylesheet to do it with and writes them out that way.
+    expect(textOf(html)).toContain('Handling');
+    expect(svg).toContain('HANDLING');
+    for (const page of [textOf(html), svg]) {
+      for (const label of ['Hand pallet truck', 'Forklift', 'Crane', 'Conveyor', 'Manual lift']) {
+        expect(page).toContain(label);
+      }
+    }
+  });
+
+  it('starts a design at the two ways nearly every pallet is moved', () => {
+    expect(pallet.handling).toEqual(['pallet_truck', 'forklift']);
+    expect(sheetContent(pallet, layout).handling).toEqual([
+      { method: 'pallet_truck', label: 'Hand pallet truck', allowed: true },
+      { method: 'forklift', label: 'Forklift', allowed: true },
+      { method: 'crane', label: 'Crane', allowed: false },
+      { method: 'conveyor', label: 'Conveyor', allowed: false },
+      { method: 'manual', label: 'Manual lift', allowed: false },
+    ]);
+    expect(marks(html)).toEqual(['yes', 'yes', 'no', 'no', 'no']);
+  });
+
+  it('ticks and crosses what the design says, not what it was clicked in', () => {
+    // Typed in any order, with a repeat: the sheet still prints five rows in the
+    // catalogue's order, and the repeat is one row.
+    const slung = { ...pallet, handling: ['crane' as const, 'pallet_truck' as const, 'crane' as const] };
+    expect(sheetContent(slung, layout).handling.map((row) => row.allowed)).toEqual([
+      true,
+      false,
+      true,
+      false,
+      false,
+    ]);
+    expect(marks(renderSheet(slung, layout))).toEqual(['yes', 'no', 'yes', 'no', 'no']);
+  });
+
+  it('says no as clearly as it says yes', () => {
+    // Every method crossed is a statement, and a legal one: this pallet is
+    // moved by none of them. It must still print all five rows.
+    const none = { ...pallet, handling: [] };
+    expect(marks(renderSheet(none, layout))).toEqual(['no', 'no', 'no', 'no', 'no']);
+    expect(textOf(renderSheet(none, layout))).toContain('Crane');
+  });
+
+  it('draws each method rather than only naming it', () => {
+    // A tick beside a word is read across a workshop; a word is not. One mark
+    // and one icon per method, on both presentations of the sheet.
+    expect([...html.matchAll(/<li class="(?:yes|no)">/g)]).toHaveLength(HANDLING_METHODS.length);
+    expect([...html.matchAll(/viewBox="0 0 24 24"/g)]).toHaveLength(2 * HANDLING_METHODS.length);
+    // The SVG sheet has no nested <svg> to give an icon its own box, so each is
+    // a scaled <g> instead — see svgSheet.ts.
+    expect([...svg.matchAll(/scale\(/g)].length).toBeGreaterThanOrEqual(2 * HANDLING_METHODS.length);
+  });
+
+  it('keeps the corner whatever the table above it does', () => {
+    // The block is placed, not flowed. A design with parts enough to fill the
+    // column must not push it off the page — which is what a flowed block did.
+    const long = {
+      ...pallet,
+      layers: [...pallet.layers, ...pallet.layers.map((layer, i) => ({ ...layer, id: `${layer.id}-x${i}`, order: layer.order + 10 }))],
+    };
+    const crowded = renderSheetSvg(long, computeLayout(long));
+    expect(crowded).toContain('HANDLING');
+    for (const label of ['Hand pallet truck', 'Crane', 'Manual lift']) {
+      expect(crowded).toContain(label);
+    }
+  });
+
+  it('reserves the same band on both sheets', () => {
+    // Three rows of two, plus the heading and the gap above it.
+    expect(handlingHeight(HANDLING_METHODS.length)).toBeCloseTo(
+      HANDLING.gapAbove + HANDLING.headingHeight + 3 * HANDLING.rowHeight,
+      6,
+    );
+    // The printed sheet reserves it by holding the block out of the flow.
+    expect(html).toMatch(/\.handling \{[^}]*flex: 0 0 auto/);
+    expect(html).toMatch(/\.flow \{[^}]*overflow: hidden/);
   });
 });

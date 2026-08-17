@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { today } from './ids.js';
-import { MAX_NAILS_PER_CROSSING, NOT_APPLICABLE } from './types.js';
+import { DEFAULT_HANDLING, MAX_NAILS_PER_CROSSING, NOT_APPLICABLE } from './types.js';
 import type { Client, Pallet } from './types.js';
 
 /**
@@ -156,6 +156,13 @@ export const PalletSchema = z.object({
   planing: z.enum(['', 'na', 'none', '1_side', '2_side', '4_side']),
   staticLoadKg: loadKg.optional(),
   dynamicLoadKg: loadKg.optional(),
+
+  // A yes or a no per method, not the three states above: see HandlingMethod.
+  // Absent on every document written before the sheet said how a pallet may be
+  // moved, and those all meant the two ways nearly every pallet is moved.
+  handling: z
+    .array(z.enum(['pallet_truck', 'forklift', 'crane', 'conveyor', 'manual']))
+    .default(() => [...DEFAULT_HANDLING]),
 
   nails: z.array(NailSpecSchema).default([]),
   // Absent on a document written before nails were placed by hand: every

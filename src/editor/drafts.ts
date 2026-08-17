@@ -1,3 +1,4 @@
+import { DEFAULT_HANDLING } from '../types.js';
 import type { Pallet } from '../types.js';
 
 /**
@@ -65,6 +66,31 @@ function isPallet(value: unknown): value is Pallet {
   );
 }
 
+/**
+ * A draft written before a field existed, given that field.
+ *
+ * Everything else in this program reads a document through the schema, which is
+ * where a field added later gets its default — the rule
+ * `tests/compatibility.test.ts` exists to hold. A draft is the one document that
+ * does not go through it, because half its purpose is to hold a design too
+ * unfinished to pass. So the lists a draft is allowed to be missing are filled
+ * in here instead: an old draft opens as a design with nothing ticked twice,
+ * rather than taking the editor down on the first thing that counts them.
+ *
+ * The draft's own values win — this only supplies what is not there at all.
+ */
+function completed(pallet: Pallet): Pallet {
+  // It was JSON a moment ago, whatever the type on it says, and an old one has
+  // whichever of these the version that wrote it had never heard of.
+  const held = pallet as Partial<Pallet>;
+  return {
+    ...pallet,
+    handling: held.handling ?? [...DEFAULT_HANDLING],
+    nails: held.nails ?? [],
+    nailPlacements: held.nailPlacements ?? [],
+  };
+}
+
 function read(storage: DraftStorage, key: string): Draft | null {
   const raw = storage.getItem(key);
   if (raw === null) return null;
@@ -76,7 +102,7 @@ function read(storage: DraftStorage, key: string): Draft | null {
       storage.removeItem(key);
       return null;
     }
-    return { pallet: parsed.pallet, at: parsed.at };
+    return { pallet: completed(parsed.pallet), at: parsed.at };
   } catch {
     storage.removeItem(key);
     return null;

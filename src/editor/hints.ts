@@ -42,6 +42,8 @@ export const HINTS = {
   dynamicLoad:
     'What the pallet will carry while it is being moved. Always the lower of the two figures.',
   species: 'The timber the pallet is made from — pine, hardwood, and so on.',
+  handling:
+    'What the finished pallet may be moved with. Ticked prints as a tick on the sheet, unticked as a cross — the sheet says both, because what a pallet must not be lifted with is what gets it dropped.',
   palletCode: 'The shop’s own number for this design. A design can be drawn, saved and printed before it has one.',
   clientPartNo: 'The number the client knows this pallet by, which is rarely the same as the shop’s.',
   sheetNote: 'A line printed in the title block beside the date — a client drawing number, or “(old)”.',
@@ -70,6 +72,7 @@ export const GLOSSARY: Array<{ term: string; hint: HintKey }> = [
   { term: 'Static load', hint: 'staticLoad' },
   { term: 'Dynamic load', hint: 'dynamicLoad' },
   { term: 'Planing', hint: 'planing' },
+  { term: 'Handling', hint: 'handling' },
   { term: 'cft', hint: 'cft' },
 ];
 
@@ -94,6 +97,7 @@ const FIELD_LABEL: Record<string, string> = {
   entry: 'Entry',
   species: 'Species',
   planing: 'Planing',
+  handling: 'Handling',
   staticLoadKg: 'Static load',
   dynamicLoadKg: 'Dynamic load',
   note: 'Sheet note',

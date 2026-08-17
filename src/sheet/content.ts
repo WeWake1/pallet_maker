@@ -1,10 +1,11 @@
 import type { Layout } from '../geometry/types.js';
 import { mmLabel } from '../render/scene.js';
-import { notApplicable } from '../types.js';
-import type { LoadKg, Pallet } from '../types.js';
+import { HANDLING_METHODS, notApplicable } from '../types.js';
+import type { HandlingMethod, LoadKg, Pallet } from '../types.js';
 import { componentTable } from './components.js';
 import type { ComponentRow } from './components.js';
 import { documentName } from './filename.js';
+import { HANDLING_LABEL } from './handling.js';
 
 export type { ComponentRow };
 
@@ -83,6 +84,13 @@ export interface SheetHeading {
   note: string;
 }
 
+/** One method of moving the pallet, and whether this design is cleared for it. */
+export interface HandlingRow {
+  method: HandlingMethod;
+  label: string;
+  allowed: boolean;
+}
+
 export interface NailRow {
   label: string;
   type: string;
@@ -100,6 +108,12 @@ export interface SheetContent {
   /** Absent where the design has no nail schedule typed on it. */
   nails: { rows: NailRow[]; total: number } | null;
   material: Pair[];
+  /**
+   * Every handling method, ticked or crossed. The whole list on every sheet:
+   * what a pallet must not be lifted with is the half of the answer that gets
+   * it dropped, and a method left off the sheet has not been answered at all.
+   */
+  handling: HandlingRow[];
   /** Free text under the material block, or empty. */
   notes: string;
   /** For the document title and the download's file name. */
@@ -135,6 +149,7 @@ export function sheetContent(pallet: Pallet, layout: Layout): SheetContent {
     components: componentTable(pallet, layout).flatMap((group) => group.rows),
     nails: nailRows(pallet),
     material: materialRows(pallet),
+    handling: handlingRows(pallet),
     notes: pallet.notes ?? '',
     title: documentName(pallet),
   };
@@ -200,6 +215,22 @@ function nailRows(pallet: Pallet): { rows: NailRow[]; total: number } | null {
     })),
     total: pallet.nails.reduce((sum, nail) => sum + (nail.count ?? 0), 0),
   };
+}
+
+/**
+ * What the pallet may be moved with, in the order the catalogue states it.
+ *
+ * Read off the document rather than out of it: the order is the catalogue's, so
+ * two designs' sheets carry the same five rows in the same five places whatever
+ * order somebody happened to tick them in, and a method the document names twice
+ * is still one row.
+ */
+function handlingRows(pallet: Pallet): HandlingRow[] {
+  return HANDLING_METHODS.map((method) => ({
+    method,
+    label: HANDLING_LABEL[method],
+    allowed: pallet.handling.includes(method),
+  }));
 }
 
 function materialRows(pallet: Pallet): Pair[] {

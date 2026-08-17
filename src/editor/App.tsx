@@ -7,9 +7,10 @@ import { analysePallet } from '../geometry/layout.js';
 import { LAYER_STYLE } from '../render/theme.js';
 import { PalletSchema, parsePallet } from '../schema.js';
 import { downloadName } from '../sheet/filename.js';
+import { handlingCatalogue, handlingIconSvg } from '../sheet/handling.js';
 import { renderSheet } from '../sheet/sheet.js';
-import { NOT_APPLICABLE } from '../types.js';
-import type { Client, LayerKind, Pallet, Unstated } from '../types.js';
+import { HANDLING_METHODS, NOT_APPLICABLE } from '../types.js';
+import type { Client, HandlingMethod, LayerKind, Pallet, Unstated } from '../types.js';
 import { api } from './api.js';
 import type { ClientDesigns } from './api.js';
 import { Dashboard } from './Dashboard.jsx';
@@ -27,6 +28,7 @@ import type { Action } from './state.js';
 import { emptyPallet, newPallet } from './templates.js';
 import {
   Button,
+  Check,
   Field,
   Hint,
   Menu,
@@ -1157,6 +1159,8 @@ function Editor({
               </div>
             </div>
 
+            <Handling pallet={pallet} patch={patch} />
+
             <div className="mt-5">
               <SectionHeading>Load and notes</SectionHeading>
               <div className="grid grid-cols-4 gap-3">
@@ -1270,6 +1274,59 @@ function Editor({
         </div>
       </div>
     </>
+  );
+}
+
+/**
+ * What the pallet may be moved with — the block printed in the corner of the
+ * sheet, edited with the same icons it prints with.
+ *
+ * A yes or a no each, not the three states the fields above it have. Ticking is
+ * a claim about what the shop may put under this pallet, so the list is rebuilt
+ * from the catalogue on every change: the document then carries the methods in
+ * the order they print, once each, whatever order they were clicked in.
+ */
+function Handling({
+  pallet,
+  patch,
+}: {
+  pallet: Pallet;
+  patch: (patch: Partial<Pallet>) => void;
+}) {
+  const toggle = (method: HandlingMethod, on: boolean): void => {
+    patch({
+      handling: HANDLING_METHODS.filter((each) =>
+        each === method ? on : pallet.handling.includes(each),
+      ),
+    });
+  };
+
+  return (
+    <div className="mt-5" id={fieldId('handling')}>
+      <SectionHeading note="printed in the corner of the sheet, ticked and crossed">
+        Handling
+      </SectionHeading>
+      <div className="flex flex-wrap gap-x-5 gap-y-2">
+        {handlingCatalogue().map(({ method, label }) => (
+          <Check
+            key={method}
+            checked={pallet.handling.includes(method)}
+            onChange={(on) => toggle(method, on)}
+            label={label}
+            strikeWhenOff
+            // The sheet's own icon, taking its colour from the label around it,
+            // so the row on screen is the row on paper.
+            icon={
+              <span
+                className="inline-block h-5 w-5 shrink-0"
+                dangerouslySetInnerHTML={{ __html: handlingIconSvg(method, 'currentColor', '100%') }}
+              />
+            }
+          />
+        ))}
+      </div>
+      <p className="mt-2 text-micro text-ink-faint">{HINTS.handling}</p>
+    </div>
   );
 }
 

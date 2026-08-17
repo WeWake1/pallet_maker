@@ -138,6 +138,33 @@ describe('the list of drafts', () => {
     expect(readDraft('mangled', storage)).toBeNull();
   });
 
+  /**
+   * A draft is the one document in this program that does not come back through
+   * the schema — half its purpose is to hold a design too unfinished to pass —
+   * so it is also the one that can arrive missing a field added since it was
+   * written. It opens with the default rather than taking the editor down.
+   */
+  it('opens a draft written before a field existed', () => {
+    const storage = new FakeStorage();
+    const old = newPallet(CLIENT) as Partial<Pallet>;
+    delete old.handling;
+    delete old.nails;
+    delete old.nailPlacements;
+    storage.setItem(`pallet-draft:${old.id!}`, JSON.stringify({ at: '2026-08-03', pallet: old }));
+
+    const recovered = readDraft(old.id!, storage)!;
+    expect(recovered.pallet.handling).toEqual(['pallet_truck', 'forklift']);
+    expect(recovered.pallet.nails).toEqual([]);
+    expect(recovered.pallet.nailPlacements).toEqual([]);
+  });
+
+  it('leaves a draft that states its own handling alone, including none at all', () => {
+    const storage = new FakeStorage();
+    const crossed = { ...newPallet(CLIENT), handling: [] };
+    writeDraft(crossed, storage);
+    expect(readDraft(crossed.id, storage)!.pallet.handling).toEqual([]);
+  });
+
   it('clears several at once, for a client who is no longer on the books', () => {
     const storage = new FakeStorage();
     const first = named('one');

@@ -55,6 +55,42 @@ export type Entry = Unstated | '2_way' | '4_way' | 'partial_4way';
 
 export type Planing = Unstated | 'none' | '1_side' | '2_side' | '4_side';
 
+/**
+ * What the finished pallet may be moved with.
+ *
+ * Not the three states the attributes above have. A handling method is asked as
+ * a yes or a no — the shop either may put a fork in this pallet or may not — and
+ * a method nobody has thought about is a method nobody has cleared, so it prints
+ * crossed rather than blank. The whole list is printed on every sheet, ticked
+ * and crossed, because what a pallet must *not* be lifted with is the half of
+ * the answer that gets it dropped.
+ */
+export type HandlingMethod =
+  /** The hydraulic hand truck whose forks go into the pallet itself. */
+  | 'pallet_truck'
+  | 'forklift'
+  /** Slung and lifted, by crane or hoist. */
+  | 'crane'
+  /** Run over a roller bed, which the underside has to be able to cross. */
+  | 'conveyor'
+  /** Light enough to be picked up and carried. */
+  | 'manual';
+
+/** Every method, in the order the sheet prints them. */
+export const HANDLING_METHODS: readonly HandlingMethod[] = [
+  'pallet_truck',
+  'forklift',
+  'crane',
+  'conveyor',
+  'manual',
+];
+
+/**
+ * What a design allows before anyone says otherwise: the two ways nearly every
+ * pallet in the yard is moved. Everything else is cleared per design.
+ */
+export const DEFAULT_HANDLING: readonly HandlingMethod[] = ['pallet_truck', 'forklift'];
+
 export type LayerKind =
   | 'top_deck'
   | 'bearer'
@@ -269,6 +305,12 @@ export interface Pallet {
   planing: Planing;
   staticLoadKg?: LoadKg;
   dynamicLoadKg?: LoadKg;
+
+  /**
+   * The handling methods this design is cleared for. Anything not in the list
+   * prints crossed on the sheet. See {@link HandlingMethod}.
+   */
+  handling: HandlingMethod[];
 
   /** The written nail schedule. Independent of the dots on the drawing. */
   nails: NailSpec[];

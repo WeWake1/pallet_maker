@@ -4,9 +4,10 @@ import type { Layout } from '../geometry/types.js';
 import { mmLabel } from '../render/scene.js';
 import { el, esc, fmt, fragmentSize, line, rect, text } from '../render/svg.js';
 import type { Pallet } from '../types.js';
-import type { ComponentRow, Pair, SheetContent } from './content.js';
+import type { ComponentRow, HandlingRow, Pair, SheetContent } from './content.js';
 import { PROJECTION_NOTE, sheetContent } from './content.js';
-import { DRAWING, LOGO, PAGE, PX_PER_MM, SHEET, WATERMARK } from './layout.js';
+import { HANDLING_INK, ICON_BOX, handlingIcon, handlingMark } from './handling.js';
+import { DRAWING, HANDLING, LOGO, PAGE, PX_PER_MM, SHEET, WATERMARK, handlingHeight } from './layout.js';
 import { drawingRows, sheetViews } from './sheet.js';
 import type { DrawingRows } from './sheet.js';
 
@@ -160,7 +161,11 @@ function headerBand(content: SheetContent): string {
 function dataColumn(content: SheetContent): string {
   const left = PAGE.padding;
   const top = PAGE.padding + SHEET.headerHeight + SHEET.headerGap;
-  const bottom = PAGE.height - PAGE.padding;
+  const foot = PAGE.height - PAGE.padding;
+  // The handling band holds the bottom corner, and everything that flows stops
+  // at the top of it — the printed sheet reserves the same band with a flex
+  // basis. See HANDLING in layout.ts.
+  const bottom = foot - handlingHeight(content.handling.length);
 
   let y = top;
   const parts: string[] = [];
@@ -205,14 +210,67 @@ function dataColumn(content: SheetContent): string {
 
   return (
     parts.join('') +
+    handlingBand(content.handling, left, foot) +
     // The rule between the written side and the drawings.
     line(
       px(left + SHEET.dataWidth),
       px(top),
       px(left + SHEET.dataWidth),
-      px(bottom),
+      px(foot),
       { stroke: '#bbbbbb', 'stroke-width': px(0.14) },
     )
+  );
+}
+
+/**
+ * The handling block, set from the bottom of the column up.
+ *
+ * The one part of the written side that is placed rather than flowed, because
+ * it is the one part that has to be there whatever the table above it did.
+ */
+function handlingBand(rows: HandlingRow[], left: number, foot: number): string {
+  const top = foot - handlingHeight(rows.length) + HANDLING.gapAbove;
+  const columnWidth = DATA_INNER / HANDLING.columns;
+  const parts = [
+    label(left, top + 3, 'HANDLING', {
+      size: 9,
+      weight: 700,
+      fill: MUTED,
+      'letter-spacing': fmt(px(0.23)),
+    }),
+  ];
+
+  for (const [index, row] of rows.entries()) {
+    const x = left + (index % HANDLING.columns) * columnWidth;
+    const y = top + HANDLING.headingHeight + Math.floor(index / HANDLING.columns) * HANDLING.rowHeight;
+    const ink = row.allowed ? HANDLING_INK.allowed : HANDLING_INK.crossed;
+    const middle = y + HANDLING.rowHeight / 2;
+    parts.push(
+      placed(handlingMark(row.allowed, ink), x, middle, HANDLING.markSize),
+      placed(handlingIcon(row.method, ink), x + HANDLING.markSize + HANDLING.gap, middle, HANDLING.iconSize),
+      // Set on the middle of the row rather than on a baseline of its own, so
+      // the name sits with the picture it names however the two are sized.
+      label(x + HANDLING.markSize + HANDLING.iconSize + 2 * HANDLING.gap, middle, row.label, {
+        size: 9.5,
+        fill: ink,
+        baseline: 'central',
+      }),
+    );
+  }
+
+  return parts.join('');
+}
+
+/** One icon, scaled out of its 24-unit box and centred on `middle`. */
+function placed(icon: string, x: number, middle: number, size: number): string {
+  return el(
+    'g',
+    {
+      transform:
+        `translate(${fmt(px(x))} ${fmt(px(middle - size / 2))})` +
+        ` scale(${fmt(px(size) / ICON_BOX)})`,
+    },
+    icon,
   );
 }
 

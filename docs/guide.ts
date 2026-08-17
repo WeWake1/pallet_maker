@@ -91,6 +91,13 @@ ${page(`
       correct that one. <strong>Add board</strong> and the <strong>×</strong>
       to remove one are in there too.
     </li>
+    <li>
+      Under <strong>Handling</strong>, tick what the finished pallet may be
+      moved with. A hand pallet truck and a forklift are ticked to start with.
+      All five print in the corner of the sheet either way — a tick for what may
+      be used, a cross for what may not — so untick anything this pallet will
+      not take.
+    </li>
     <li>Press <strong>Save</strong>.</li>
   </ol>
 

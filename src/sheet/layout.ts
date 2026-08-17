@@ -35,6 +35,40 @@ export const SHEET = {
 } as const;
 
 /**
+ * The handling block, in the bottom left corner of the written column.
+ *
+ * It holds that corner rather than following the blocks above it. A sheet is
+ * read in the same order every time and the corner is where the eye goes for it,
+ * and — the practical half — the block above it is the components table, which
+ * grows with the design. Flowing after it would put the handling of a
+ * twelve-part pallet off the bottom of the page, and the one thing on the sheet
+ * that says what must not be put under this pallet is not a thing to lose to a
+ * long table. So the band is reserved and the tables clip against it.
+ *
+ * Two columns, because five methods down one would cost 35 mm of a column the
+ * components table is already competing for, and three rows of two cost 21.
+ */
+export const HANDLING = {
+  columns: 2,
+  rowHeight: 6.8,
+  /** The tick or cross beside each icon. */
+  markSize: 3.6,
+  iconSize: 6.4,
+  /** Between the mark, the icon and the label. */
+  gap: 1.5,
+  /** The block's own heading, the same as every other heading on the column. */
+  headingHeight: 4.4,
+  /** Between the last block above and this one. */
+  gapAbove: 3.2,
+} as const;
+
+/** How deep the handling band is for a given number of methods. */
+export function handlingHeight(methods: number): number {
+  const rows = Math.ceil(methods / HANDLING.columns);
+  return HANDLING.gapAbove + HANDLING.headingHeight + rows * HANDLING.rowHeight;
+}
+
+/**
  * The logo in the corner. Nearly square, so the height is what to set; it fills
  * the footer band exactly, which is what that band was deepened for.
  */

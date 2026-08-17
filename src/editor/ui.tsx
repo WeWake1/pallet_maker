@@ -393,15 +393,30 @@ export function Check({
   /** Where the label is a column heading elsewhere, and the box needs its own. */
   hiddenLabel,
   disabled,
+  /** Drawn between the box and the label — for a choice that has a picture. */
+  icon,
+  /**
+   * Show an unticked box as struck off rather than merely not ticked. For the
+   * choice where not ticking it is itself an answer, and prints as one.
+   */
+  strikeWhenOff,
 }: {
   checked: boolean;
   onChange: (checked: boolean) => void;
   label: string;
   hiddenLabel?: string;
   disabled?: boolean;
+  icon?: ReactNode;
+  strikeWhenOff?: boolean;
 }) {
+  const struck = strikeWhenOff === true && !checked;
   return (
-    <label className="flex items-center gap-1.5 text-ui text-slate-700">
+    <label
+      className={
+        'flex items-center gap-1.5 text-ui ' +
+        (struck ? 'text-ink-faint line-through decoration-line' : 'text-slate-700')
+      }
+    >
       <input
         type="checkbox"
         className="h-3.5 w-3.5 rounded border-line accent-(--color-accent)"
@@ -410,6 +425,7 @@ export function Check({
         aria-label={hiddenLabel}
         onChange={(event) => onChange(event.target.checked)}
       />
+      {icon}
       {label}
     </label>
   );

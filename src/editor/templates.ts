@@ -1,4 +1,5 @@
 import { newId, today } from '../ids.js';
+import { DEFAULT_HANDLING } from '../types.js';
 import type {
   BlockCell,
   BlockGrid,
@@ -140,6 +141,7 @@ export function newPallet(client: { id: string; name: string }): Pallet {
     entry: '4_way',
     species,
     planing: 'none',
+    handling: [...DEFAULT_HANDLING],
     // Both empty: a schedule is typed only where there is one to state, and
     // every crossing takes the default nail count until one is clicked.
     nails: [],
@@ -189,6 +191,12 @@ export function emptyPallet(client: { id: string; name: string }): Pallet {
     entry: '',
     species: 'pine',
     planing: '',
+    // Not the exception the fields above are. A checkbox has no "nobody has
+    // said yet", and an empty list says the pallet may not be moved at all,
+    // which is a stronger claim than the truth about any pallet. So even the
+    // design that assumes nothing starts at the two ways nearly all of them
+    // are moved, and is corrected where it is wrong.
+    handling: [...DEFAULT_HANDLING],
     nails: [],
     nailPlacements: [],
     updatedAt: today(),

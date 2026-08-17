@@ -17,6 +17,7 @@ component.
 | [src/render/](src/render/) | SVG views, built from `PlacedPiece[]` alone |
 | [src/sheet/](src/sheet/) | The A4 sheet, its PDF export and its SVG export |
 | [src/sheet/content.ts](src/sheet/content.ts) | What the sheet says, with nothing about how it looks |
+| [src/sheet/handling.ts](src/sheet/handling.ts) | What the pallet may be moved with, and the icons for it |
 | [src/brand/](src/brand/) | The company name, the logo and the company font |
 | [src/editor/](src/editor/) | The React editor: form, live preview, nudge |
 | [docs/guide.ts](docs/guide.ts) | The user guide, drawings and all |
@@ -28,6 +29,7 @@ component.
 | [src/cli/layout.ts](src/cli/layout.ts) | Loads a JSON pallet, prints `PlacedPiece[]` |
 | [src/cli/views.ts](src/cli/views.ts) | Writes the views to SVG files |
 | [src/cli/sheet.ts](src/cli/sheet.ts) | Writes the specification sheet as HTML, PDF and SVG |
+| [assets/icons/](assets/icons/) | The artwork the handling icons were drawn from |
 | [fixtures/](fixtures/) | Hand-written pallet documents used by the tests |
 | [fixtures/stored/](fixtures/stored/) | Documents frozen as an earlier version wrote them. Never edited |
 | [tests/](tests/) | Vitest suites |
@@ -129,6 +131,37 @@ into a field, or picked as *not applicable* from a list — the whole row comes
 off the sheet and the rows below it close up. Species, planing, both loads,
 type, entry and deck all work this way; the overall size and the two tolerances
 are on every sheet whatever the design.
+
+### Handling
+
+The bottom left corner says what the finished pallet may be moved with: a hand
+pallet truck, a forklift, a crane, a conveyor, a manual lift — each drawn, and
+each ticked or crossed ([src/sheet/handling.ts](src/sheet/handling.ts)).
+
+**Not the three states above.** A handling method is asked as a yes or a no, and
+a method nobody has cleared prints crossed rather than blank. Every method is on
+every sheet, ticked and crossed alike, because what a pallet must *not* be lifted
+with is the half of the answer that gets it dropped. A new design starts with the
+hand pallet truck and the forklift ticked, which is how nearly every pallet in
+the yard is moved; the rest are cleared per design.
+
+The block **holds the corner rather than flowing after the tables above it**. The
+components table grows with the design, and a flowed handling block would go off
+the bottom of a twelve-part pallet's sheet — so the band is reserved and the
+tables clip against it. Both presenters reserve the same band, the printed one by
+holding the block out of the flow and the SVG by placing it from the bottom up.
+
+Adding a sixth method is a line in `HANDLING_METHODS`, a label and an icon: the
+icons are plain shapes in a 24-unit box, drawn once and used by the printed
+sheet, the SVG and the editor's own checkbox row, so none of the three can drift
+from the others.
+
+**None of them is a picture.** The pallet truck and the forklift are drawn from
+the artwork in [assets/icons/](assets/icons/), the way the mark in
+[src/brand/logo.ts](src/brand/logo.ts) is drawn from the logo PNG: a raster
+`<image>` is one of the things that makes a page-layout program flatten the whole
+sheet, and a 512-pixel drawing set 6.4 mm wide prints as a smudge. Change the
+artwork and the shapes have to be drawn again — nothing reads those files.
 
 The drawings run top and bottom view on the first row, side and end view on the
 second, isometric across the full width on the third: plans with plans,
