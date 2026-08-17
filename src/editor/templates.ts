@@ -5,7 +5,6 @@ import type {
   Direction,
   Layer,
   LayerKind,
-  NailSpec,
   Pallet,
   Slot,
 } from '../types.js';
@@ -111,17 +110,6 @@ export function newLayer(
 }
 
 /**
- * The three joints a block pallet is nailed at, as the rows of a schedule
- * waiting to be filled in. Sizes and counts are left blank because they are the
- * estimator's to work out — nothing can read them off the drawing.
- */
-export const DEFAULT_NAILS: NailSpec[] = [
-  { label: 'top board to centre board', type: 'wire nail' },
-  { label: 'centre board to block', type: 'wire nail' },
-  { label: 'bottom board to block', type: 'wire nail' },
-];
-
-/**
  * A whole plain 1200 x 800 block pallet to start from.
  *
  * Nearly every design is a variation on this one, so a new pallet starts as a
@@ -152,8 +140,9 @@ export function newPallet(client: { id: string; name: string }): Pallet {
     entry: '4_way',
     species,
     planing: 'none',
-    nails: DEFAULT_NAILS.map((nail) => ({ ...nail })),
-    // Empty: every crossing takes the default until one is clicked.
+    // Both empty: a schedule is typed only where there is one to state, and
+    // every crossing takes the default nail count until one is clicked.
+    nails: [],
     nailPlacements: [],
     updatedAt: today(),
     layers: [
@@ -200,8 +189,6 @@ export function emptyPallet(client: { id: string; name: string }): Pallet {
     entry: '',
     species: 'pine',
     planing: '',
-    // The default schedule names the joints of a block pallet, and this is not
-    // one yet.
     nails: [],
     nailPlacements: [],
     updatedAt: today(),

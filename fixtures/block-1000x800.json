@@ -12,20 +12,6 @@
   "planing": "none",
   "staticLoadKg": 4000,
   "dynamicLoadKg": 1500,
-  "nails": [
-    {
-      "label": "top board to centre board",
-      "type": "wire nail"
-    },
-    {
-      "label": "centre board to block",
-      "type": "wire nail"
-    },
-    {
-      "label": "bottom board to block",
-      "type": "wire nail"
-    }
-  ],
   "layers": [
     {
       "id": "top",

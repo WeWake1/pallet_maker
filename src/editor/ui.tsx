@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { ReactNode, RefObject } from 'react';
+import { createPortal } from 'react-dom';
 import { shade } from '../render/theme.js';
 import type { LayerStyle } from '../render/theme.js';
 import { NOT_APPLICABLE } from '../types.js';
@@ -19,15 +20,26 @@ const inputClass =
  * A bubble opened by a click has two ways of being finished with: clicking
  * somewhere else, and pressing Escape. Both have to work, or the thing stays on
  * screen and has to be hunted down and clicked again.
+ *
+ * `also` is for a bubble that is not inside the thing that opened it — one
+ * rendered through a portal, as Menu's is. Without it a click on the bubble
+ * itself counts as a click somewhere else: the mousedown closes it, and the
+ * button the click was aimed at is gone before the click lands on it.
  */
-function useDismiss(open: boolean, close: () => void) {
+function useDismiss(
+  open: boolean,
+  close: () => void,
+  ...also: Array<RefObject<HTMLElement | null>>
+) {
   const box = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
 
+    const inside = (node: Node): boolean =>
+      box.current?.contains(node) === true || also.some((ref) => ref.current?.contains(node));
     const onDown = (event: MouseEvent) => {
-      if (!box.current?.contains(event.target as Node)) close();
+      if (!inside(event.target as Node)) close();
     };
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') close();
@@ -448,6 +460,10 @@ export function Button({
   );
 }
 
+/** Clear space between a list and its button, and between a list and the window's edge. */
+const MENU_GAP = 4;
+const MENU_EDGE = 8;
+
 /**
  * A button that opens a short list of things it can do.
  *
@@ -456,6 +472,17 @@ export function Button({
  * hovered to be found. A list has room to say what each one is for on the way
  * past, and gives the row back to the two things done constantly: Save, and
  * getting back to the library.
+ *
+ * The list is rendered through a portal, on the body, rather than under the
+ * button that opens it. As a child it was at the mercy of whatever its
+ * ancestors did: a design card lifts itself half a step on hover, and a
+ * transform — however small — makes the element a stacking context, which traps
+ * the list's z-index inside a card that has none of its own. So the list opened
+ * on top and then slid behind the next row of cards the moment the pointer
+ * reached it. On the body it has no ancestor left to be trapped by.
+ *
+ * The cost of the portal is that the list no longer moves with the button, so
+ * where it goes has to be worked out here — see `place` below.
  */
 export function Menu({
   label,
@@ -477,33 +504,93 @@ export function Menu({
   children: (close: () => void) => ReactNode;
 }) {
   const [open, setOpen] = useState(false);
-  const box = useDismiss(open, () => setOpen(false));
+  const panel = useRef<HTMLDivElement>(null);
+  const [at, setAt] = useState<{ left: number; top: number } | null>(null);
+
+  const close = () => {
+    setOpen(false);
+    setAt(null);
+  };
+  const box = useDismiss(open, close, panel);
+
+  // Measured rather than guessed, so a list that will not fit under its button
+  // opens over it instead of running off the foot of the window. A layout
+  // effect, so the move happens before the browser paints and is never seen.
+  useLayoutEffect(() => {
+    if (!open) return;
+
+    const place = () => {
+      const button = box.current?.getBoundingClientRect();
+      const list = panel.current?.getBoundingClientRect();
+      if (!button || !list) return;
+
+      // Under the button if it fits there, over it if it does not, and pinned
+      // to the foot of the window if it fits neither way.
+      const below = button.bottom + MENU_GAP;
+      const above = button.top - MENU_GAP - list.height;
+      const top =
+        below + list.height <= window.innerHeight - MENU_EDGE
+          ? below
+          : above >= MENU_EDGE
+            ? above
+            : Math.max(MENU_EDGE, window.innerHeight - MENU_EDGE - list.height);
+
+      const left = align === 'right' ? button.right - list.width : button.left;
+      setAt({
+        top,
+        left: Math.max(MENU_EDGE, Math.min(left, window.innerWidth - MENU_EDGE - list.width)),
+      });
+    };
+
+    place();
+    // A fixed list does not travel with the button that owns it, so it has to
+    // be put back whenever the button moves. The library scrolls in a pane of
+    // its own, so the scroll is caught on the way down rather than waited for
+    // on the window.
+    window.addEventListener('scroll', place, true);
+    window.addEventListener('resize', place);
+    return () => {
+      window.removeEventListener('scroll', place, true);
+      window.removeEventListener('resize', place);
+    };
+  }, [open, align]);
 
   return (
-    <div className="relative" ref={box}>
+    <div className="relative inline-flex" ref={box}>
       <Button
         tone={tone}
         title={title}
         disabled={disabled}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => (open ? close() : setOpen(true))}
       >
         <span aria-expanded={open} className="flex items-center gap-1">
           {label}
         </span>
       </Button>
-      {open && (
-        <div
-          role="menu"
-          className={
-            'absolute top-full z-40 mt-1 overflow-hidden rounded-card border border-line ' +
-            'bg-card py-1 shadow-raised ' +
-            (width === 'sm' ? 'w-52 ' : 'w-64 ') +
-            (align === 'right' ? 'right-0' : 'left-0')
-          }
-        >
-          {children(() => setOpen(false))}
-        </div>
-      )}
+      {open &&
+        createPortal(
+          <div
+            ref={panel}
+            role="menu"
+            style={{
+              top: at?.top ?? 0,
+              left: at?.left ?? 0,
+              // Fixed, so a list longer than the window would otherwise have
+              // its last item somewhere unreachable.
+              maxHeight: `calc(100vh - ${2 * MENU_EDGE}px)`,
+              // Measured on the first pass, moved into place on the same pass.
+              visibility: at === null ? 'hidden' : undefined,
+            }}
+            className={
+              'fixed z-50 overflow-x-hidden overflow-y-auto rounded-card border border-line ' +
+              'bg-card py-1 shadow-raised ' +
+              (width === 'sm' ? 'w-52' : 'w-64')
+            }
+          >
+            {children(close)}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

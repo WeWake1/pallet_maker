@@ -14,16 +14,6 @@
   "planing": "none",
   "staticLoadKg": 3000,
   "dynamicLoadKg": 1200,
-  "nails": [
-    {
-      "label": "top board to centre board",
-      "type": "wire nail"
-    },
-    {
-      "label": "bottom board to block",
-      "type": "wire nail"
-    }
-  ],
   "nailPlacements": [],
   "notes": "Deck overhangs the base on all four sides, top by 50 and bottom by 25.",
   "updatedAt": "2026-08-06",

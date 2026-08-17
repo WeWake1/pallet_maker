@@ -13,16 +13,6 @@
   "planing": "none",
   "staticLoadKg": 3000,
   "dynamicLoadKg": 1000,
-  "nails": [
-    {
-      "label": "top board to runner",
-      "type": "wire nail"
-    },
-    {
-      "label": "bottom board to runner",
-      "type": "wire nail"
-    }
-  ],
   "layers": [
     {
       "id": "top",

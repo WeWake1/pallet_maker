@@ -275,6 +275,60 @@ describe('dimensions', () => {
     // The gap callout skips the nudged pair and reports the computed spacing.
     expect(found).toContain('16.7');
   });
+
+  /**
+   * The clearance under the deck, which is the same opening seen two ways and
+   * so honestly two numbers. See `entryOpening` in views.ts.
+   */
+  describe('the entry clearance', () => {
+    it('reaches the ground where the pocket is clear and the plank where it is not', () => {
+      // 18 bottom plank, 100 blocks, 20 bearer, 18 top boards. The planks run
+      // across the width, tucked under the blocks: looking along them, from the
+      // side, the pocket is open to the floor and the clearance is 18 greater.
+      const layout = computeLayout(loadFixture('block-1000x800'));
+      expect(labels(renderView(layout, 'side'))).toContain('118');
+      expect(labels(renderView(layout, 'end'))).toContain('100');
+    });
+
+    it('is the block height both ways where there is no bottom deck to ride over', () => {
+      const layout = computeLayout(loadFixture('joined-middle-pair'));
+      expect(labels(renderView(layout, 'side'))).toContain('100');
+      expect(labels(renderView(layout, 'end'))).toContain('100');
+    });
+
+    it('is the block height both ways where the bottom deck runs both ways', () => {
+      // The m-pallet's bottom deck crosses the width at the ends and runs the
+      // length between, so there is a plank across every pocket either way on.
+      const layout = computeLayout(loadFixture('m-pallet'));
+      expect(labels(renderView(layout, 'side'))).toContain('100');
+      expect(labels(renderView(layout, 'end'))).toContain('100');
+    });
+
+    it('is not floored by a plank that only laps the mouth of the pocket', () => {
+      // Bottom planks are cut wider than the blocks they are nailed to, so a
+      // plank laps a few mm into the pocket beside it without ever being in a
+      // fork's way. Widen this pallet's bottom boards from 100 to 108 and the
+      // side view must still read as clear to the ground.
+      const lipped = loadFixture('block-1000x800');
+      const deck = lipped.layers.find((layer) => layer.kind === 'bottom_deck')!;
+      if (deck.content.type !== 'sequence') throw new Error('expected a boarded bottom deck');
+      deck.content.slots = deck.content.slots.map((slot) => ({ ...slot, width: 108 }));
+      expect(labels(renderView(computeLayout(lipped), 'side'))).toContain('118');
+    });
+
+    it('sits inside the overall height rather than displacing it', () => {
+      const layout = computeLayout(loadFixture('block-1000x800'));
+      expect(labels(renderView(layout, 'end'))).toEqual(expect.arrayContaining(['100', '156']));
+    });
+
+    it('is left off a pallet that has nothing holding its deck up', () => {
+      const flat = loadFixture('block-1000x800');
+      flat.layers = flat.layers.filter((layer) => layer.kind !== 'block');
+      const found = labels(renderView(computeLayout(flat), 'side'));
+      // Only the two overall dimensions are left.
+      expect(found.filter((label) => /^\d/.test(label))).toHaveLength(2);
+    });
+  });
 });
 
 describe('the SVG itself', () => {

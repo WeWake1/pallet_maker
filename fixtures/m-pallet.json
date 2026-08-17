@@ -13,20 +13,6 @@
   "planing": "none",
   "staticLoadKg": 3000,
   "dynamicLoadKg": 1200,
-  "nails": [
-    {
-      "label": "top board to centre board",
-      "type": "wire nail"
-    },
-    {
-      "label": "centre board to block",
-      "type": "wire nail"
-    },
-    {
-      "label": "bottom board to block",
-      "type": "wire nail"
-    }
-  ],
   "notes": "The bottom deck runs two ways. Two boards cross the width at the ends and three run along the length between them, all five nailed straight to the blocks as one course of timber.",
   "updatedAt": "2026-01-01",
   "layers": [

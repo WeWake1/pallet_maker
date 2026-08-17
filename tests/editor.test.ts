@@ -72,6 +72,8 @@ describe('copying a design', () => {
   it('is a full deep copy that shares nothing with the original', () => {
     const original = newPallet(CLIENT);
     original.clientName = 'First client';
+    // A new pallet carries no schedule, so one is typed here to be copied.
+    original.nails = [{ label: 'top board to centre board', type: 'wire nail' }];
     const copy = duplicatePallet(original);
 
     expect(copy.id).not.toBe(original.id);

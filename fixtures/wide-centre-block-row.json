@@ -10,12 +10,6 @@
   "entry": "4_way",
   "species": "hardwood",
   "planing": "2_side",
-  "nails": [
-    {
-      "label": "centre board to block",
-      "type": "wire nail"
-    }
-  ],
   "layers": [
     {
       "id": "top",

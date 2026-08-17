@@ -1427,65 +1427,70 @@ function NudgeControl({
 function Nails({ pallet, dispatch }: { pallet: Pallet; dispatch: (action: Action) => void }) {
   return (
     <Panel title="Nails" actions={<Button onClick={() => dispatch({ type: 'addNail' })}>Add</Button>}>
-      <table className="w-full text-ui">
-        <thead>
-          <tr className="text-micro uppercase tracking-wide text-slate-400">
-            <th className="text-left font-medium">Joint</th>
-            <th className="w-32 text-left font-medium">Type</th>
-            <th className="w-20 text-left font-medium">Size</th>
-            <th className="w-20 text-left font-medium">Qty</th>
-            <th className="w-8" />
-          </tr>
-        </thead>
-        <tbody>
-          {pallet.nails.map((nail, index) => (
-            <tr key={index}>
-              <td className="pr-1">
-                <TextInput
-                  value={nail.label}
-                  placeholder="top board to centre board"
-                  onChange={(label) => dispatch({ type: 'patchNail', index, patch: { label } })}
-                />
-              </td>
-              <td className="pr-1">
-                <TextInput
-                  value={nail.type}
-                  onChange={(type) => dispatch({ type: 'patchNail', index, patch: { type } })}
-                />
-              </td>
-              <td className="pr-1">
-                <OptionalNumberInput
-                  value={nail.sizeMm}
-                  min={1}
-                  placeholder="mm"
-                  onChange={(sizeMm) => dispatch({ type: 'patchNail', index, patch: { sizeMm } })}
-                />
-              </td>
-              <td className="pr-1">
-                <OptionalNumberInput
-                  value={nail.count}
-                  min={0}
-                  placeholder="qty"
-                  onChange={(count) => dispatch({ type: 'patchNail', index, patch: { count } })}
-                />
-              </td>
-              <td>
-                <Button
-                  size="sm"
-                  tone="danger"
-                  label={`Remove nail row ${index + 1}`}
-                  onClick={() => dispatch({ type: 'removeNail', index })}
-                >
-                  ×
-                </Button>
-              </td>
+      {/* No schedule until one is typed: an empty table is a row of headings
+          standing over nothing, and a pallet with no schedule prints none. */}
+      {pallet.nails.length > 0 && (
+        <table className="w-full text-ui">
+          <thead>
+            <tr className="text-micro uppercase tracking-wide text-slate-400">
+              <th className="text-left font-medium">Joint</th>
+              <th className="w-32 text-left font-medium">Type</th>
+              <th className="w-20 text-left font-medium">Size</th>
+              <th className="w-20 text-left font-medium">Qty</th>
+              <th className="w-8" />
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {pallet.nails.map((nail, index) => (
+              <tr key={index}>
+                <td className="pr-1">
+                  <TextInput
+                    value={nail.label}
+                    placeholder="top board to centre board"
+                    onChange={(label) => dispatch({ type: 'patchNail', index, patch: { label } })}
+                  />
+                </td>
+                <td className="pr-1">
+                  <TextInput
+                    value={nail.type}
+                    onChange={(type) => dispatch({ type: 'patchNail', index, patch: { type } })}
+                  />
+                </td>
+                <td className="pr-1">
+                  <OptionalNumberInput
+                    value={nail.sizeMm}
+                    min={1}
+                    placeholder="mm"
+                    onChange={(sizeMm) => dispatch({ type: 'patchNail', index, patch: { sizeMm } })}
+                  />
+                </td>
+                <td className="pr-1">
+                  <OptionalNumberInput
+                    value={nail.count}
+                    min={0}
+                    placeholder="qty"
+                    onChange={(count) => dispatch({ type: 'patchNail', index, patch: { count } })}
+                  />
+                </td>
+                <td>
+                  <Button
+                    size="sm"
+                    tone="danger"
+                    label={`Remove nail row ${index + 1}`}
+                    onClick={() => dispatch({ type: 'removeNail', index })}
+                  >
+                    ×
+                  </Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
       <p className="mt-3 text-label leading-relaxed text-ink-faint">
         The schedule printed on the sheet and priced by costing. Typed as you work it out; nothing
-        here is derived, and nothing here moves a dot on the drawing.
+        here is derived, and nothing here moves a dot on the drawing. With no rows added, the sheet
+        carries no nail table at all.
       </p>
       <p className="mt-1.5 text-label leading-relaxed text-ink-faint">
         Where the nails <em>go</em> is set on the drawing instead. Every crossing gets two on a
@@ -1519,11 +1524,15 @@ function CostingPanel({ costing }: { costing: Costing | null }) {
               <td className="w-24 text-right tabular-nums">{money(line.cost)}</td>
             </tr>
           ))}
-          <tr>
-            <td className="text-slate-600">nails</td>
-            <td className="text-right tabular-nums text-slate-500">{costing.nailCount}</td>
-            <td className="text-right tabular-nums">{money(costing.nailCost)}</td>
-          </tr>
+          {/* Only where a schedule has been typed. Nothing is counted off the
+              drawing, so with no rows there is no nail cost to state. */}
+          {costing.nails.length > 0 && (
+            <tr>
+              <td className="text-slate-600">nails</td>
+              <td className="text-right tabular-nums text-slate-500">{costing.nailCount}</td>
+              <td className="text-right tabular-nums">{money(costing.nailCost)}</td>
+            </tr>
+          )}
           <tr>
             <td className="text-slate-600">overhead</td>
             <td className="text-right tabular-nums text-slate-500">

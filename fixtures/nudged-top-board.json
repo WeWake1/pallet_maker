@@ -11,12 +11,6 @@
   "entry": "4_way",
   "species": "pine",
   "planing": "none",
-  "nails": [
-    {
-      "label": "top board to centre board",
-      "type": "wire nail"
-    }
-  ],
   "layers": [
     {
       "id": "top",

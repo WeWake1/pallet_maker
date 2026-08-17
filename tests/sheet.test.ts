@@ -244,16 +244,27 @@ describe('the sheet', () => {
     expect([...html.matchAll(/First-angle projection, all dimensions in mm/g)]).toHaveLength(1);
   });
 
-  it('lists the components, the nails and the load and material', () => {
+  it('lists the components and the load and material', () => {
     const text = textOf(html);
     expect(text).toContain('Top board');
     // Length, then width, then thickness: the order the shop floor says them in.
     expect(text).toContain('1200 × 100 × 18');
-    // The nail schedule as typed on the document, printed as written.
-    expect(text).toContain('top board to centre board');
-    expect(text).toContain('wire nail');
     expect(text).toContain('Static load 3000 kg');
     expect(text).toContain('Species pine');
+  });
+
+  /**
+   * The schedule is typed, not derived, and most designs have none. A sheet
+   * only carries the table where somebody has written the rows out.
+   */
+  it('prints the nail schedule as typed, and no table where none is typed', () => {
+    expect(textOf(html)).not.toContain('Nails');
+
+    const scheduled = { ...pallet, nails: [{ label: 'top board to centre board', type: 'wire nail' }] };
+    const text = textOf(renderSheet(scheduled, layout));
+    expect(text).toContain('Nails');
+    expect(text).toContain('top board to centre board');
+    expect(text).toContain('wire nail');
   });
 
   it('states the two tolerances on every sheet, whatever the design', () => {

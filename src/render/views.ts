@@ -1,5 +1,6 @@
 import { hasOverhang } from '../geometry/footprint.js';
 import type { LayerLayout, Layout, Overhang } from '../geometry/types.js';
+import type { LayerKind } from '../types.js';
 import { renderDimension } from './dimension.js';
 import { facesOf, projectPieces, projectPlanPoint, viewFrame, VIEW_TITLE } from './project.js';
 import type { Projected, ViewKind } from './project.js';
@@ -480,6 +481,8 @@ function buildDimensions(layout: Layout, view: ViewKind, projected: Projected[])
     dims.push(...overhangDims(layout, view, overhang));
     dims.push(...nearLayerDims(layout, view, projected));
     dims.push(...nudgeDims(layout, view, projected));
+  } else {
+    dims.push(...entryDims(layout, view));
   }
 
   dims.push({
@@ -562,6 +565,147 @@ function overhangDims(layout: Layout, view: ViewKind, overhang: Overhang | null)
   }
 
   return dims;
+}
+
+/** The layers that hold the deck up off the floor, and so open the gap under it. */
+const SPACER_KINDS = new Set<LayerKind>(['block', 'runner']);
+
+/**
+ * The clear stretches between the spacers, in mm along the view's u axis. These
+ * are the fork pockets: the openings a fork or a trolley wheel goes in through,
+ * seen face on. Only the gaps between spacers count, never the deck that
+ * overhangs past the outermost one, which is not something anything enters.
+ */
+function pockets(posts: Array<[number, number]>): Array<[number, number]> {
+  const merged: Array<[number, number]> = [];
+  for (const [u0, u1] of [...posts].sort((a, b) => a[0] - b[0])) {
+    const last = merged.at(-1);
+    if (last && u0 <= last[1] + TOLERANCE) last[1] = Math.max(last[1], u1);
+    else merged.push([u0, u1]);
+  }
+  return merged.slice(0, -1).map((post, i) => [post[1], merged[i + 1]![0]] as [number, number]);
+}
+
+/**
+ * The clear gap under the deck as this view sees it, in mm above the underside
+ * of the pallet, or null where nothing holds the deck up.
+ *
+ * This is the one number on the sheet that says whether the pallet can actually
+ * be picked up: it is the headroom a fork or a trolley wheel has to pass
+ * through, and a deck that is 143 tall tells nobody what it is.
+ *
+ * The top of the opening is the same whichever way you look at it — the
+ * underside of the plank the spacers carry, since layers stack without a space
+ * between them. The floor is not, and that is the whole of why this is worked
+ * out per view rather than once for the pallet. Bottom planks run one way; a
+ * view either looks along them or across them. Across them, every pocket has a
+ * plank lying in it and a fork rides over it, so the floor is the top of that
+ * plank. Along them, the planks sit tucked under the spacers and the pocket is
+ * open to the ground, so the floor is the ground — and the clearance is the
+ * plank's thickness greater. The same pallet honestly reads as two numbers.
+ *
+ * So: the floor is whatever the highest thing under the spacers is that is
+ * actually in the way of a pocket, and the ground where a pocket is clear to
+ * it. Where a view shows no pocket at all — the blind face of a two-way pallet,
+ * where the runners are unbroken — there is nothing to enter, and the spacer
+ * course itself is what gets measured.
+ */
+function entryOpening(layout: Layout, view: ViewKind): { bottom: number; top: number } | null {
+  const spacers = layout.layers.filter((layer) => SPACER_KINDS.has(layer.kind));
+  if (spacers.length === 0) return null;
+
+  const spacerIds = new Set(spacers.map((layer) => layer.layerId));
+  const under = Math.min(...spacers.map((layer) => layer.zBottom));
+  const top = Math.max(...spacers.map((layer) => layer.zBottom + layer.thickness));
+
+  const projected = projectPieces(layout, view);
+  const openings = pockets(
+    projected
+      .filter((item) => spacerIds.has(item.piece.layerId))
+      .map((item) => [item.u, item.u + item.du] as [number, number]),
+  );
+
+  // Anything sitting below the spacers, which is what a pocket can be floored by.
+  const beneath = projected.filter((item) => item.piece.z + item.piece.dz <= under + TOLERANCE);
+
+  // The least generous pocket, since that is the one that has to be cleared.
+  const bottom =
+    openings.length === 0 ? under : Math.max(...openings.map((gap) => floorOf(gap, beneath)));
+  return top - bottom > TOLERANCE ? { bottom, top } : null;
+}
+
+/**
+ * How high the floor of one pocket stands, in mm above the underside of the
+ * pallet.
+ *
+ * Not simply the highest thing that touches the pocket. Bottom planks are cut a
+ * few millimetres wider than the blocks they are nailed to — 89 under an 85 is
+ * ordinary — so a plank laps a hair past the block and into the mouth of the
+ * pocket. Asked only whether anything overlaps, a 3 mm lip on the lip of a
+ * 240 mm opening answers yes, and the pallet reads as though a fork had to ride
+ * over a plank that is not in its way at all. That is what made a design with
+ * planks along its length report the same clearance on both elevations.
+ *
+ * So the pocket is measured rather than merely tested: cut it at every plank
+ * edge, and take the level of the widest stretch. A lip is a sliver against the
+ * clear span beside it and loses; a plank that really does lie across the
+ * pocket covers the whole of it and wins.
+ */
+function floorOf(pocket: [number, number], beneath: Projected[]): number {
+  const [u0, u1] = pocket;
+  const inside = (u: number): boolean => u > u0 + TOLERANCE && u < u1 - TOLERANCE;
+  const cuts = [
+    u0,
+    u1,
+    ...beneath.flatMap((item) => [item.u, item.u + item.du].filter(inside)),
+  ].sort((a, b) => a - b);
+
+  const stretches: Array<{ width: number; level: number }> = [];
+  for (let i = 0; i < cuts.length - 1; i++) {
+    const from = cuts[i]!;
+    const to = cuts[i + 1]!;
+    if (to - from <= TOLERANCE) continue;
+    const at = (from + to) / 2;
+    const level = Math.max(
+      0,
+      ...beneath
+        .filter((item) => item.u < at && at < item.u + item.du)
+        .map((item) => item.piece.z + item.piece.dz),
+    );
+    // Neighbouring stretches floored at the same height are one stretch.
+    const last = stretches.at(-1);
+    if (last && Math.abs(last.level - level) <= TOLERANCE) last.width += to - from;
+    else stretches.push({ width: to - from, level });
+  }
+
+  return stretches.reduce((widest, s) => (s.width > widest.width ? s : widest), {
+    width: 0,
+    level: 0,
+  }).level;
+}
+
+/**
+ * The entry clearance, dimensioned on the elevations. A detail dimension, so it
+ * takes the lane inside the overall height rather than pushing it about.
+ */
+function entryDims(layout: Layout, view: ViewKind): DimSpec[] {
+  const opening = entryOpening(layout, view);
+  if (opening === null) return [];
+
+  // v runs down the page and z runs up the pallet, so the top of the opening is
+  // the smaller of the two. See `place` in project.ts.
+  const frame = viewFrame(layout, view);
+  return [
+    {
+      side: 'right',
+      tier: TIER.detail,
+      lane: 0,
+      a: layout.overallHeight - opening.top,
+      b: layout.overallHeight - opening.bottom,
+      anchor: frame.uSpan,
+      label: mmLabel(opening.top - opening.bottom),
+    },
+  ];
 }
 
 /**

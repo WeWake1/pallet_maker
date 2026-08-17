@@ -607,6 +607,10 @@ below it.
 **How many are bought** is the schedule on the sheet: label, type, size and
 quantity, typed by hand and printed as written. Costing prices that table.
 
+A pallet starts with no schedule at all. Nothing can be read off the drawing, so
+there is nothing honest to fill the rows in with: the editor shows no table and
+the sheet prints no nail block until **Add** is pressed and the rows are typed.
+
 The two used to be one thing — the schedule was counted off the dots, and a
 spec's label was matched against layer names by a list of words it might contain
 ("plywood", "centre board", "stringer") to decide which joint it overrode. It
