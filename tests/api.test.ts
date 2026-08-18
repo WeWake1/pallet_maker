@@ -2,9 +2,8 @@ import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../src/server/app.js';
-import { openDb } from '../src/server/db.js';
 import type { Pallet } from '../src/types.js';
-import { loadFixture } from './helpers.js';
+import { cleanupStores, loadFixture, tempStore } from './helpers.js';
 
 /** The API, over a real socket, because that is how the editor will meet it. */
 let server: Server;
@@ -12,7 +11,7 @@ let base: string;
 let clientId: string;
 
 beforeAll(async () => {
-  const app = createApp(openDb(':memory:'));
+  const app = createApp(tempStore());
   server = await new Promise<Server>((resolve) => {
     const listening = app.listen(0, () => resolve(listening));
   });
@@ -25,6 +24,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
+  cleanupStores();
 });
 
 async function call(method: string, path: string, body?: unknown) {

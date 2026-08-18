@@ -24,7 +24,7 @@ component.
 | [src/dxf/](src/dxf/) | DXF R12 output, from `PlacedPiece[]` |
 | [src/costing/](src/costing/) | Timber volume and cost, at the rates in the config |
 | [config/rates.json](config/rates.json) | Every rate the tool knows. Edit here, nowhere else |
-| [src/server/](src/server/) | SQLite storage and the local API |
+| [src/server/](src/server/) | The local API over the store |
 | [src/duplicate.ts](src/duplicate.ts) | Copying a design into one that is linked to nothing |
 | [src/cli/layout.ts](src/cli/layout.ts) | Loads a JSON pallet, prints `PlacedPiece[]` |
 | [src/cli/views.ts](src/cli/views.ts) | Writes the views to SVG files |
@@ -462,15 +462,40 @@ step is worth more here than hot reload.
 
 ## Storage
 
-One local SQLite file, `data/pallets.sqlite` by default and `PALLET_DB`
-otherwise. A pallet is stored as its document, with the few fields the design
-list needs lifted into columns: the document is the truth, the columns are an
-index. `npm run serve` puts an Express API in front of it and serves the built
-editor from the same port, so the whole tool is one process.
+A folder of JSON files, `data/library` by default and `PALLET_STORE` otherwise:
+one file per design under `designs/`, named by its id, and `clients.json` beside
+them. The document is the whole of what is stored — there is no index to keep in
+step with it — and a design names its own client inside itself, so a file on its
+own is a complete record. `npm run serve` puts an Express API in front of the
+folder and serves the built editor from the same port, so the whole tool is one
+process.
+
+The folder is meant to be one a sync client watches: point several machines at
+the same shared Google Drive folder and they are working on the same designs,
+with no server between them. That is what shapes two rules. Every write lands by
+rename, so a sync copying the folder can never catch a design half-written. And
+every read tolerates a file that will not parse — half downloaded, or something
+that was never a design — by leaving it out and saying so, rather than taking
+the design list down with it.
+
+Designs and `clients.json` sync separately, and either can arrive first. A design
+naming a client the folder does not hold yet still appears, under the name it
+carries, and that client is folded into `clients.json` at the next start.
+
+Two people editing **different** designs never collide, because they are
+different files. Two people editing the **same** design between syncs is last
+save wins, with Drive's own version history behind it.
+
+### Coming from the database
+
+Earlier versions kept one SQLite file. `npm run convert -- data/pallets.sqlite data/library`
+writes its contents into a folder, ids and dates and all. It reads a copy, so
+the database it converts is left exactly as it was, and running it twice is
+safe.
 
 A design is edited in place. Saving overwrites it and there is no history: to
 keep an old design, **duplicate it before reworking it** — the copy is a separate
-row from that moment on and nothing done to either can reach the other. The date
+file from that moment on and nothing done to either can reach the other. The date
 a design carries is the whole of what says how current it is.
 
 PDFs are served from the store rather than from the editor's working copy, and
@@ -478,20 +503,23 @@ named for the design and its date, so what is printed is what is recorded.
 
 ### Backups
 
-Every start copies the database into `data/backups/` and keeps the last twenty
-(`PALLET_BACKUPS` to change that). The copy is taken with SQLite's own backup,
-not a file copy that could catch a half-written page.
+Every start writes the whole library into `backups/` inside the store and keeps
+the last twenty (`PALLET_BACKUPS` to change that). A snapshot is one library
+file rather than a copy of the folder: a single write, so it cannot be caught
+part way through, and it goes back in through the same import any library file
+does.
 
-That protects against this program spoiling the file. It does nothing about a
-disk fault, so copy the `data` folder somewhere else now and then — or export
-the library, below, which is the same designs in a form anything can read.
+That protects against this program, or a sync, spoiling the folder. It does
+nothing about the folder itself being deleted, so copy it somewhere else now and
+then — or export the library, below.
 
 ### Designs in and out of files
 
-The database is a file only this program can read, on one machine. Designs leave
-it as JSON, which is the document itself rather than a picture of it — the only
-output that can be opened again and worked on. A PDF cannot: it is a printout
-and a dead end.
+The store is already JSON, so a design in it can be read by anything. These are
+still how designs travel to somebody outside the shared folder, and how they
+come back. A design file is the document itself rather than a picture of it — the
+only output that can be opened again and worked on. A PDF cannot: it is a
+printout and a dead end.
 
 **One design.** `JSON` on its card, or Export in the editor, writes
 `<design> - <client> - <date>.json`. `Import` on a client's row reads one back
@@ -517,14 +545,14 @@ is in [src/server/library.ts](src/server/library.ts).
 
 ## Keeping designs safe across a change to this program
 
-Once a couple of hundred designs are in it, that one file is the business
-record — the thing a client complaint gets judged against. Everything below is
-about not breaking it while the program keeps growing.
+Once a couple of hundred designs are in it, that folder is the business record —
+the thing a client complaint gets judged against. Everything below is about not
+breaking it while the program keeps growing.
 
 **A design is a JSON document, read back through the schema every time it is
 opened.** That read is the one place where a change to this program can lose
 somebody's work. Make a field required that a stored document has not got, and
-every design drawn before the change stops opening at once. The database is
+every design drawn before the change stops opening at once. The files are
 untouched and the backups are fine, and none of that helps, because nothing can
 read them any more.
 
@@ -532,9 +560,11 @@ So the rule is: **a field added later must be optional or carry a default.**
 Adding one that way is safe, and so is anything that only changes how the sheet
 looks — the sheet is rendered fresh from the document every time it is asked
 for, and nothing about it is stored. Renaming a field, removing one, or
-tightening what an existing one will accept is not safe, and needs a migration
-in [src/server/db.ts](src/server/db.ts) — the way the change that removed
-revisions had one, which rewrote every row rather than dropping any.
+tightening what an existing one will accept is not safe, and needs the stored
+designs rewritten to match — the way the change that removed revisions did,
+which rewrote every design rather than dropping any. That migration now lives in
+the converter, [src/cli/convert.ts](src/cli/convert.ts), because it is only ever
+reached on the way out of the old database.
 
 Two guards, in [tests/compatibility.test.ts](tests/compatibility.test.ts):
 

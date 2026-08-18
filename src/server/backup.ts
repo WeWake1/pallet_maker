@@ -1,21 +1,26 @@
-import { mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
-import type { Db } from './db.js';
+import { mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import type { FileStore } from '../store/files.js';
+import { exportLibrary } from './library.js';
+import { ClientRepository, PalletRepository } from './repository.js';
 
 /**
- * Snapshots of the database.
+ * Snapshots of the library.
  *
- * Once a couple of hundred designs are in it, this one file is the business
- * record: the thing a client complaint gets judged against. The frozen-row
- * triggers stop the program from spoiling it. They do nothing about a disk
- * fault or a stray delete, so a copy is taken every time the tool starts.
+ * Once a couple of hundred designs are in it, this folder is the business
+ * record: the thing a client complaint gets judged against. Writing by rename
+ * stops the program from spoiling it, and Drive keeps its own version history
+ * of each file. Neither helps against the folder itself being deleted, or a
+ * sync that goes wrong and takes the designs with it, so a copy of the whole
+ * library is taken every time the tool starts.
  *
- * `better-sqlite3` does the copying, which is a proper online backup rather
- * than a file copy that could catch a half-written page.
+ * A snapshot is one library document rather than a copy of the folder: it is a
+ * single file, so it cannot be caught half-written, and it goes back in through
+ * the same import any other library file does.
  */
 
 export interface BackupOptions {
-  /** Where the snapshots go. Defaults to `backups/` beside the database. */
+  /** Where the snapshots go. Defaults to `backups/` inside the store. */
   directory?: string;
   /** How many to keep. The oldest are removed beyond this. */
   keep?: number;
@@ -24,7 +29,7 @@ export interface BackupOptions {
 }
 
 const PREFIX = 'pallets-';
-const SUFFIX = '.sqlite';
+const SUFFIX = '.json';
 
 function stamp(now: Date): string {
   const pad = (value: number): string => String(value).padStart(2, '0');
@@ -34,22 +39,20 @@ function stamp(now: Date): string {
   );
 }
 
-export function backupDirectoryFor(dbPath: string): string {
-  return resolve(dirname(dbPath), 'backups');
+export function backupDirectoryFor(root: string): string {
+  return resolve(root, 'backups');
 }
 
-/** Snapshot the database, then drop the oldest beyond `keep`. */
-export async function backupDatabase(
-  db: Db,
-  dbPath: string,
-  options: BackupOptions = {},
-): Promise<string> {
-  const directory = options.directory ?? backupDirectoryFor(dbPath);
+/** Snapshot the library, then drop the oldest beyond `keep`. */
+export function backupLibrary(store: FileStore, options: BackupOptions = {}): string {
+  const directory = options.directory ?? backupDirectoryFor(store.root);
   const keep = options.keep ?? 20;
+
+  const library = exportLibrary(new PalletRepository(store), new ClientRepository(store));
 
   mkdirSync(directory, { recursive: true });
   const target = join(directory, `${PREFIX}${stamp(options.now ?? new Date())}${SUFFIX}`);
-  await db.backup(target);
+  writeFileSync(target, `${JSON.stringify(library, null, 2)}\n`, 'utf8');
 
   prune(directory, keep);
   return target;

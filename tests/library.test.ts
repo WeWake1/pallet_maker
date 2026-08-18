@@ -1,13 +1,12 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { newId, today } from '../src/ids.js';
 import { LIBRARY_FORMAT, parseLibrary } from '../src/library.js';
 import type { Library } from '../src/library.js';
-import { openDb } from '../src/server/db.js';
-import type { Db } from '../src/server/db.js';
 import { exportLibrary, importDesign, importLibrary } from '../src/server/library.js';
 import { ClientRepository, PalletRepository } from '../src/server/repository.js';
 import type { Client, Pallet } from '../src/types.js';
-import { loadFixture } from './helpers.js';
+import type { FileStore } from '../src/store/files.js';
+import { cleanupStores, loadFixture, tempStore } from './helpers.js';
 
 /**
  * The library in and out of a file.
@@ -17,7 +16,7 @@ import { loadFixture } from './helpers.js';
  * can never cost you a design you already had.
  */
 
-let db: Db;
+let folder: FileStore;
 let pallets: PalletRepository;
 let clients: ClientRepository;
 let acme: Client;
@@ -35,17 +34,19 @@ function named(code: string, client: Client = acme): Pallet {
 }
 
 /** A second, empty store, standing for another computer. */
-function elsewhere(): { pallets: PalletRepository; clients: ClientRepository; db: Db } {
-  const other = openDb(':memory:');
-  return { db: other, pallets: new PalletRepository(other), clients: new ClientRepository(other) };
+function elsewhere(): { pallets: PalletRepository; clients: ClientRepository; store: FileStore } {
+  const other = tempStore();
+  return { store: other, pallets: new PalletRepository(other), clients: new ClientRepository(other) };
 }
 
 beforeEach(() => {
-  db = openDb(':memory:');
-  pallets = new PalletRepository(db);
-  clients = new ClientRepository(db);
+  folder = tempStore();
+  pallets = new PalletRepository(folder);
+  clients = new ClientRepository(folder);
   acme = clients.create('Acme Ltd');
 });
+
+afterEach(cleanupStores);
 
 describe('exporting the library', () => {
   it('writes every client and every design', () => {
@@ -95,7 +96,7 @@ describe('importing a library', () => {
     const file = exportLibrary(pallets, clients);
 
     const there = elsewhere();
-    const report = importLibrary(there.db, file, there.pallets, there.clients, 'skip');
+    const report = importLibrary(there.store, file, there.pallets, there.clients, 'skip');
 
     expect(report.designsAdded).toBe(2);
     expect(report.clientsAdded).toBe(1);
@@ -119,7 +120,7 @@ describe('importing a library', () => {
     };
 
     const there = elsewhere();
-    importLibrary(there.db, file, there.pallets, there.clients);
+    importLibrary(there.store, file, there.pallets, there.clients);
 
     expect(there.pallets.get(old.id).updatedAt).toBe('2024-03-11');
   });
@@ -132,8 +133,8 @@ describe('importing a library', () => {
     const file = exportLibrary(pallets, clients);
 
     const there = elsewhere();
-    importLibrary(there.db, file, there.pallets, there.clients);
-    const again = importLibrary(there.db, file, there.pallets, there.clients);
+    importLibrary(there.store, file, there.pallets, there.clients);
+    const again = importLibrary(there.store, file, there.pallets, there.clients);
 
     expect(again.designsAdded).toBe(0);
     expect(again.designsSkipped).toBe(1);
@@ -157,7 +158,7 @@ describe('importing a library', () => {
       designs: [{ ...mine, palletName: 'What the file says' }],
     };
 
-    const report = importLibrary(db, file, pallets, clients, 'skip');
+    const report = importLibrary(folder, file, pallets, clients, 'skip');
 
     expect(report.designsSkipped).toBe(1);
     expect(report.designsReplaced).toBe(0);
@@ -176,7 +177,7 @@ describe('importing a library', () => {
       designs: [{ ...mine, palletName: 'What the file says' }],
     };
 
-    const report = importLibrary(db, file, pallets, clients, 'replace');
+    const report = importLibrary(folder, file, pallets, clients, 'replace');
 
     expect(report.designsReplaced).toBe(1);
     expect(report.designsSkipped).toBe(0);
@@ -194,7 +195,7 @@ describe('importing a library', () => {
 
     pallets.save(named('AP-001'), clients);
     const report = importLibrary(
-      there.db,
+      there.store,
       exportLibrary(pallets, clients),
       there.pallets,
       there.clients,
@@ -217,7 +218,7 @@ describe('importing a library', () => {
       designs: [{ ...named('AP-001'), clientName: 'Someone Else' }],
     };
 
-    const report = importLibrary(db, file, pallets, clients);
+    const report = importLibrary(folder, file, pallets, clients);
 
     expect(report.clientsAdded).toBe(1);
     expect(report.designsAdded).toBe(1);
@@ -242,7 +243,7 @@ describe('importing a library', () => {
       designs: [named('AP-001'), { ...named('AP-002'), clientName: '   ' }],
     });
 
-    expect(() => importLibrary(db, file, pallets, clients)).toThrow(/needs a name/);
+    expect(() => importLibrary(folder, file, pallets, clients)).toThrow(/needs a name/);
     expect(pallets.all()).toHaveLength(0);
   });
 });

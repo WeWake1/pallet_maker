@@ -1,15 +1,15 @@
 import { duplicatePallet } from '../duplicate.js';
 import { newId, today } from '../ids.js';
 import { parsePallet } from '../schema.js';
+import type { FileStore } from '../store/files.js';
 import type { Client, Pallet } from '../types.js';
-import type { Db } from './db.js';
 
 /**
  * Everything the tool does to stored designs.
  *
  * There is no history. Saving a design overwrites it, and the date it carries
  * is the whole of what says how current it is. Keeping an old design means
- * duplicating it before the rework starts, which makes two rows that have
+ * duplicating it before the rework starts, which makes two files that have
  * nothing to do with each other from then on.
  */
 
@@ -49,39 +49,28 @@ export class DuplicateClientError extends Error {
   }
 }
 
-interface ClientRow {
-  id: string;
-  name: string;
-  created_at: string;
+/** SQLite's NOCASE, which is what the dashboard was ordered by. */
+function byNameNoCase(a: string, b: string): number {
+  const left = a.toLowerCase();
+  const right = b.toLowerCase();
+  return left < right ? -1 : left > right ? 1 : 0;
 }
 
-interface PalletRow {
-  id: string;
-  client_id: string;
-  pallet_code: string;
-  pallet_name: string;
-  updated_at: string;
-  doc: string;
-}
-
-function toClient(row: ClientRow): Client {
-  return { id: row.id, name: row.name, createdAt: row.created_at };
+function byText(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
 }
 
 export class ClientRepository {
-  constructor(private readonly db: Db) {}
+  constructor(private readonly store: FileStore) {}
 
   list(): Client[] {
-    return this.db
-      .prepare<[], ClientRow>('SELECT * FROM clients ORDER BY name COLLATE NOCASE')
-      .all()
-      .map(toClient);
+    return [...this.store.readClients()].sort((a, b) => byNameNoCase(a.name, b.name));
   }
 
   get(id: string): Client {
-    const row = this.db.prepare<[string], ClientRow>('SELECT * FROM clients WHERE id = ?').get(id);
-    if (!row) throw new ClientNotFoundError(id);
-    return toClient(row);
+    const client = this.store.readClients().find((held) => held.id === id);
+    if (!client) throw new ClientNotFoundError(id);
+    return client;
   }
 
   /**
@@ -91,19 +80,15 @@ export class ClientRepository {
    * against to avoid entering the same customer twice.
    */
   findByName(name: string): Client | undefined {
-    const row = this.db
-      .prepare<[string], ClientRow>('SELECT * FROM clients WHERE name = ? COLLATE NOCASE')
-      .get(name.trim());
-    return row ? toClient(row) : undefined;
+    const wanted = name.trim().toLowerCase();
+    return this.store.readClients().find((held) => held.name.toLowerCase() === wanted);
   }
 
   create(name: string): Client {
     const client: Client = { id: newId(), name: name.trim(), createdAt: today() };
     if (client.name === '') throw new Error('A client needs a name');
     if (this.findByName(client.name)) throw new DuplicateClientError(client.name);
-    this.db
-      .prepare('INSERT INTO clients (id, name, created_at) VALUES (?, ?, ?)')
-      .run(client.id, client.name, client.createdAt);
+    this.store.writeClients([...this.store.readClients(), client]);
     return client;
   }
 
@@ -119,55 +104,65 @@ export class ClientRepository {
     const clash = this.findByName(next);
     if (clash && clash.id !== id) throw new DuplicateClientError(next);
 
-    this.db.transaction(() => {
-      this.db.prepare('UPDATE clients SET name = ? WHERE id = ?').run(next, id);
-      const rows = this.db
-        .prepare<[string], PalletRow>('SELECT * FROM pallets WHERE client_id = ?')
-        .all(id);
-      const write = this.db.prepare('UPDATE pallets SET doc = ? WHERE id = ?');
-      for (const row of rows) {
-        const doc = JSON.parse(row.doc) as Record<string, unknown>;
-        doc.clientName = next;
-        write.run(JSON.stringify(doc), row.id);
+    return this.store.transaction(() => {
+      this.store.writeClients(
+        this.store.readClients().map((held) => (held.id === id ? { ...held, name: next } : held)),
+      );
+      for (const design of this.store.listDesigns()) {
+        if (design.clientId === id) this.store.writeDesign({ ...design, clientName: next });
       }
-    })();
-
-    return { ...client, name: next };
+      return { ...client, name: next };
+    });
   }
 
-  /** Deleting a client deletes their designs with them: the rows cascade. */
+  /** Deleting a client deletes their designs with them. */
   delete(id: string): void {
     this.get(id);
-    this.db.prepare('DELETE FROM clients WHERE id = ?').run(id);
+    this.store.transaction(() => {
+      this.store.writeClients(this.store.readClients().filter((held) => held.id !== id));
+      for (const design of this.store.listDesigns()) {
+        if (design.clientId === id) this.store.deleteDesign(design.id);
+      }
+    });
   }
 }
 
 export class PalletRepository {
-  constructor(private readonly db: Db) {}
+  constructor(private readonly store: FileStore) {}
 
   list(): PalletSummary[] {
-    return this.db
-      .prepare<[], PalletRow & { client_name: string }>(
-        `SELECT p.*, c.name AS client_name
-           FROM pallets p
-           JOIN clients c ON c.id = p.client_id
-          ORDER BY c.name COLLATE NOCASE, p.pallet_code, p.pallet_name`,
-      )
-      .all()
-      .map((row) => ({
-        id: row.id,
-        clientId: row.client_id,
-        clientName: row.client_name,
-        palletCode: row.pallet_code,
-        palletName: row.pallet_name,
-        updatedAt: row.updated_at,
-      }));
+    const names = new Map(this.store.readClients().map((client) => [client.id, client.name]));
+    return this.store
+      .listDesigns()
+      .map((design) => ({
+        id: design.id,
+        clientId: design.clientId,
+        // The clients file is the authority on the spelling. A design whose
+        // client is not in it has not lost its own copy of the name, and that
+        // is better than showing nothing.
+        clientName: names.get(design.clientId) ?? design.clientName,
+        palletCode: design.palletCode,
+        palletName: design.palletName,
+        updatedAt: design.updatedAt,
+      }))
+      .sort(
+        (a, b) =>
+          byNameNoCase(a.clientName, b.clientName) ||
+          byText(a.palletCode, b.palletCode) ||
+          byText(a.palletName, b.palletName),
+      );
   }
 
   /**
    * The dashboard: every client, each with their designs. A client with none
    * still gets a section, which is the point of their being a record of their
    * own — a customer can be on the books before anything is drawn for them.
+   *
+   * A design whose client is missing from the clients file gets that client
+   * rebuilt from the design's own copy of the name. Files arrive in this folder
+   * from a colleague's machine and from Drive, in whatever order those two
+   * choose, and a design that is on disk must never be missing from the
+   * dashboard because the file naming it happens to be behind.
    */
   dashboard(clients: ClientRepository): ClientDesigns[] {
     const byClient = new Map<string, PalletSummary[]>();
@@ -176,16 +171,28 @@ export class PalletRepository {
       designs.push(design);
       byClient.set(design.clientId, designs);
     }
-    return clients.list().map((client) => ({
+
+    const known = clients.list();
+    const sections = known.map((client) => ({
       client,
       designs: byClient.get(client.id) ?? [],
     }));
+
+    const held = new Set(known.map((client) => client.id));
+    const orphans = [...byClient.entries()]
+      .filter(([id]) => !held.has(id))
+      .map(([id, designs]) => ({
+        client: { id, name: designs[0]!.clientName, createdAt: designs[0]!.updatedAt },
+        designs,
+      }));
+
+    return [...sections, ...orphans].sort((a, b) => byNameNoCase(a.client.name, b.client.name));
   }
 
   get(id: string): Pallet {
-    const row = this.db.prepare<[string], PalletRow>('SELECT * FROM pallets WHERE id = ?').get(id);
-    if (!row) throw new PalletNotFoundError(id);
-    return parsePallet(JSON.parse(row.doc));
+    const design = this.store.readDesign(id);
+    if (!design) throw new PalletNotFoundError(id);
+    return design;
   }
 
   /**
@@ -194,22 +201,17 @@ export class PalletRepository {
    * the only thing an export can be made of.
    */
   all(): Pallet[] {
-    return this.db
-      .prepare<[], PalletRow>('SELECT * FROM pallets ORDER BY pallet_code, pallet_name')
-      .all()
-      .map((row) => parsePallet(JSON.parse(row.doc)));
+    return this.store
+      .listDesigns()
+      .sort((a, b) => byText(a.palletCode, b.palletCode) || byText(a.palletName, b.palletName));
   }
 
   has(id: string): boolean {
-    return (
-      this.db
-        .prepare<[string], { one: number }>('SELECT 1 AS one FROM pallets WHERE id = ?')
-        .get(id) !== undefined
-    );
+    return this.store.hasDesign(id);
   }
 
   /**
-   * Write a design, creating the row if it is new. Overwrites what was there:
+   * Write a design, creating the file if it is new. Overwrites what was there:
    * the previous state is not kept anywhere.
    *
    * The date and the copy of the client's name are set here rather than taken
@@ -235,27 +237,7 @@ export class PalletRepository {
   private write(submitted: Pallet, clients: ClientRepository): Pallet {
     const client = clients.get(submitted.clientId);
     const pallet: Pallet = { ...submitted, clientName: client.name };
-
-    this.db
-      .prepare(
-        `INSERT INTO pallets (id, client_id, pallet_code, pallet_name, updated_at, doc)
-         VALUES (@id, @client_id, @pallet_code, @pallet_name, @updated_at, @doc)
-         ON CONFLICT(id) DO UPDATE SET
-           client_id = excluded.client_id,
-           pallet_code = excluded.pallet_code,
-           pallet_name = excluded.pallet_name,
-           updated_at = excluded.updated_at,
-           doc = excluded.doc`,
-      )
-      .run({
-        id: pallet.id,
-        client_id: pallet.clientId,
-        pallet_code: pallet.palletCode,
-        pallet_name: pallet.palletName,
-        updated_at: pallet.updatedAt,
-        doc: JSON.stringify(pallet),
-      });
-
+    this.store.writeDesign(pallet);
     return pallet;
   }
 
@@ -266,6 +248,32 @@ export class PalletRepository {
 
   delete(id: string): void {
     if (!this.has(id)) throw new PalletNotFoundError(id);
-    this.db.prepare('DELETE FROM pallets WHERE id = ?').run(id);
+    this.store.deleteDesign(id);
   }
+}
+
+/**
+ * Make sure every client a design names is in the clients file.
+ *
+ * Designs and the clients file sync independently, and a design can land first.
+ * Run at startup, this folds any such client back in from the design's own copy
+ * of the name, so the dashboard settles rather than relying on the rebuilding
+ * that `dashboard` does on the fly.
+ */
+export function reconcileClients(store: FileStore): number {
+  const clients = store.readClients();
+  const held = new Set(clients.map((client) => client.id));
+  const missing = new Map<string, Client>();
+
+  for (const design of store.listDesigns()) {
+    if (held.has(design.clientId) || missing.has(design.clientId)) continue;
+    missing.set(design.clientId, {
+      id: design.clientId,
+      name: design.clientName,
+      createdAt: design.updatedAt,
+    });
+  }
+
+  if (missing.size > 0) store.writeClients([...clients, ...missing.values()]);
+  return missing.size;
 }

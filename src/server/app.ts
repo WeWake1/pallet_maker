@@ -12,7 +12,7 @@ import { contentDisposition, downloadName } from '../sheet/filename.js';
 import { exportPdfBuffer } from '../sheet/pdf.js';
 import { renderSheet } from '../sheet/sheet.js';
 import { renderSheetSvg } from '../sheet/svgSheet.js';
-import type { Db } from './db.js';
+import type { FileStore } from '../store/files.js';
 import { exportLibrary, importDesign, importLibrary } from './library.js';
 import {
   ClientNotFoundError,
@@ -23,8 +23,10 @@ import {
 } from './repository.js';
 
 /**
- * The local API. One user, one machine, no authentication: the whole point of
- * this tool is that it is a program on the owner's computer.
+ * The local API. No authentication: it listens only on this machine, and the
+ * designs it serves are files in a folder that the operating system has already
+ * decided this person can read. Sharing happens in the folder — Drive syncs it
+ * between the few people who draw pallets — not over this port.
  */
 
 export interface AppOptions {
@@ -34,10 +36,10 @@ export interface AppOptions {
   rates?: Rates;
 }
 
-export function createApp(db: Db, options: AppOptions = {}): Express {
+export function createApp(store: FileStore, options: AppOptions = {}): Express {
   const app = express();
-  const pallets = new PalletRepository(db);
-  const clients = new ClientRepository(db);
+  const pallets = new PalletRepository(store);
+  const clients = new ClientRepository(store);
   // Generous, because a whole library being imported arrives as one body and a
   // few hundred designs is a few megabytes of it. Nothing reaches this server
   // from outside the machine, so there is nothing for a tighter limit to guard.
@@ -223,10 +225,10 @@ export function createApp(db: Db, options: AppOptions = {}): Express {
   /**
    * The whole library as one file: every client, every design.
    *
-   * The store is a database on this machine and nothing else can read it. This
-   * is the same designs in a form that can go in a Drive folder, onto a stick,
-   * or to another computer — and the only copy of them that survives this one
-   * dying.
+   * The store is already a folder of JSON files, so this is not the only
+   * readable copy any more. It is still the one that travels: every client and
+   * every design as a single document, for a stick, an email, or an archive
+   * that outlives the folder.
    */
   app.get('/api/library.json', wrap((_req, res) => {
     const library = exportLibrary(pallets, clients);
@@ -248,7 +250,7 @@ export function createApp(db: Db, options: AppOptions = {}): Express {
   app.post('/api/library/import', wrap((req, res) => {
     const body = req.body as { library?: unknown; mode?: unknown };
     const mode = body.mode === 'replace' ? 'replace' : 'skip';
-    res.json(importLibrary(db, parseLibrary(body.library), pallets, clients, mode));
+    res.json(importLibrary(store, parseLibrary(body.library), pallets, clients, mode));
   }));
 
   if (options.staticDir && existsSync(options.staticDir)) {

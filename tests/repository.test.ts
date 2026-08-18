@@ -1,7 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { newId } from '../src/ids.js';
-import { openDb } from '../src/server/db.js';
-import type { Db } from '../src/server/db.js';
 import {
   ClientNotFoundError,
   ClientRepository,
@@ -10,9 +8,10 @@ import {
   PalletRepository,
 } from '../src/server/repository.js';
 import type { Client, Pallet } from '../src/types.js';
-import { loadFixture } from './helpers.js';
+import type { FileStore } from '../src/store/files.js';
+import { cleanupStores, loadFixture, tempStore } from './helpers.js';
 
-let db: Db;
+let folder: FileStore;
 let pallets: PalletRepository;
 let clients: ClientRepository;
 let acme: Client;
@@ -36,11 +35,13 @@ function named(code: string, client: Client = acme): Pallet {
 const store = (pallet: Pallet): Pallet => pallets.save(pallet, clients);
 
 beforeEach(() => {
-  db = openDb(':memory:');
-  pallets = new PalletRepository(db);
-  clients = new ClientRepository(db);
+  folder = tempStore();
+  pallets = new PalletRepository(folder);
+  clients = new ClientRepository(folder);
   acme = clients.create('ACME Logistics');
 });
+
+afterEach(cleanupStores);
 
 describe('clients', () => {
   it('can be on the books before anything is drawn for them', () => {

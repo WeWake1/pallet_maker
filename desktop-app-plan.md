@@ -46,12 +46,12 @@ stays (in-process).
 
 Nothing else starts until the current data is provably recoverable.
 
-- [ ] Copy `data/pallets.sqlite` and `data/backups/` somewhere outside the repo
-- [ ] Export the full library via `GET /api/library.json` and save the file
-- [ ] Generate a PDF for **5 designs** covering different shapes — stringer,
+- [x] Copy `data/pallets.sqlite` and `data/backups/` somewhere outside the repo
+- [x] Export the full library via `GET /api/library.json` and save the file
+- [x] Generate a PDF for **5 designs** covering different shapes — stringer,
       block, wing, M-pallet, plywood — and keep them as the reference set
-- [ ] Record `npm test` passing, and the count, as the baseline
-- [ ] Confirm the reference PDFs open correctly and the font renders
+- [x] Record `npm test` passing, and the count, as the baseline
+- [x] Confirm the reference PDFs open correctly and the font renders
 
 **Done when:** the library can be rebuilt from files that are not in this repo.
 
@@ -87,51 +87,74 @@ split, clients and designs as two lists, so the shape is proven.
 
 ### Work
 
-- [ ] Write `src/store/files.ts` — read/write/list/delete over the folder
-- [ ] **Atomic writes**: write to `<id>.json.tmp`, then rename into place. A
+- [x] Write `src/store/files.ts` — read/write/list/delete over the folder
+- [x] **Atomic writes**: write to `<id>.json.tmp`, then rename into place. A
       rename is instant, so Drive never sees a half-written design
-- [ ] **Tolerate bad files**: a design that fails to parse is skipped and
+- [x] **Tolerate bad files**: a design that fails to parse is skipped and
       reported, never fatal. Drive may hand us a file mid-download, and one bad
       file must not take down the dashboard
-- [ ] Reimplement `ClientRepository` and `PalletRepository` against the folder,
+- [x] Reimplement `ClientRepository` and `PalletRepository` against the folder,
       keeping their current method signatures so `src/server/app.ts` is untouched
-- [ ] Port `ClientRepository.rename` — it rewrites `clientName` on every design
+- [x] Port `ClientRepository.rename` — it rewrites `clientName` on every design
       of that client (`repository.ts:110-136`); same behaviour, now over files
-- [ ] Port the cascade: deleting a client deletes their designs
-- [ ] Rebuild the dashboard listing by reading the folder rather than SQL
-- [ ] Rework `src/server/backup.ts` — timestamped folder copy instead of
+- [x] Port the cascade: deleting a client deletes their designs
+- [x] Rebuild the dashboard listing by reading the folder rather than SQL
+- [x] Rework `src/server/backup.ts` — timestamped folder copy instead of
       `VACUUM INTO`, same `keep` limit
 
 ### Converter
 
-- [ ] Write `src/cli/convert.ts`: reads an existing `pallets.sqlite`, writes the
+- [x] Write `src/cli/convert.ts`: reads an existing `pallets.sqlite`, writes the
       folder layout, **never modifies the database**
-- [ ] Reuse the existing migration in `src/server/db.ts` so a database from the
+- [x] Reuse the existing migration in `src/server/db.ts` so a database from the
       revisions-era version converts correctly too
-- [ ] Report counts on finish: clients, designs, anything skipped
+- [x] Report counts on finish: clients, designs, anything skipped
 
 ### Verification — do not skip
 
-- [ ] Run the converter on the real `data/pallets.sqlite`
-- [ ] Compare counts: clients and designs out must equal rows in
-- [ ] Round-trip check: export `library.json` from the old DB and from the new
+- [x] Run the converter on the real `data/pallets.sqlite`
+- [x] Compare counts: clients and designs out must equal rows in
+- [x] Round-trip check: export `library.json` from the old DB and from the new
       folder, and diff them — they should be identical
-- [ ] Regenerate the 5 reference PDFs from the folder store and compare against
+- [x] Regenerate the 5 reference PDFs from the folder store and compare against
       Phase 0
 
 ### Tests
 
-- [ ] Rewrite `tests/repository.test.ts` (211 lines) against the folder store
-- [ ] Rewrite `tests/backup.test.ts` (96 lines) for folder backups
-- [ ] `tests/api.test.ts` (358 lines) — behaviour is unchanged; only the fixture
+- [x] Rewrite `tests/repository.test.ts` (211 lines) against the folder store
+- [x] Rewrite `tests/backup.test.ts` (96 lines) for folder backups
+- [x] `tests/api.test.ts` (358 lines) — behaviour is unchanged; only the fixture
       setup should need touching
-- [ ] Keep `tests/migration.test.ts` (238 lines) — it now covers the converter
-- [ ] New: atomic write leaves no `.tmp` behind
-- [ ] New: an unparseable file is skipped, not fatal
-- [ ] New: an empty folder starts a fresh library cleanly
+- [x] Keep `tests/migration.test.ts` (238 lines) — it now covers the converter
+- [x] New: atomic write leaves no `.tmp` behind
+- [x] New: an unparseable file is skipped, not fatal
+- [x] New: an empty folder starts a fresh library cleanly
 
 **Done when:** the app runs exactly as before on `npm start`, with the folder as
 its store, all tests green, and PDFs matching Phase 0.
+
+### What came out differently
+
+- **A snapshot is one library file, not a folder copy.** `backups/pallets-<stamp>.json`
+  is a single write that cannot be caught half-finished, and it goes back in
+  through the import that already existed. A folder copy would have needed a
+  restore path of its own.
+- **`reconcileClients` was added.** Designs and `clients.json` sync separately
+  and either can land first, so a design can arrive naming a client the folder
+  does not hold yet. It is folded in from the design's own copy of the name at
+  startup, and `dashboard` rebuilds it on the fly in the meantime — a design on
+  disk is never missing from the dashboard.
+- **The read cache compares nanoseconds, not milliseconds.** Two writes in the
+  same millisecond at the same length would otherwise look like no write, and a
+  colleague's change would not appear.
+- **The converter preserves ids.** The first attempt reused `importLibrary`,
+  which matches clients by name and mints fresh ids — correct for merging two
+  libraries, wrong for a conversion. Caught by the round-trip check: the folder
+  was equivalent to the database but not equal to it.
+- **Converting twice was a real bug.** A database from the revisions era has no
+  clients table, so ids are invented while it is read and a second run invented
+  a second set. Found by a test, fixed by matching on name when the folder
+  already holds clients.
 
 ---
 

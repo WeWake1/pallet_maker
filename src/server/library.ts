@@ -4,14 +4,16 @@ import { LIBRARY_FORMAT, LIBRARY_VERSION } from '../library.js';
 import type { ImportMode, ImportReport, Library } from '../library.js';
 import { parsePallet } from '../schema.js';
 import type { Pallet } from '../types.js';
-import type { Db } from './db.js';
+import type { FileStore } from '../store/files.js';
 import type { ClientRepository, PalletRepository } from './repository.js';
 
 /**
  * The library in and out of a file.
  *
- * The store is a database on one machine. This is how designs leave it — to a
- * backup, to a colleague, to another computer — and how they come back.
+ * The store is a folder of files, which a colleague's machine may already be
+ * syncing. This is the whole of it as one document — for a backup, for somebody
+ * outside the Drive folder, or for reading years from now — and the way back
+ * in.
  */
 
 /** Every client and every design, as one document. */
@@ -47,7 +49,7 @@ export function exportLibrary(pallets: PalletRepository, clients: ClientReposito
  * must leave the store as it was, not half-imported.
  */
 export function importLibrary(
-  db: Db,
+  store: FileStore,
   library: Library,
   pallets: PalletRepository,
   clients: ClientRepository,
@@ -68,7 +70,7 @@ export function importLibrary(
     return created.id;
   };
 
-  db.transaction(() => {
+  store.transaction(() => {
     // Named first, so that a client with no designs still arrives. Being a
     // record of their own is the whole point of the clients table.
     for (const client of library.clients) clientIdFor(client.name);
@@ -84,7 +86,7 @@ export function importLibrary(
       if (held) report.designsReplaced += 1;
       else report.designsAdded += 1;
     }
-  })();
+  });
 
   return report;
 }
