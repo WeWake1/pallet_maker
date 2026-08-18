@@ -1,0 +1,65 @@
+# How the app is packaged.
+#
+# One target: a Windows installer, 64-bit, because that is what everyone who
+# draws pallets is on. The installer is not signed — a certificate costs a few
+# hundred a year and there are four users — so Windows shows "protected your PC"
+# on the first run of each version. "More info" then "Run anyway" gets past it.
+
+appId: in.ambicapatterns.palletspec
+productName: Pallet Spec
+copyright: © Ambica Patterns (India) Pvt. Ltd.
+
+directories:
+  output: release
+  buildResources: build
+
+# The app is one bundled file plus the production dependencies electron-builder
+# works out for itself. Everything the program reads at run time is below.
+files:
+  - dist/electron/**/*
+  - package.json
+
+extraResources:
+  # The built editor, served from inside the app.
+  - from: dist/editor
+    to: editor
+  # Costing rates. Sealed in: one set of prices that everybody quotes from,
+  # changed by shipping a new version.
+  - from: config/rates.json
+    to: rates.json
+  - from: build/icon.png
+    to: icon.png
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.png
+
+nsis:
+  # Not one-click: somebody installing a tool they have never seen should get
+  # to read what it is going to do first.
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Pallet Spec
+
+mac:
+  target:
+    # The zip is what an update is delivered as; the dmg is what a person
+    # installs from. Windows needs no such pair — its installer is both.
+    - target: dmg
+      arch: [arm64]
+    - target: zip
+      arch: [arm64]
+  icon: build/icon.png
+  category: public.app-category.productivity
+
+# Updates come from the releases on the repository. It is public, so no token
+# is needed anywhere — neither in the app nor on anybody's machine.
+publish:
+  provider: github
+  owner: WeWake1
+  repo: pallet_maker

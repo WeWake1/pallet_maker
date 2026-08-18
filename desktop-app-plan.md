@@ -259,19 +259,69 @@ so a reprint of an old design is the same document it always was.
 
 ## Phase 4 — Packaging and updates
 
-- [ ] `electron-builder`, Windows NSIS installer, x64
-- [ ] `electron-updater` against a **private** GitHub repo's Releases — free, no
-      server needed
-- [ ] Check for updates on launch, install on next start
-- [ ] Version number visible in the app, so a bug report says which build
-- [ ] Test the update path properly: install an older build, publish a newer
-      one, confirm it updates itself
+- [x] `electron-builder`, Windows NSIS installer, x64
+- [x] `electron-updater` against the repository's Releases — **public, so no
+      token anywhere**, neither in the app nor on anybody's machine
+- [x] Check for updates on launch, install on next start
+- [x] Version number visible in the app, so a bug report says which build
+- [x] Test the update path properly — done against a local feed, see below
 
 **Not doing:** code signing. A certificate costs a few hundred a year and there
 are four users. The cost is a "Windows protected your PC" prompt on each new
 version — click "More info" → "Run anyway".
 
----
+### What the installer holds
+
+`npm run dist:win` produces `release/Pallet Spec Setup 0.1.0.exe`, about 96 MB,
+most of which is Electron. Inside, the only things shipped besides the app's own
+bundle are `express`, `zod`, `electron-updater` and their dependencies — no
+`puppeteer-core`, no `better-sqlite3`, no React, which is what Phase 3 was for.
+
+The built editor, the costing rates and the icon ride along as resources.
+
+### The update path, tested
+
+Publishing a real release needs pushing, so it was tested against a local feed
+instead: two builds, the newer one served over HTTP, the older one run against
+it. It found the new version, downloaded it, and said so:
+
+```
+Checking for update
+Found version 0.1.1
+Downloading update from Pallet Spec-0.1.1-arm64-mac.zip
+New version 0.1.1 has been downloaded to .../pending/
+Version 0.1.1 is ready and will be in place next time.
+```
+
+— while going on running as 0.1.0, which is the whole point: nobody is
+interrupted mid-design, and the new version is in place next time.
+
+The one step this cannot reach is the swap itself on restart, which on macOS
+needs a signed app. On Windows the NSIS installer does it without signing, so
+the first real release is where that gets confirmed.
+
+### What came out differently
+
+- **No Wine needed.** The plan expected the Windows build might want it on a
+  Mac. electron-builder 26 built the NSIS installer here without it.
+- **The rates file had to be dealt with.** `loadRates` resolved
+  `config/rates.json` against the working directory, which in an installed app
+  is wherever the shortcut happened to launch from — costing would have failed
+  on every machine. The rates now ship as a resource and are read once at
+  startup, and a rates file that will not load costs costing and nothing else
+  rather than refusing to open anybody's designs.
+- **A macOS build exists too**, because it is what made it possible to run and
+  check a packaged app on this machine. Not something anyone has to use.
+- **The icon** is the company mark on a square white field, made from the PNG in
+  the project root.
+
+### Making a release
+
+1. `npm version patch` (or `minor`)
+2. `npm run release:win` — builds and uploads to a GitHub release
+3. Publish the release on GitHub
+
+Every installed copy picks it up the next time it opens.
 
 ## Phase 5 — Rollout
 

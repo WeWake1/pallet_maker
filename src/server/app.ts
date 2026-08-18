@@ -37,6 +37,14 @@ export interface AppOptions {
   /** Rates to cost with. Read from the config file when not given. */
   rates?: Rates;
   /**
+   * Which build this is, for the editor to show.
+   *
+   * Worth having on screen because four people update at their own pace, and a
+   * bug report is a great deal easier to place when it says which version saw
+   * it. Absent outside the app, where there is no build to name.
+   */
+  version?: string;
+  /**
    * Ask the operating system for a folder, returning null if nobody picks one.
    *
    * Only the app can do this — a web page has no way to open a native dialog —
@@ -87,7 +95,11 @@ export function createApp(handle: StoreHandle, options: AppOptions = {}): Expres
    */
   app.get('/api/settings', wrap((_req, res) => {
     fresh(res);
-    res.json({ ...handle.status(), canBrowse: options.chooseFolder !== undefined });
+    res.json({
+      ...handle.status(),
+      canBrowse: options.chooseFolder !== undefined,
+      version: options.version ?? null,
+    });
   }));
 
   /**
