@@ -156,6 +156,13 @@ export function StoreFolderBar({
       >
         Change
       </button>
+      {/* Four people update at their own pace, so a bug report is much easier
+          to place when the screen it was seen on says which build it was. */}
+      {status.version && (
+        <span className="text-label text-ink-faint" title="Which version of the app this is">
+          v{status.version}
+        </span>
+      )}
     </div>
   );
 }

@@ -2,6 +2,8 @@ import { app, BrowserWindow, dialog, Menu, shell } from 'electron';
 import type { AddressInfo } from 'node:net';
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { loadRates } from '../src/costing/load.js';
+import type { Rates } from '../src/costing/rates.js';
 import { createApp } from '../src/server/app.js';
 import { backupLibrary } from '../src/server/backup.js';
 import { reconcileClients } from '../src/server/repository.js';
@@ -9,6 +11,7 @@ import { usePrinter } from '../src/sheet/pdf.js';
 import { StoreHandle } from '../src/store/handle.js';
 import { configuredStoreRoot } from '../src/store/settings.js';
 import { closePrinter, printWithElectron } from './printer.js';
+import { watchForUpdates } from './updates.js';
 
 /**
  * The tool as an application.
@@ -29,6 +32,35 @@ function editorDirectory(): string {
   return app.isPackaged
     ? join(process.resourcesPath, 'editor')
     : resolve(app.getAppPath(), 'dist', 'editor');
+}
+
+/**
+ * The costing rates, read once at startup.
+ *
+ * `loadRates` looks beside the working directory, which in a built app is
+ * wherever somebody happened to launch it from — so the path is given here
+ * instead. The rates ship with the app: changing a timber price means a new
+ * version, which is the trade for there being one set of prices that everybody
+ * is quoting from.
+ *
+ * A rates file that will not load costs costing, and nothing else. It is not
+ * worth refusing to open somebody's designs over.
+ */
+function readRates(): Rates | undefined {
+  const path = app.isPackaged
+    ? join(process.resourcesPath, 'rates.json')
+    : resolve(app.getAppPath(), 'config', 'rates.json');
+  try {
+    return loadRates(path);
+  } catch (error) {
+    console.error(
+      `Could not read the costing rates from ${path}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    console.error('Designs will open as usual; costing will not work until this is put right.');
+    return undefined;
+  }
 }
 
 /** The company mark, for the window and the dock. */
@@ -154,6 +186,8 @@ async function main(): Promise<void> {
   // the tool and has no use in a built app.
   const server = createApp(handle, {
     staticDir: editorDirectory(),
+    rates: readRates(),
+    version: app.getVersion(),
     chooseFolder: () => chooseFolder(window),
   }).listen(Number(process.env.PORT ?? 0), '127.0.0.1');
 
@@ -163,6 +197,10 @@ async function main(): Promise<void> {
   buildMenu(window, handle);
   await window.loadURL(`http://127.0.0.1:${port}/`);
   window.show();
+
+  // After the window is up, so that a slow or unreachable GitHub delays nothing
+  // anybody is waiting on.
+  watchForUpdates(window);
 
   // A link to anywhere else is somebody's browser's business, not ours.
   window.webContents.setWindowOpenHandler(({ url }) => {

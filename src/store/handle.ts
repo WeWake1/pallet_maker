@@ -23,6 +23,8 @@ export interface StoreStatus {
   clients: number | null;
   /** Whether a native folder dialog can be opened, which only the app can do. */
   canBrowse?: boolean;
+  /** Which build this is, when it is the app rather than a browser tab. */
+  version?: string | null;
 }
 
 export interface HandleOptions {

@@ -471,6 +471,36 @@ dialog.
 Nothing in [electron/](electron/) knows anything about pallets. It opens a
 window, starts the server in its own process, and says which printer to use.
 
+### Building the installer
+
+`npm run dist:win` writes `release/Pallet Spec Setup <version>.exe` — a 64-bit
+Windows installer, about 96 MB, most of which is Electron. It builds on macOS as
+well as on Windows, and needs no Wine.
+
+The installer is **not signed**. A certificate costs a few hundred a year and
+there are four users, so Windows shows "protected your PC" on the first run of
+each version: "More info", then "Run anyway".
+
+`npm run dist:mac` builds a macOS app, which is what makes it possible to run a
+packaged build on a Mac while working on the tool. Nobody has to use it.
+
+### Updates
+
+The app looks for a new version when it opens, downloads it quietly, and puts it
+in place the next time it starts — so nobody is interrupted mid-design, and four
+copies do not drift onto four different versions.
+
+Releases live on the repository, which is public, so there is no token in the
+app and none on anybody's machine. To ship one:
+
+1. `npm version patch`
+2. `npm run release:win`
+3. Publish the release on GitHub
+
+A laptop with no internet is the ordinary case here rather than a fault — the
+whole design is for somebody working on a Sunday — so a failed check is written
+down and otherwise ignored.
+
 ### Printing
 
 [src/sheet/pdf.ts](src/sheet/pdf.ts) names no printer. Whichever entry point
