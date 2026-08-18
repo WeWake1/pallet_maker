@@ -12,7 +12,9 @@ import { contentDisposition, downloadName } from '../sheet/filename.js';
 import { exportPdfBuffer } from '../sheet/pdf.js';
 import { renderSheet } from '../sheet/sheet.js';
 import { renderSheetSvg } from '../sheet/svgSheet.js';
-import type { FileStore } from '../store/files.js';
+import { StoreUnavailableError } from '../store/files.js';
+import type { StoreHandle } from '../store/handle.js';
+import { rememberStoreRoot } from '../store/settings.js';
 import { exportLibrary, importDesign, importLibrary } from './library.js';
 import {
   ClientNotFoundError,
@@ -34,12 +36,24 @@ export interface AppOptions {
   staticDir?: string;
   /** Rates to cost with. Read from the config file when not given. */
   rates?: Rates;
+  /**
+   * Ask the operating system for a folder, returning null if nobody picks one.
+   *
+   * Only the app can do this — a web page has no way to open a native dialog —
+   * so it is absent when the tool is being run as a page, and the editor falls
+   * back to a typed path. The server is running inside the app's own process,
+   * which is what lets it offer this at all.
+   */
+  chooseFolder?: () => Promise<string | null>;
 }
 
-export function createApp(store: FileStore, options: AppOptions = {}): Express {
+export function createApp(handle: StoreHandle, options: AppOptions = {}): Express {
   const app = express();
-  const pallets = new PalletRepository(store);
-  const clients = new ClientRepository(store);
+  // The repositories ask the handle which folder to use each time they are
+  // used, so pointing the tool somewhere else takes effect without a restart.
+  const storeNow = () => handle.require();
+  const pallets = new PalletRepository(storeNow);
+  const clients = new ClientRepository(storeNow);
   // Generous, because a whole library being imported arrives as one body and a
   // few hundred designs is a few megabytes of it. Nothing reaches this server
   // from outside the machine, so there is nothing for a tighter limit to guard.
@@ -62,6 +76,73 @@ export function createApp(store: FileStore, options: AppOptions = {}): Express {
   const fresh = (res: Response): void => {
     res.setHeader('Cache-Control', 'no-store, must-revalidate');
   };
+
+  /**
+   * Which folder the designs are in.
+   *
+   * Always answers, even when the folder cannot be reached — that is the whole
+   * point of it. Everything else needs the designs; this is what the editor
+   * asks when it cannot have them, so it can say where it was looking and offer
+   * somewhere else.
+   */
+  app.get('/api/settings', wrap((_req, res) => {
+    fresh(res);
+    res.json({ ...handle.status(), canBrowse: options.chooseFolder !== undefined });
+  }));
+
+  /**
+   * Use a different folder from now on.
+   *
+   * The folder is made if it is not there: somebody typing a path has said so
+   * on purpose, and a first run has to be able to start a library somewhere.
+   * That is the opposite of what happens at startup, where a folder that has
+   * gone missing is reported rather than replaced with an empty one.
+   */
+  app.put('/api/settings', wrap((req, res) => {
+    const root = (req.body as { root?: unknown }).root;
+    if (typeof root !== 'string' || root.trim() === '') {
+      res.status(400).json({ error: 'A folder has to be given' });
+      return;
+    }
+    if (handle.status().source === 'environment') {
+      res.status(409).json({
+        error: 'PALLET_STORE is set, and it decides the folder. Unset it to choose one here.',
+      });
+      return;
+    }
+
+    const status = handle.use(root.trim());
+    rememberStoreRoot(status.root!);
+    res.json(status);
+  }));
+
+  /** Look again, for a folder that was not there when the tool started. */
+  app.post('/api/settings/retry', wrap((_req, res) => {
+    res.json(handle.retry());
+  }));
+
+  /**
+   * Pick a folder in a native dialog, and use it.
+   *
+   * Answers 501 when there is no dialog to open, which is how the editor knows
+   * to ask for a typed path instead rather than offering a button that cannot
+   * do anything.
+   */
+  app.post('/api/settings/browse', wrap(async (_req, res) => {
+    if (!options.chooseFolder) {
+      res.status(501).json({ error: 'Choosing a folder needs the app rather than a browser tab' });
+      return;
+    }
+    const picked = await options.chooseFolder();
+    if (picked === null) {
+      // Cancelled. Nothing changes, and nothing has gone wrong.
+      res.json(handle.status());
+      return;
+    }
+    const status = handle.use(picked);
+    rememberStoreRoot(status.root!);
+    res.json(status);
+  }));
 
   // Rates go to the editor so it can cost a design as it is being changed,
   // rather than only once it has been saved.
@@ -250,7 +331,7 @@ export function createApp(store: FileStore, options: AppOptions = {}): Express {
   app.post('/api/library/import', wrap((req, res) => {
     const body = req.body as { library?: unknown; mode?: unknown };
     const mode = body.mode === 'replace' ? 'replace' : 'skip';
-    res.json(importLibrary(store, parseLibrary(body.library), pallets, clients, mode));
+    res.json(importLibrary(handle.require(), parseLibrary(body.library), pallets, clients, mode));
   }));
 
   if (options.staticDir && existsSync(options.staticDir)) {
@@ -261,6 +342,13 @@ export function createApp(store: FileStore, options: AppOptions = {}): Express {
   }
 
   app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
+    // Not a fault in this program: the designs are somewhere it cannot read.
+    // Its own status, so the editor can tell it apart from a design that is
+    // merely missing and offer to be pointed somewhere else.
+    if (error instanceof StoreUnavailableError) {
+      res.status(503).json({ error: error.message, storeUnavailable: true });
+      return;
+    }
     if (error instanceof PalletNotFoundError) {
       res.status(404).json({ error: error.message });
       return;

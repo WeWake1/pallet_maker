@@ -25,6 +25,34 @@ import type { Client, Pallet } from '../types.js';
 export const DESIGNS_DIR = 'designs';
 export const CLIENTS_FILE = 'clients.json';
 
+/**
+ * The folder is not there, and this is not the moment to invent one.
+ *
+ * A store folder that has been used before and is now missing means something
+ * is wrong outside this program: Drive is not running, the folder was renamed,
+ * an external disk is unplugged. Making an empty one would show an empty
+ * library, and somebody would redraw designs that are not lost at all — and
+ * then Drive would come back and there would be two of everything.
+ */
+export class StoreUnavailableError extends Error {
+  constructor(
+    readonly root: string,
+    readonly reason: string,
+  ) {
+    super(`Cannot reach the designs folder ${root}: ${reason}`);
+    this.name = 'StoreUnavailableError';
+  }
+}
+
+export interface OpenOptions {
+  /**
+   * Make the folder when it is not there. Only true where somebody has just
+   * said which folder to use, or for a brand new library — never for a folder
+   * that was in the settings and should therefore already exist.
+   */
+  create?: boolean;
+}
+
 /** A file that could not be read. Reported, never thrown. */
 export interface StoreProblem {
   file: string;
@@ -99,10 +127,22 @@ export class FileStore {
   /** Set while a transaction is open: reads see these before they see the disk. */
   private pending: { designs: Map<string, Pallet>; deletes: Set<string>; clients?: Client[] } | undefined;
 
-  constructor(root: string) {
+  constructor(root: string, options: OpenOptions = {}) {
     this.root = resolve(root);
     this.designsDir = join(this.root, DESIGNS_DIR);
     this.clientsPath = join(this.root, CLIENTS_FILE);
+
+    if (!existsSync(this.root)) {
+      if (!options.create) throw new StoreUnavailableError(this.root, 'there is no such folder');
+      mkdirSync(this.designsDir, { recursive: true });
+      return;
+    }
+    if (!statSync(this.root).isDirectory()) {
+      throw new StoreUnavailableError(this.root, 'that is a file, not a folder');
+    }
+    // The folder is there, so `designs/` is ours to make: an empty library and
+    // one somebody has deleted the designs out of look the same from here, and
+    // neither is a reason to refuse to open.
     mkdirSync(this.designsDir, { recursive: true });
   }
 

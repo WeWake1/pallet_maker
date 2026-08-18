@@ -90,7 +90,8 @@ export function readDatabase(dbPath: string): { clients: Client[]; designs: Pall
  */
 export function convert(dbPath: string, root: string): ConvertReport {
   const { clients, designs, skipped } = readDatabase(dbPath);
-  const store = new FileStore(root);
+  // Converting into a folder is the one moment it is right to make one.
+  const store = new FileStore(root, { create: true });
 
   store.transaction(() => {
     const held = store.readClients();

@@ -460,9 +460,43 @@ Fast Refresh: editing a component reloads the page. `@vitejs/plugin-react`
 requires Vite 8 while Vitest pins Vite 5, and one fewer dependency to keep in
 step is worth more here than hot reload.
 
+## Running it as an application
+
+`npm run app` builds the editor, builds the Electron main process and opens the
+window. Inside is the same program `npm run serve` runs — the API and the editor,
+unchanged — on a loopback port nobody else can reach. Electron supplies the two
+things a browser tab cannot: a Chromium of its own to print with, and a folder
+dialog.
+
+Nothing in [electron/](electron/) knows anything about pallets. It opens a
+window, starts the server in its own process, and says which printer to use.
+
+### Printing
+
+[src/sheet/pdf.ts](src/sheet/pdf.ts) names no printer. Whichever entry point
+knows what it is running inside chooses one:
+
+| Running as | Printer | Chromium |
+| --- | --- | --- |
+| The app | [electron/printer.ts](electron/printer.ts) | the one inside Electron |
+| `npm run serve`, the CLI, the tests | [src/sheet/browserPrinter.ts](src/sheet/browserPrinter.ts) | Chrome or Edge on the machine |
+
+Both are the same engine — only the copy differs. The app carrying its own is
+what stops a sheet depending on which browser a particular laptop has, which had
+already caused one round of inconsistent output.
+
+`npm run compare:pdf` is the check that they agree. It prints the reference
+designs through Electron and compares them with PDFs printed the old way — not
+byte for byte, since a PDF carries a creation date and an id that change on
+every print, but mark for mark: the inflated content streams, every string
+drawn and its order, every drawing operator counted, the paper size, and that
+nothing was rasterised. They come out identical, tagged-PDF structure and all.
+Run it after anything that touches the sheet or the printer.
+
 ## Storage
 
-A folder of JSON files, `data/library` by default and `PALLET_STORE` otherwise:
+A folder of JSON files — chosen in the editor, `data/library` until one is, and
+`PALLET_STORE` overriding both:
 one file per design under `designs/`, named by its id, and `clients.json` beside
 them. The document is the whole of what is stored — there is no index to keep in
 step with it — and a design names its own client inside itself, so a file on its
@@ -485,6 +519,27 @@ carries, and that client is folded into `clients.json` at the next start.
 Two people editing **different** designs never collide, because they are
 different files. Two people editing the **same** design between syncs is last
 save wins, with Drive's own version history behind it.
+
+### Which folder, and where that is remembered
+
+The folder is chosen on the setup screen and written to this machine's own
+settings — `%APPDATA%` on Windows, `~/Library/Application Support` on macOS,
+`$XDG_CONFIG_HOME` otherwise. Deliberately not in the designs folder itself: the
+designs are shared, but the path to them is not, because Drive mounts somewhere
+different on every machine.
+
+**A folder that has gone missing is reported, never re-made.** Drive not started
+yet, a renamed folder and an unplugged disk all look exactly like a fresh
+install, and quietly making an empty one shows an empty library — which is how
+somebody comes to redraw designs that were never lost, only for Drive to come
+back and leave two of everything. So the tool starts, says which folder it could
+not reach and why, and offers "Look again" for when Drive is simply slow. A
+folder is only created when somebody has just named one.
+
+The chosen folder can be changed while the tool is running, from **Change** on
+the designs folder bar. `PALLET_STORE` overrides the choice when it is set, and
+the editor says so rather than letting a change be made that the next start
+would undo.
 
 ### Coming from the database
 

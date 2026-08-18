@@ -5,6 +5,16 @@ import type { FileStore } from '../store/files.js';
 import type { Client, Pallet } from '../types.js';
 
 /**
+ * The folder to work in, or a way of asking which folder that is now.
+ *
+ * Somebody can point the tool at a different folder without restarting it, so a
+ * repository that held on to one would go on reading the old one. Taking a
+ * function means the answer is looked up per call, and the only cost is that
+ * the store is resolved rather than remembered.
+ */
+export type StoreRef = FileStore | (() => FileStore);
+
+/**
  * Everything the tool does to stored designs.
  *
  * There is no history. Saving a design overwrites it, and the date it carries
@@ -61,7 +71,11 @@ function byText(a: string, b: string): number {
 }
 
 export class ClientRepository {
-  constructor(private readonly store: FileStore) {}
+  constructor(private readonly ref: StoreRef) {}
+
+  private get store(): FileStore {
+    return typeof this.ref === 'function' ? this.ref() : this.ref;
+  }
 
   list(): Client[] {
     return [...this.store.readClients()].sort((a, b) => byNameNoCase(a.name, b.name));
@@ -128,7 +142,11 @@ export class ClientRepository {
 }
 
 export class PalletRepository {
-  constructor(private readonly store: FileStore) {}
+  constructor(private readonly ref: StoreRef) {}
+
+  private get store(): FileStore {
+    return typeof this.ref === 'function' ? this.ref() : this.ref;
+  }
 
   list(): PalletSummary[] {
     const names = new Map(this.store.readClients().map((client) => [client.id, client.name]));

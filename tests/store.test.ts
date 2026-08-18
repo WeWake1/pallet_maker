@@ -1,11 +1,11 @@
-import { readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { newId } from '../src/ids.js';
 import { ClientRepository, PalletRepository, reconcileClients } from '../src/server/repository.js';
-import { FileStore, fileNameFor } from '../src/store/files.js';
+import { FileStore, StoreUnavailableError, fileNameFor } from '../src/store/files.js';
 import type { Client, Pallet } from '../src/types.js';
-import { cleanupStores, loadFixture, tempStore } from './helpers.js';
+import { cleanupStores, loadFixture, missingStoreRoot, tempStore } from './helpers.js';
 
 /**
  * The folder the designs live in.
@@ -46,11 +46,44 @@ describe('an empty folder', () => {
     expect(new PalletRepository(fresh).dashboard(new ClientRepository(fresh))).toEqual([]);
   });
 
-  it('is made if it is not there', () => {
-    const fresh = tempStore();
-    rmSync(fresh.root, { recursive: true, force: true });
-    const again = new FileStore(fresh.root);
-    expect(again.listDesigns()).toEqual([]);
+  it('is made when somebody has just said to use it', () => {
+    const root = missingStoreRoot();
+    const made = new FileStore(root, { create: true });
+    expect(made.listDesigns()).toEqual([]);
+  });
+});
+
+describe('a folder that has gone missing', () => {
+  /**
+   * Drive not running, the folder renamed, an external disk unplugged. Making
+   * an empty one would show an empty library, and somebody would redraw designs
+   * that were never lost — and then Drive would come back and there would be
+   * two of everything.
+   */
+  it('is refused rather than quietly made again', () => {
+    const root = missingStoreRoot();
+    expect(() => new FileStore(root)).toThrow(StoreUnavailableError);
+    expect(existsSync(root)).toBe(false);
+  });
+
+  it('says which folder and why, so it can be put right', () => {
+    const root = missingStoreRoot();
+    expect(() => new FileStore(root)).toThrow(new RegExp(root.replace(/[/\\]/g, '.')));
+    expect(() => new FileStore(root)).toThrow(/no such folder/);
+  });
+
+  it('is not confused with a file of the same name', () => {
+    const root = missingStoreRoot();
+    mkdirSync(dirname(root), { recursive: true });
+    writeFileSync(root, 'not a folder');
+    expect(() => new FileStore(root)).toThrow(/not a folder/);
+    rmSync(root, { force: true });
+  });
+
+  /** An empty folder is a new library, not a broken one. */
+  it('is told apart from a folder that is simply empty', () => {
+    const empty = tempStore();
+    expect(new PalletRepository(empty).list()).toEqual([]);
   });
 });
 

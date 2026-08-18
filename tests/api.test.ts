@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../src/server/app.js';
 import type { Pallet } from '../src/types.js';
-import { cleanupStores, loadFixture, tempStore } from './helpers.js';
+import { cleanupStores, loadFixture, tempHandle } from './helpers.js';
 
 /** The API, over a real socket, because that is how the editor will meet it. */
 let server: Server;
@@ -11,7 +11,7 @@ let base: string;
 let clientId: string;
 
 beforeAll(async () => {
-  const app = createApp(tempStore());
+  const app = createApp(tempHandle());
   server = await new Promise<Server>((resolve) => {
     const listening = app.listen(0, () => resolve(listening));
   });

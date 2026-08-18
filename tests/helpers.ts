@@ -4,6 +4,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parsePallet } from '../src/schema.js';
 import { FileStore } from '../src/store/files.js';
+import { StoreHandle } from '../src/store/handle.js';
 import type { Layout, PlacedPiece } from '../src/geometry/types.js';
 import type { Pallet } from '../src/types.js';
 
@@ -44,6 +45,21 @@ export function tempStore(): FileStore {
   return new FileStore(root);
 }
 
+/** The same, behind the handle the API is built on. */
+export function tempHandle(): StoreHandle {
+  return new StoreHandle(tempStore().root);
+}
+
 export function cleanupStores(): void {
   for (const root of temporary.splice(0)) rmSync(root, { recursive: true, force: true });
+}
+
+/**
+ * A folder that is not there, standing for Drive not running or an unplugged
+ * disk. Made and then taken away, so the path is a real one that has gone.
+ */
+export function missingStoreRoot(): string {
+  const root = mkdtempSync(join(tmpdir(), 'pallet-gone-'));
+  rmSync(root, { recursive: true, force: true });
+  return root;
 }

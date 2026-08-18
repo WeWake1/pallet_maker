@@ -1,9 +1,24 @@
 import type { Rates } from '../costing/rates.js';
 import type { ImportMode, ImportReport } from '../library.js';
 import type { ClientDesigns, PalletSummary } from '../server/repository.js';
+import type { StoreStatus } from '../store/handle.js';
 import type { Client, Pallet } from '../types.js';
 
 /** The editor's side of the local API. */
+
+/**
+ * The designs cannot be reached at all.
+ *
+ * Told apart from every other failure because the answer is different: nothing
+ * here is wrong with the design or the request, and the only thing worth
+ * showing is where the tool was looking and how to point it somewhere else.
+ */
+export class StoreUnavailable extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'StoreUnavailable';
+  }
+}
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -11,8 +26,11 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
     headers: init?.body ? { 'content-type': 'application/json' } : undefined,
   });
   if (!response.ok) {
-    const detail = (await response.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(detail?.error ?? `${response.status} ${response.statusText}`);
+    const detail = (await response.json().catch(() => null)) as
+      | { error?: string; storeUnavailable?: boolean }
+      | null;
+    const message = detail?.error ?? `${response.status} ${response.statusText}`;
+    throw detail?.storeUnavailable ? new StoreUnavailable(message) : new Error(message);
   }
   return response.status === 204 ? (undefined as T) : ((await response.json()) as T);
 }
@@ -49,6 +67,16 @@ export const api = {
       body: JSON.stringify({ library, mode }),
     }),
 
+  /** Which folder the designs are in. Answers even when it cannot be reached. */
+  settings: () => call<StoreStatus>('/api/settings'),
+  /** Use this folder from now on, making it if it is not there. */
+  useStoreFolder: (root: string) =>
+    call<StoreStatus>('/api/settings', { method: 'PUT', body: JSON.stringify({ root }) }),
+  /** Look again, for a folder that was not there when the tool started. */
+  retryStore: () => call<StoreStatus>('/api/settings/retry', { method: 'POST' }),
+  /** Pick a folder in a native dialog. Only the app can do this. */
+  browseForFolder: () => call<StoreStatus>('/api/settings/browse', { method: 'POST' }),
+
   sheetUrl: (id: string) => `/api/pallets/${id}/sheet.pdf`,
   dxfUrl: (id: string) => `/api/pallets/${id}/drawing.dxf`,
   // The whole sheet as vector, for taking into a drawing or page-layout
@@ -61,4 +89,4 @@ export const api = {
   libraryUrl: () => '/api/library.json',
 };
 
-export type { Client, ClientDesigns, PalletSummary };
+export type { Client, ClientDesigns, PalletSummary, StoreStatus };
