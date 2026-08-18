@@ -25,6 +25,10 @@ export interface StoreStatus {
   canBrowse?: boolean;
   /** Which build this is, when it is the app rather than a browser tab. */
   version?: string | null;
+  /** Whether the prices came from the designs folder or from this version. */
+  ratesFrom?: 'folder' | 'built-in';
+  /** Why the folder's prices were not used, when there are some and they failed. */
+  ratesProblem?: string | null;
 }
 
 export interface HandleOptions {

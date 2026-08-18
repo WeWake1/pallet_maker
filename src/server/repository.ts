@@ -1,6 +1,7 @@
 import { duplicatePallet } from '../duplicate.js';
 import { newId, today } from '../ids.js';
 import { parsePallet } from '../schema.js';
+import { fingerprint } from '../store/fingerprint.js';
 import type { FileStore } from '../store/files.js';
 import type { Client, Pallet } from '../types.js';
 
@@ -49,6 +50,26 @@ export class ClientNotFoundError extends Error {
   constructor(id: string) {
     super(`No client ${id}`);
     this.name = 'ClientNotFoundError';
+  }
+}
+
+/**
+ * Somebody else saved this design while it was open here.
+ *
+ * The designs are files in a shared folder and there is no server between the
+ * people editing them, so two of them having the same design open cannot be
+ * prevented. What this prevents is the quiet part: the second save going
+ * through as though the first had never happened, and an afternoon's work being
+ * gone with nothing on screen having suggested it.
+ */
+export class ConcurrentEditError extends Error {
+  constructor(readonly savedAt: string) {
+    super(
+      `Somebody else saved this design after you opened it${
+        savedAt ? ` (theirs is dated ${savedAt})` : ''
+      }.`,
+    );
+    this.name = 'ConcurrentEditError';
   }
 }
 
@@ -235,8 +256,25 @@ export class PalletRepository {
    * The date and the copy of the client's name are set here rather than taken
    * from the document, so neither can be stale or wrong about itself.
    */
-  save(input: Pallet, clients: ClientRepository): Pallet {
+  save(input: Pallet, clients: ClientRepository, basedOn?: string): Pallet {
+    if (basedOn !== undefined) this.refuseIfChanged(input.id, basedOn);
     return this.write({ ...parsePallet(input), updatedAt: today() }, clients);
+  }
+
+  /**
+   * Stop a save that would overwrite somebody else's.
+   *
+   * `basedOn` is the design as the editor found it. If the folder no longer
+   * holds that version, somebody has saved in between — through Drive, from
+   * another machine — and going ahead would throw their work away.
+   *
+   * A design the folder has never held cannot clash with anything, which is
+   * what makes saving a new design under an id from a draft still work.
+   */
+  private refuseIfChanged(id: string, basedOn: string): void {
+    const held = this.store.readDesign(id);
+    if (!held) return;
+    if (fingerprint(held) !== basedOn) throw new ConcurrentEditError(held.updatedAt);
   }
 
   /**

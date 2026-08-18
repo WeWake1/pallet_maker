@@ -13,9 +13,9 @@ import { PAGE } from '../src/sheet/layout.js';
  * happens to have installed.
  *
  * The options are the ones `browserPrinter.ts` passes, said the way Electron
- * says them — millimetres become microns, and "no margins" becomes a named
- * margin type. `preferCSSPageSize` means the sheet's own `@page` rule decides
- * the paper either way, and the size below is what it falls back to.
+ * says them — millimetres become microns, and margins are given in inches.
+ * `preferCSSPageSize` means the sheet's own `@page` rule decides the paper
+ * either way, and the size below is what it falls back to.
  */
 
 /** Millimetres in the microns Electron measures paper in. */
@@ -91,7 +91,11 @@ async function render(html: string): Promise<Buffer> {
         width: PAGE.width * MICRONS_PER_MM,
         height: PAGE.height * MICRONS_PER_MM,
       },
-      margins: { marginType: 'none' },
+      // In inches, and every one of them nil. Electron's default is about
+      // 0.4in, and `preferCSSPageSize` happens to make the sheet's own @page
+      // rule win before that can matter — but relying on that would put a
+      // margin on every drawing the moment it stopped being true.
+      margins: { top: 0, bottom: 0, left: 0, right: 0 },
     });
   } finally {
     rmSync(scratch, { recursive: true, force: true });

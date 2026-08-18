@@ -140,6 +140,15 @@ export function StoreFolderBar({
   onChange: () => void;
 }) {
   return (
+    <>
+    {/* Prices that could not be read are said out loud and stay said. Quoting
+        at last year's timber price without being told is the one failure this
+        whole arrangement has to prevent. */}
+    {status.ratesProblem && (
+      <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-label text-amber-900">
+        <strong className="font-semibold">Prices:</strong> {status.ratesProblem}
+      </div>
+    )}
     <div className="flex items-center gap-2 border-b border-line bg-ground-soft px-4 py-1.5">
       <span className="text-label text-ink-soft">Designs folder</span>
       <span className="truncate font-mono text-label text-ink" title={status.root ?? ''}>
@@ -158,11 +167,20 @@ export function StoreFolderBar({
       </button>
       {/* Four people update at their own pace, so a bug report is much easier
           to place when the screen it was seen on says which build it was. */}
+      {status.ratesFrom === 'folder' && !status.ratesProblem && (
+        <span
+          className="text-label text-ink-faint"
+          title="Prices are coming from rates.json in the designs folder, so everybody is quoting from the same set"
+        >
+          shared prices
+        </span>
+      )}
       {status.version && (
         <span className="text-label text-ink-faint" title="Which version of the app this is">
           v{status.version}
         </span>
       )}
     </div>
+    </>
   );
 }

@@ -11,7 +11,7 @@ import { handlingCatalogue, handlingIconSvg } from '../sheet/handling.js';
 import { renderSheet } from '../sheet/sheet.js';
 import { HANDLING_METHODS, NOT_APPLICABLE } from '../types.js';
 import type { Client, HandlingMethod, LayerKind, Pallet, Unstated } from '../types.js';
-import { api, StoreUnavailable } from './api.js';
+import { api, StaleEdit, StoreUnavailable } from './api.js';
 import type { ClientDesigns, StoreStatus } from './api.js';
 import { Dashboard } from './Dashboard.jsx';
 import type { DesignActions } from './Dashboard.jsx';
@@ -23,6 +23,7 @@ import { canRedo, canUndo, historyReducer, initialHistory } from './history.js';
 import { LayerEditor } from './LayerEditor.jsx';
 import { Preview } from './Preview.jsx';
 import { shortcutLabel, useShortcuts } from './shortcuts.js';
+import { fingerprint } from '../store/fingerprint.js';
 import { selectedSlot } from './state.js';
 import { StoreFolderBar, StoreSetup } from './StoreFolder.jsx';
 import type { Action } from './state.js';
@@ -703,7 +704,43 @@ function Editor({
     [pallet, layout, rates],
   );
 
-  const store = () => (stored ? api.save(pallet) : api.create(pallet));
+  /**
+   * Write the design back, refusing to overwrite somebody else's save.
+   *
+   * The store is a shared folder, so a colleague can have saved this same
+   * design in the time it has been open here. `basedOn` is the version this
+   * editor started from; where the folder no longer holds it, the save comes
+   * back refused and the choice goes to whoever is at the keyboard. Nobody's
+   * afternoon is thrown away without them being asked.
+   */
+  const store = async (): Promise<Pallet> => {
+    if (!stored) return api.create(pallet);
+
+    try {
+      return await api.save(pallet, savedDoc ? fingerprint(JSON.parse(savedDoc)) : undefined);
+    } catch (error) {
+      if (!(error instanceof StaleEdit)) throw error;
+
+      const theirs = await api.get(pallet.id).catch(() => null);
+      const mine = window.confirm(
+        `${error.message}\n\n` +
+          'Saving now would replace their version with yours, and theirs could not be got back.\n\n' +
+          'OK to save yours over theirs. Cancel to leave theirs alone — yours stays on screen, ' +
+          'and you can copy what you need out of it.',
+      );
+      if (!mine) {
+        // Take on their version as the one being edited against, so the next
+        // save is judged against what is actually in the folder.
+        if (theirs) setSavedDoc(JSON.stringify(theirs));
+        throw new Error(
+          'Left their version alone. Yours is still on screen and has not been saved.',
+        );
+      }
+      // Said plainly, so it overwrites rather than being refused again.
+      return api.save(pallet);
+    }
+  };
+
   const save = () => attempt(store);
 
   const copy = () =>
