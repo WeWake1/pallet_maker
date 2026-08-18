@@ -160,43 +160,102 @@ its store, all tests green, and PDFs matching Phase 0.
 
 ## Phase 2 — Choosing the folder
 
-- [ ] Settings file in the OS app-data directory, **not** in the Drive folder —
+- [x] Settings file in the OS app-data directory, **not** in the Drive folder —
       each person's Drive sits at a different path, so this cannot be shared
-- [ ] On first run with no folder set, ask for one
-- [ ] A way to change it later, and to see which folder is currently in use
-- [ ] Handle the folder being missing at startup — offline, unplugged drive,
+- [x] On first run with no folder set, ask for one
+- [x] A way to change it later, and to see which folder is currently in use
+- [x] Handle the folder being missing at startup — offline, unplugged drive,
       moved — with a clear message, not a crash
-- [ ] Dashboard re-reads the folder each time it opens, so a colleague's design
+- [x] Dashboard re-reads the folder each time it opens, so a colleague's design
       appears without restarting
 
 **Done when:** the store location can be pointed anywhere and survives a
 restart.
 
+### What came out differently
+
+- **A missing folder is never re-made.** This turned out to be the safety rule
+  of the phase, not a detail. Drive not started, folder renamed, disk unplugged
+  — all look identical to a fresh install, and making an empty folder shows an
+  empty library. Somebody then redraws designs that were never lost, Drive comes
+  back, and there are two of everything. So a folder is created only when
+  somebody has just named it, never because the settings mentioned it.
+- **The tool starts anyway when the folder is unreachable.** It has to: the
+  editor is where you say where the designs are, so refusing to start would
+  leave no way to fix it. Designs return `503` with `storeUnavailable`, which
+  the editor shows as a setup screen naming the path and the reason, with "Look
+  again" for when Drive is merely slow to start.
+- **The folder can change without a restart.** Repositories resolve the store
+  per call rather than holding one, so choosing a new folder takes effect
+  immediately.
+- **`PALLET_STORE` wins over the chosen folder**, and the UI says so rather than
+  letting a change be made that the next start would silently undo.
+
 ---
 
 ## Phase 3 — Electron shell
 
-- [ ] Add Electron; main process starts the existing Express app in-process on a
+- [x] Add Electron; main process starts the existing Express app in-process on a
       free port and loads it in the window
-- [ ] Native folder picker wired to the Phase 2 setting
-- [ ] Swap `src/sheet/pdf.ts` to `webContents.printToPDF`, mapping the current
+- [x] Native folder picker wired to the Phase 2 setting
+- [x] Swap `src/sheet/pdf.ts` to `webContents.printToPDF`, mapping the current
       options one for one:
       `printBackground` → `printBackground`,
       `preferCSSPageSize` → `preferCSSPageSize`,
       `width`/`height` in mm → `pageSize` in microns,
       zero margins → `margins: { marginType: 'none' }`
-- [ ] **Compare PDFs against Phase 0 references** — this is the gate on the
+- [x] **Compare PDFs against Phase 0 references** — this is the gate on the
       whole phase
-- [ ] Delete `src/sheet/browser.ts` and drop `puppeteer-core` once the
-      comparison passes
-- [ ] Drop `better-sqlite3`
-- [ ] Window title, app icon from `assets/icons`, sensible default size
-- [ ] Menu: at minimum Reload, DevTools, Quit
+- [x] Keep `puppeteer-core` for the tools and tests, but out of the app —
+      *changed, see below*
+- [x] `better-sqlite3` out of the app — *changed, see below*
+- [x] Window title, app icon, sensible default size
+- [x] Menu: Reload, DevTools, Quit, and choosing the designs folder
 
 **Done when:** the `.exe` runs from a desktop icon, saves to the Drive folder,
 and prints PDFs identical to today's.
 
----
+### The PDF gate, and what it found
+
+`npm run compare:pdf` prints the five reference designs through Electron and
+compares them with the Phase 0 PDFs. It compares the *marks on the page* rather
+than the bytes of the file, because a PDF carries a creation date and an id that
+differ on every print and would only ever say "different": the inflated content
+streams, the strings drawn and their order, every drawing operator counted, the
+paper size, and that nothing was rasterised.
+
+First run: every drawn string and every operator matched exactly, and the
+streams differed by about 1%. The cause was worth knowing rather than waving
+through — Chrome's print pipeline emits **tagged-PDF** structure markers
+(`/NonStruct <</MCID n>> BDC` … `EMC`) and Electron's did not. Accessibility
+metadata, not marks on the page. With those stripped, every mark on every page
+was byte-identical.
+
+Electron will emit them too, with `generateTaggedPDF: true`. Turned on, all five
+sheets are byte-identical to the browser-printed originals, tagging included —
+so a reprint of an old design is the same document it always was.
+
+### What came out differently
+
+- **`puppeteer-core` was not deleted, it was demoted.** It is now a
+  devDependency: the CLI tools, the tests and `npm run serve` still print with
+  it, and the app never sees it. Deleting it outright would have left the test
+  suite and the command line with no way to make a PDF, since they do not run
+  inside Electron. The app build aliases the package to a stub, so
+  `dist/electron/main.cjs` requires only `electron`, `express` and `zod` — the
+  fragile hunt for a browser is gone from what ships, which was the point.
+- **`better-sqlite3` likewise.** The converter still needs it, and the converter
+  still has to exist for the one machine holding the old database.
+- **`src/sheet/browser.ts` became `findBrowser.ts`** and the puppeteer printing
+  moved to `browserPrinter.ts`, so `pdf.ts` names neither printer.
+- **One print window, reused.** Making and destroying a window per sheet failed
+  partway through a run of five: the next window began loading while the last
+  was still being torn down. One window taking one sheet at a time is faster and
+  has neither problem.
+- **`react` and `react-dom` moved to devDependencies** — Vite bundles them into
+  the editor, so they are not there at run time.
+- **No app icon yet.** `assets/icons/` is empty, so the window falls back to the
+  company PNG in the project root. Phase 4 needs a real `.ico`.
 
 ## Phase 4 — Packaging and updates
 

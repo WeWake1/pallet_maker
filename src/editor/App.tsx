@@ -11,8 +11,8 @@ import { handlingCatalogue, handlingIconSvg } from '../sheet/handling.js';
 import { renderSheet } from '../sheet/sheet.js';
 import { HANDLING_METHODS, NOT_APPLICABLE } from '../types.js';
 import type { Client, HandlingMethod, LayerKind, Pallet, Unstated } from '../types.js';
-import { api } from './api.js';
-import type { ClientDesigns } from './api.js';
+import { api, StoreUnavailable } from './api.js';
+import type { ClientDesigns, StoreStatus } from './api.js';
 import { Dashboard } from './Dashboard.jsx';
 import type { DesignActions } from './Dashboard.jsx';
 import { clearDraft, clearDrafts, draftAge, listDrafts, readDraft, writeDraft } from './drafts.js';
@@ -24,6 +24,7 @@ import { LayerEditor } from './LayerEditor.jsx';
 import { Preview } from './Preview.jsx';
 import { shortcutLabel, useShortcuts } from './shortcuts.js';
 import { selectedSlot } from './state.js';
+import { StoreFolderBar, StoreSetup } from './StoreFolder.jsx';
 import type { Action } from './state.js';
 import { emptyPallet, newPallet } from './templates.js';
 import {
@@ -133,11 +134,29 @@ export function App() {
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [help, setHelp] = useState(false);
+  /**
+   * Which folder the designs are in. Null only until the first answer comes
+   * back; after that it is known even when the folder cannot be reached, which
+   * is the state the setup screen exists for.
+   */
+  const [folder, setFolder] = useState<StoreStatus | null>(null);
+  /** Set from the library screen, to change folders while everything is fine. */
+  const [choosing, setChoosing] = useState(false);
   const libraryFile = useRef<HTMLInputElement>(null);
 
   const clients = useMemo(() => sections.map((section) => section.client), [sections]);
 
   const refresh = useCallback(async () => {
+    const status = await api.settings();
+    setFolder(status);
+    if (!status.ready) {
+      // Nothing to show and nothing to ask for: the setup screen takes over
+      // from here, and asking for designs would only produce a second error
+      // saying the same thing.
+      setSections([]);
+      setDrafts([]);
+      return;
+    }
     const next = await api.dashboard();
     setSections(next);
     setDrafts(usableDrafts(next));
@@ -154,6 +173,13 @@ export function App() {
         await refresh();
         return result;
       } catch (error) {
+        // The folder having gone is not a failed action to report at the top of
+        // the library — there is no library to put it at the top of. Take the
+        // screen over instead.
+        if (error instanceof StoreUnavailable) {
+          await api.settings().then(setFolder).catch(() => undefined);
+          return undefined;
+        }
         setProblem(error instanceof Error ? error.message : String(error));
         return undefined;
       } finally {
@@ -311,6 +337,64 @@ export function App() {
     setOpen({ pallet: newPallet(client), saved: null });
   };
 
+  /** Point the tool at a folder, and open what is in it. */
+  const useFolder = (root: string) => {
+    setChoosing(false);
+    void attempt(async () => {
+      setFolder(await api.useStoreFolder(root));
+    });
+  };
+
+  const retryFolder = () => {
+    void attempt(async () => {
+      setFolder(await api.retryStore());
+    });
+  };
+
+  /** The native dialog, in the app. Cancelling changes nothing. */
+  const browseForFolder = () => {
+    void attempt(async () => {
+      const status = await api.browseForFolder();
+      setFolder(status);
+      if (status.ready) setChoosing(false);
+    });
+  };
+
+  // Until the first answer comes back there is nothing worth drawing: showing
+  // an empty library for a moment would be showing something untrue.
+  if (folder === null) {
+    return <div className="flex h-full flex-col bg-slate-100 text-slate-900" />;
+  }
+
+  /**
+   * The designs cannot be reached, or nobody has said where they are. Either
+   * way the library is not a thing that can be shown, and offering the folder
+   * is the only useful screen there is.
+   */
+  if (!folder.ready || choosing) {
+    return (
+      <div className="h-full overflow-auto bg-slate-100 text-slate-900">
+        {problem && (
+          <div className="border-b border-red-200 bg-red-50 px-3 py-2 text-label text-red-700">
+            {problem}
+          </div>
+        )}
+        <StoreSetup
+          status={folder}
+          busy={busy}
+          onUse={useFolder}
+          onBrowse={folder.canBrowse ? browseForFolder : null}
+          onRetry={retryFolder}
+        />
+        {choosing && folder.ready && (
+          <div className="mx-auto max-w-2xl px-4 pb-10">
+            <Button onClick={() => setChoosing(false)}>Back to the library</Button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full flex-col bg-slate-100 text-slate-900">
       {problem && (
@@ -352,6 +436,7 @@ export function App() {
         />
       ) : (
         <>
+          <StoreFolderBar status={folder} busy={busy} onChange={() => setChoosing(true)} />
           <header className="flex items-center gap-2 border-b border-line bg-card px-4 py-2.5">
             <h1 className="text-title font-semibold tracking-tight text-ink">Pallet spec</h1>
 
@@ -462,6 +547,14 @@ function Editor({
   const [recovered, setRecovered] = useState<string | null>(recoveredAt ?? null);
   const [busy, setBusy] = useState(false);
   const [help, setHelp] = useState(false);
+  /**
+   * Which folder the designs are in. Null only until the first answer comes
+   * back; after that it is known even when the folder cannot be reached, which
+   * is the state the setup screen exists for.
+   */
+  const [folder, setFolder] = useState<StoreStatus | null>(null);
+  /** Set from the library screen, to change folders while everything is fine. */
+  const [choosing, setChoosing] = useState(false);
 
   // The drawing is always regenerated from the data, on every keystroke.
   const layout = useMemo(() => analysePallet(pallet), [pallet]);

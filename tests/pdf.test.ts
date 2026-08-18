@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { computeLayout } from '../src/geometry/layout.js';
-import { findBrowser } from '../src/sheet/browser.js';
+import { findBrowser } from '../src/sheet/findBrowser.js';
 import { exportPdf } from '../src/sheet/pdf.js';
 import { renderSheet } from '../src/sheet/sheet.js';
 import { loadFixture } from './helpers.js';
