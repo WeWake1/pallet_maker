@@ -337,10 +337,33 @@ Every installed copy picks it up the next time it opens.
 
 ---
 
+## After Phase 5 — done since
+
+- **A save can no longer overwrite somebody else's quietly.** The editor says
+  which version it started from and the store refuses a save that would replace
+  a newer one, putting the choice to whoever is at the keyboard. Judged on a
+  hash of the document rather than the date, because two edits on the same
+  afternoon share a date — which is exactly when two people are most likely to
+  collide.
+- **Prices moved into the shared folder.** `rates.json` there takes the place of
+  the built-in one, so a change to the timber price reaches everybody at once
+  instead of needing a release. A file that will not read does not fall back
+  quietly: the built-in prices are used and the editor says so in a banner that
+  stays, because quoting at prices you were never told about is the failure that
+  matters.
+- **`electron/` is type-checked now.** It was outside `tsconfig`, and esbuild
+  does not check types, so the Electron main process had never been checked at
+  all. Adding it found a real one: `margins: { marginType: 'none' }` is not
+  Electron's shape — margins are inches, and its default is about 0.4in. It only
+  ever printed correctly because `preferCSSPageSize` let the sheet's own `@page`
+  rule win first. Now stated properly, and the PDF gate still passes.
+
 ## Deliberately not doing yet
 
-- **Locking or merge on simultaneous edits.** Rare at this usage, and Drive
-  keeps version history when it does happen. Revisit if it actually bites.
+- **The converter stays.** `convert.ts` and `better-sqlite3` were to be deleted
+  once everyone was on the folder. They are devDependencies and not in the app,
+  so they cost nothing shipped — and until the rollout is finished they are the
+  only way back from `pallets.sqlite`. Delete them after Phase 5, not before.
 - **A human-readable Drive folder.** Ids are safer. An exported index can come
   later if browsing the folder turns out to matter.
 - **macOS or Linux builds.** Everyone is on Windows.

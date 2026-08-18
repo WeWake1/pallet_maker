@@ -547,8 +547,36 @@ naming a client the folder does not hold yet still appears, under the name it
 carries, and that client is folded into `clients.json` at the next start.
 
 Two people editing **different** designs never collide, because they are
-different files. Two people editing the **same** design between syncs is last
-save wins, with Drive's own version history behind it.
+different files.
+
+Two people editing the **same** design is not prevented — there is no server
+between them to hold a lock — but it is no longer quiet. The editor says which
+version it started from, and a save that would overwrite somebody else's is
+refused and put to whoever is at the keyboard:
+
+> Somebody else saved this design after you opened it (theirs is dated
+> 2026-08-18). Saving now would replace their version with yours, and theirs
+> could not be got back.
+
+Cancel and theirs is left alone, with yours still on screen to copy out of. The
+version each save is judged against is a hash of the document itself, in
+[src/store/fingerprint.ts](src/store/fingerprint.ts) — not the date, because the
+date is only a date, and two edits on the same afternoon share it.
+
+### Prices
+
+`rates.json` in the designs folder takes the place of the one that ships with
+the program. The folder is shared, so a price written there is the price
+everybody quotes at from the afternoon it is saved, rather than everybody
+quoting at whatever their copy was built with. There need not be one — without
+it, the built-in prices are used and nothing is amiss.
+
+A `rates.json` in the folder that will not read is **not** quietly ignored. The
+built-in prices are used so that costing goes on working, and the editor says so
+in a banner that does not go away. The failure worth guarding against here is
+not a missing file; it is somebody quoting at prices they were never told they
+were quoting at. When the folder's prices are in use, the designs folder bar
+says **shared prices**.
 
 ### Which folder, and where that is remembered
 

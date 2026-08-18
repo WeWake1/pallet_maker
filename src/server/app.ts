@@ -2,7 +2,8 @@ import express from 'express';
 import type { Express, NextFunction, Request, Response } from 'express';
 import { existsSync } from 'node:fs';
 import { computeCosting } from '../costing/costing.js';
-import { loadRates } from '../costing/load.js';
+import { DEFAULT_RATES_PATH } from '../costing/load.js';
+import { ratesResolver } from '../costing/resolve.js';
 import type { Rates } from '../costing/rates.js';
 import { palletToDxf } from '../dxf/drawing.js';
 import { analysePallet } from '../geometry/layout.js';
@@ -19,6 +20,7 @@ import { exportLibrary, importDesign, importLibrary } from './library.js';
 import {
   ClientNotFoundError,
   ClientRepository,
+  ConcurrentEditError,
   DuplicateClientError,
   PalletNotFoundError,
   PalletRepository,
@@ -34,8 +36,18 @@ import {
 export interface AppOptions {
   /** Built editor to serve, when there is one. */
   staticDir?: string;
-  /** Rates to cost with. Read from the config file when not given. */
+  /**
+   * Rates to cost with, fixed. Only tests pass this; everything else lets the
+   * designs folder or the built-in file decide.
+   */
   rates?: Rates;
+  /**
+   * The rates that ship with the program, for when the designs folder has none
+   * of its own. Defaults to the config file beside the working directory, which
+   * is right everywhere except an installed app — where the working directory
+   * is wherever the shortcut happened to be launched from.
+   */
+  ratesPath?: string;
   /**
    * Which build this is, for the editor to show.
    *
@@ -62,6 +74,15 @@ export function createApp(handle: StoreHandle, options: AppOptions = {}): Expres
   const storeNow = () => handle.require();
   const pallets = new PalletRepository(storeNow);
   const clients = new ClientRepository(storeNow);
+
+  // A `rates.json` in the designs folder is the price everybody quotes at; the
+  // file that shipped with the program is the fallback. Resolved per call, so
+  // editing the prices in the folder takes effect without a restart.
+  const ratesInUse = ratesResolver(
+    () => (handle.ready() ? handle.status().root : null),
+    options.ratesPath ?? DEFAULT_RATES_PATH,
+  );
+  const rates = (): Rates => options.rates ?? ratesInUse().rates;
   // Generous, because a whole library being imported arrives as one body and a
   // few hundred designs is a few megabytes of it. Nothing reaches this server
   // from outside the machine, so there is nothing for a tighter limit to guard.
@@ -95,10 +116,16 @@ export function createApp(handle: StoreHandle, options: AppOptions = {}): Expres
    */
   app.get('/api/settings', wrap((_req, res) => {
     fresh(res);
+    // The rates come along because a folder whose prices could not be read is
+    // something whoever is quoting has to be told, and this is the one call the
+    // editor makes whatever else is going on.
+    const prices = options.rates ? { from: 'built-in' as const, problem: null } : ratesInUse();
     res.json({
       ...handle.status(),
       canBrowse: options.chooseFolder !== undefined,
       version: options.version ?? null,
+      ratesFrom: prices.from,
+      ratesProblem: prices.problem,
     });
   }));
 
@@ -159,7 +186,7 @@ export function createApp(handle: StoreHandle, options: AppOptions = {}): Expres
   // Rates go to the editor so it can cost a design as it is being changed,
   // rather than only once it has been saved.
   app.get('/api/rates', wrap((_req, res) => {
-    res.json(options.rates ?? loadRates());
+    res.json(rates());
   }));
 
   // The dashboard, in one call: every client, each with their designs. Clients
@@ -215,14 +242,24 @@ export function createApp(handle: StoreHandle, options: AppOptions = {}): Expres
     res.status(201).json(pallets.save(req.body, clients));
   }));
 
-  // Saving overwrites. There is no previous version kept anywhere, by design.
+  /**
+   * Saving overwrites. There is no previous version kept anywhere, by design.
+   *
+   * `If-Match` carries the design as the editor found it. Where it is given, a
+   * save is refused if somebody else has saved in between — the editor then
+   * asks whoever is at the keyboard what to do, and sends the save again
+   * without the header if they decide theirs should win. Absent, the save goes
+   * through as it always did, which is what an older editor and every other
+   * caller does.
+   */
   app.put('/api/pallets/:id', wrap((req, res) => {
     const body = req.body as { id?: string };
     if (body.id !== idOf(req)) {
       res.status(400).json({ error: 'The document id does not match the address' });
       return;
     }
-    res.json(pallets.save(req.body, clients));
+    const basedOn = req.header('if-match') ?? undefined;
+    res.json(pallets.save(req.body, clients, basedOn));
   }));
 
   app.post('/api/pallets/:id/duplicate', wrap((req, res) => {
@@ -296,7 +333,7 @@ export function createApp(handle: StoreHandle, options: AppOptions = {}): Expres
 
   app.get('/api/pallets/:id/costing', wrap((req, res) => {
     const pallet = pallets.get(idOf(req));
-    res.json(computeCosting(pallet, analysePallet(pallet), options.rates ?? loadRates()));
+    res.json(computeCosting(pallet, analysePallet(pallet), rates()));
   }));
 
   app.get('/api/pallets/:id/drawing.dxf', wrap((req, res) => {
@@ -369,6 +406,14 @@ export function createApp(handle: StoreHandle, options: AppOptions = {}): Expres
       res.status(404).json({ error: error.message });
       return;
     }
+    // Not a fault and not a bad request: two people had the same design open.
+    // Its own marker, because the editor answers it by asking rather than by
+    // showing the message and giving up.
+    if (error instanceof ConcurrentEditError) {
+      res.status(409).json({ error: error.message, staleEdit: true });
+      return;
+    }
+
     if (error instanceof DuplicateClientError) {
       res.status(409).json({ error: error.message });
       return;

@@ -20,17 +20,33 @@ export class StoreUnavailable extends Error {
   }
 }
 
+/**
+ * The save was refused because somebody else had saved first.
+ *
+ * Told apart from every other failure because it is answered by asking rather
+ * than by reporting: whoever is at the keyboard is the only one who can say
+ * whose version should stand.
+ */
+export class StaleEdit extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'StaleEdit';
+  }
+}
+
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,
-    headers: init?.body ? { 'content-type': 'application/json' } : undefined,
+    headers: init?.headers ?? (init?.body ? { 'content-type': 'application/json' } : undefined),
   });
   if (!response.ok) {
     const detail = (await response.json().catch(() => null)) as
-      | { error?: string; storeUnavailable?: boolean }
+      | { error?: string; storeUnavailable?: boolean; staleEdit?: boolean }
       | null;
     const message = detail?.error ?? `${response.status} ${response.statusText}`;
-    throw detail?.storeUnavailable ? new StoreUnavailable(message) : new Error(message);
+    if (detail?.storeUnavailable) throw new StoreUnavailable(message);
+    if (detail?.staleEdit) throw new StaleEdit(message);
+    throw new Error(message);
   }
   return response.status === 204 ? (undefined as T) : ((await response.json()) as T);
 }
@@ -48,8 +64,20 @@ export const api = {
   get: (id: string) => call<Pallet>(`/api/pallets/${id}`),
   create: (pallet: Pallet) =>
     call<Pallet>('/api/pallets', { method: 'POST', body: JSON.stringify(pallet) }),
-  save: (pallet: Pallet) =>
-    call<Pallet>(`/api/pallets/${pallet.id}`, { method: 'PUT', body: JSON.stringify(pallet) }),
+  /**
+   * Write a design back.
+   *
+   * `basedOn` is the design as this editor found it, which lets the store
+   * refuse a save that would overwrite somebody else's. Left out, the save
+   * overwrites whatever is there — which is what is wanted, but only once
+   * somebody has been asked.
+   */
+  save: (pallet: Pallet, basedOn?: string) =>
+    call<Pallet>(`/api/pallets/${pallet.id}`, {
+      method: 'PUT',
+      body: JSON.stringify(pallet),
+      ...(basedOn ? { headers: { 'content-type': 'application/json', 'if-match': basedOn } } : {}),
+    }),
   duplicate: (id: string) => call<Pallet>(`/api/pallets/${id}/duplicate`, { method: 'POST' }),
   remove: (id: string) => call<void>(`/api/pallets/${id}`, { method: 'DELETE' }),
   rates: () => call<Rates>('/api/rates'),
