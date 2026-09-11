@@ -1,9 +1,17 @@
 # How the app is packaged.
 #
-# One target: a Windows installer, 64-bit, because that is what everyone who
-# draws pallets is on. The installer is not signed — a certificate costs a few
-# hundred a year and there are four users — so Windows shows "protected your PC"
-# on the first run of each version. "More info" then "Run anyway" gets past it.
+# A Windows installer carrying both architectures, because "everyone is on
+# 64-bit Windows" stopped being one thing. The Snapdragon laptops are ARM, and
+# Windows will happily run an x64 build on them by emulating it — quietly, with
+# no error, and at a fraction of the speed. Chromium is the worst possible thing
+# to emulate: the window stutters, and the compositor falls far enough behind
+# that clicks land on nothing. Shipping arm64 as well is what stops that, and it
+# has to stay shipped — dropping back to x64 alone would bring the stutter back
+# on the one machine nobody tests on.
+#
+# The installer is not signed — a certificate costs a few hundred a year and
+# there are four users — so Windows shows "protected your PC" on the first run
+# of each version. "More info" then "Run anyway" gets past it.
 
 appId: in.ambicapatterns.palletspec
 productName: Pallet Spec
@@ -33,7 +41,9 @@ extraResources:
 win:
   target:
     - target: nsis
-      arch: [x64]
+      # Both, in one installer that picks the right one on the machine it is
+      # run on. Nobody has to know which laptop they are holding.
+      arch: [x64, arm64]
   icon: build/icon.png
 
 nsis:

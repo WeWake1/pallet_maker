@@ -151,8 +151,10 @@ describe('the settings over the API', () => {
   let server: Server;
   let base: string;
 
-  async function serve(handle: StoreHandle): Promise<void> {
-    const app = createApp(handle);
+  async function serve(handle: StoreHandle, allowFolderChange = true): Promise<void> {
+    // The desktop app's arrangement: the person at the keyboard may move the
+    // folder. A hosted server never allows it — see the block below.
+    const app = createApp(handle, { allowFolderChange });
     server = await new Promise<Server>((done) => {
       const listening = app.listen(0, () => done(listening));
     });
@@ -182,6 +184,23 @@ describe('the settings over the API', () => {
     expect(status).toBe(200);
     expect(body.ready).toBe(true);
     expect(body.root).toBe(store.root);
+    expect(body.managedStore).toBe(false);
+  });
+
+  /**
+   * `PALLET_STORE` fixes the folder for this run, and the editor says so and
+   * disables the button. That is not the same as the designs being the
+   * server's own — the folder is still on this machine, and saying otherwise
+   * would tell somebody their designs are somewhere they are not.
+   */
+  it('still calls the folder a local one when an environment variable fixed it', async () => {
+    const store = tempStore();
+    await serve(new StoreHandle(store.root, { source: 'environment' }));
+
+    const { body } = await call('GET', '/api/settings');
+    expect(body.managedStore).toBe(false);
+    expect(body.root).toBe(store.root);
+    expect(body.source).toBe('environment');
   });
 
   /**
@@ -206,6 +225,8 @@ describe('the settings over the API', () => {
     const { status, body } = await call('GET', '/api/dashboard');
     expect(status).toBe(503);
     expect(body.storeUnavailable).toBe(true);
+    // Named, because on a laptop this is how somebody learns which folder
+    // Drive has not brought back yet.
     expect(body.error).toMatch(/Cannot reach the designs folder/);
   });
 
@@ -243,6 +264,87 @@ describe('the settings over the API', () => {
     const later = join(store.root, 'arrives-later');
     await serve(new StoreHandle(later, { source: 'settings' }));
 
+    expect((await call('GET', '/api/settings')).body.ready).toBe(false);
+    new StoreHandle(later, { create: true });
+    expect((await call('POST', '/api/settings/retry')).body.ready).toBe(true);
+  });
+});
+
+/**
+ * Hosted, the folder is decided when the server starts and nobody moves it
+ * from a browser: a route that let anyone on the internet point the server at
+ * a new folder — and make it — would be the most dangerous thing on the box.
+ */
+describe('the folder on a hosted server', () => {
+  let server: Server;
+  let base: string;
+
+  async function serve(handle: StoreHandle): Promise<void> {
+    const app = createApp(handle);
+    server = await new Promise<Server>((done) => {
+      const listening = app.listen(0, () => done(listening));
+    });
+    base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  }
+
+  async function call(method: string, path: string, body?: unknown) {
+    const response = await fetch(`${base}${path}`, {
+      method,
+      ...(body === undefined
+        ? {}
+        : { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
+    });
+    const text = await response.text();
+    return { status: response.status, body: text ? (JSON.parse(text) as any) : null };
+  }
+
+  afterEach(async () => {
+    if (server) await new Promise<void>((done) => server.close(() => done()));
+  });
+
+  it('keeps its path to itself and says the folder cannot be changed', async () => {
+    await serve(new StoreHandle(tempStore().root));
+    const { status, body } = await call('GET', '/api/settings');
+    expect(status).toBe(200);
+    expect(body.ready).toBe(true);
+    expect(body.root).toBeNull();
+    expect(body.managedStore).toBe(true);
+    expect(body.canBrowse).toBe(false);
+  });
+
+  it('refuses to be pointed anywhere else', async () => {
+    const store = tempStore();
+    await serve(new StoreHandle(store.root));
+    const elsewhere = missingStoreRoot();
+
+    const moved = await call('PUT', '/api/settings', { root: elsewhere });
+    expect(moved.status).toBe(403);
+    expect(moved.body.error).toMatch(/cannot be changed/);
+    expect(existsSync(elsewhere)).toBe(false);
+    expect(configuredStoreRoot()).toBeUndefined();
+
+    expect((await call('POST', '/api/settings/browse')).status).toBe(403);
+    // The designs are still where they were.
+    expect((await call('GET', '/api/dashboard')).status).toBe(200);
+  });
+
+  it('says the designs cannot be reached without naming a path on the server', async () => {
+    const root = missingStoreRoot();
+    await serve(new StoreHandle(root, { source: 'environment' }));
+
+    const { status, body } = await call('GET', '/api/dashboard');
+    expect(status).toBe(503);
+    expect(body.storeUnavailable).toBe(true);
+    expect(body.error).toMatch(/designs cannot be reached/);
+    expect(body.error).not.toContain(root);
+    // And the same on the one route that answers whatever else is wrong.
+    expect((await call('GET', '/api/settings')).body.root).toBeNull();
+  });
+
+  it('still looks again when asked, for a disk that has come back', async () => {
+    const store = tempStore();
+    const later = join(store.root, 'arrives-later');
+    await serve(new StoreHandle(later, { source: 'environment' }));
     expect((await call('GET', '/api/settings')).body.ready).toBe(false);
     new StoreHandle(later, { create: true });
     expect((await call('POST', '/api/settings/retry')).body.ready).toBe(true);

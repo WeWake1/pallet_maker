@@ -1,0 +1,14 @@
+# /etc/systemd/system/pallet-spec-offsite.service — run nightly by the timer,
+# after the snapshot, so the copy off the machine holds tonight's snapshot too.
+[Unit]
+Description=Pallet Spec off-site backup
+After=pallet-spec-backup.service
+
+[Service]
+Type=oneshot
+User=pallet
+Group=pallet
+EnvironmentFile=/etc/pallet-spec/env
+EnvironmentFile=/etc/pallet-spec/restic.env
+Environment=HOME=/var/lib/pallet-spec/home
+ExecStart=/opt/pallet-spec/current/deploy/offsite-backup.sh

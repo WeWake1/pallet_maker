@@ -38,6 +38,32 @@ export function StoreSetup({
   const [typed, setTyped] = useState(status.root ?? '');
   const first = status.root === null;
 
+  // A hosted server decided its own folder, and nobody moves it from a
+  // browser. All there is to say is what is wrong, and to look again.
+  if (status.managedStore) {
+    return (
+      <div className="mx-auto max-w-2xl px-4 py-10">
+        <h1 className="text-title font-semibold tracking-tight text-ink">
+          The designs cannot be reached right now
+        </h1>
+        <p className="mt-3 text-ui text-ink-soft">
+          Nothing has been lost. The server cannot see the folder it keeps the designs in — usually
+          a disk or a mount — and whoever looks after the server needs to know.
+        </p>
+        {status.problem && (
+          <div className="mt-4 rounded-card border border-line-soft bg-card px-3 py-2.5 text-ui text-red-600">
+            {status.problem}
+          </div>
+        )}
+        <div className="mt-4">
+          <Button disabled={busy} onClick={onRetry}>
+            Look again
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-2xl px-4 py-10">
       <h1 className="text-title font-semibold tracking-tight text-ink">
@@ -150,21 +176,29 @@ export function StoreFolderBar({
       </div>
     )}
     <div className="flex items-center gap-2 border-b border-line bg-ground-soft px-4 py-1.5">
-      <span className="text-label text-ink-soft">Designs folder</span>
-      <span className="truncate font-mono text-label text-ink" title={status.root ?? ''}>
-        {status.root}
-      </span>
-      {status.source === 'environment' && (
-        <span className="text-label text-ink-soft">(set by PALLET_STORE)</span>
+      {status.managedStore ? (
+        // Hosted: the folder is the server's own business, so there is no
+        // path to show and nothing to change.
+        <span className="ml-auto text-label text-ink-soft">Designs are kept on the server</span>
+      ) : (
+        <>
+          <span className="text-label text-ink-soft">Designs folder</span>
+          <span className="truncate font-mono text-label text-ink" title={status.root ?? ''}>
+            {status.root}
+          </span>
+          {status.source === 'environment' && (
+            <span className="text-label text-ink-soft">(set by PALLET_STORE)</span>
+          )}
+          <button
+            type="button"
+            disabled={busy || status.source === 'environment'}
+            onClick={onChange}
+            className="ml-auto text-label text-ink-soft underline underline-offset-2 hover:text-ink disabled:opacity-40"
+          >
+            Change
+          </button>
+        </>
       )}
-      <button
-        type="button"
-        disabled={busy || status.source === 'environment'}
-        onClick={onChange}
-        className="ml-auto text-label text-ink-soft underline underline-offset-2 hover:text-ink disabled:opacity-40"
-      >
-        Change
-      </button>
       {/* Four people update at their own pace, so a bug report is much easier
           to place when the screen it was seen on says which build it was. */}
       {status.ratesFrom === 'folder' && !status.ratesProblem && (

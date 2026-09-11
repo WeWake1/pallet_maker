@@ -1,0 +1,10 @@
+# /etc/systemd/system/pallet-spec-offsite.timer
+[Unit]
+Description=Pallet Spec off-site backup
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

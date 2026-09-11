@@ -1,0 +1,11 @@
+# /etc/systemd/system/pallet-spec-backup.service — run nightly by the timer.
+[Unit]
+Description=Pallet Spec nightly library snapshot
+
+[Service]
+Type=oneshot
+User=pallet
+Group=pallet
+WorkingDirectory=/opt/pallet-spec/current
+EnvironmentFile=/etc/pallet-spec/env
+ExecStart=/usr/bin/node dist/server/backup.mjs ${PALLET_DATA_ROOT}/library --keep 30

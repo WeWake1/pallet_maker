@@ -1,0 +1,31 @@
+# /etc/caddy/Caddyfile
+#
+# Caddy does TLS (a certificate from Let's Encrypt, renewed by itself), sends
+# HTTP to HTTPS, and hands everything to the server on the loopback.
+#
+# Until people log in (roadmap phase 2), one shared password stands at the
+# door. Make the hash with `caddy hash-password` and paste it below. The health
+# check is left open so that whatever watches the server can reach it.
+
+pallets.example.com {
+	encode zstd gzip
+
+	# The two import routes take a whole library in one body.
+	request_body {
+		max_size 70MB
+	}
+
+	@guarded {
+		not path /healthz
+	}
+	basic_auth @guarded {
+		ambica REPLACE_WITH_OUTPUT_OF_caddy_hash-password
+	}
+
+	reverse_proxy 127.0.0.1:5179 {
+		transport http {
+			# A sheet on a busy moment waits its turn to print.
+			read_timeout 90s
+		}
+	}
+}

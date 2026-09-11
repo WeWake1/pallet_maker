@@ -100,6 +100,19 @@ export function fileNameFor(id: string): string {
   return `${escaped}.json`;
 }
 
+/** What a transaction has staged, written to disk when it returns. */
+interface Staged {
+  designs: Map<string, Pallet>;
+  deletes: Set<string>;
+  clients?: Client[];
+  /** A step inside it threw, so none of it may be written. */
+  failed: boolean;
+}
+
+function isThenable(value: unknown): boolean {
+  return typeof (value as { then?: unknown } | null)?.then === 'function';
+}
+
 /** Write via a temporary file and a rename, so a reader never sees half of one. */
 function writeAtomic(path: string, contents: string): void {
   const temp = `${path}.tmp-${process.pid.toString(36)}-${Date.now().toString(36)}`;
@@ -125,7 +138,7 @@ export class FileStore {
   private problems: StoreProblem[] = [];
 
   /** Set while a transaction is open: reads see these before they see the disk. */
-  private pending: { designs: Map<string, Pallet>; deletes: Set<string>; clients?: Client[] } | undefined;
+  private pending: Staged | undefined;
 
   constructor(root: string, options: OpenOptions = {}) {
     this.root = resolve(root);
@@ -266,13 +279,33 @@ export class FileStore {
    * failure it has to survive is a bad document rather than a dying machine.
    */
   transaction<T>(run: () => T): T {
-    if (this.pending) return run();
+    if (this.pending) {
+      // Already inside one: this is a step of it. A failure here has to reach
+      // the transaction that is open, or it would commit what this step
+      // staged before it stopped and leave out what it never got to.
+      try {
+        return run();
+      } catch (error) {
+        this.pending.failed = true;
+        throw error;
+      }
+    }
 
-    this.pending = { designs: new Map(), deletes: new Set() };
-    let staged;
+    const pending: Staged = { designs: new Map(), deletes: new Set(), failed: false };
+    this.pending = pending;
+    let staged: Staged | undefined;
     try {
       const result = run();
-      staged = this.pending;
+      // The writes go to disk when `run` returns. An async `run` returns
+      // before it has made them, and they would then land one by one outside
+      // any transaction — which is the very thing this exists to prevent.
+      if (isThenable(result)) {
+        throw new Error('A store transaction must be synchronous: its writes are applied when it returns');
+      }
+      if (pending.failed) {
+        throw new Error('A step inside the transaction failed, so none of it was written');
+      }
+      staged = pending;
       return result;
     } finally {
       this.pending = undefined;

@@ -8,15 +8,21 @@ import type { Rates } from '../costing/rates.js';
 import { palletToDxf } from '../dxf/drawing.js';
 import { analysePallet } from '../geometry/layout.js';
 import { PalletLayoutError } from '../geometry/types.js';
+import { today } from '../ids.js';
 import { libraryFileName, parseLibrary } from '../library.js';
 import { contentDisposition, downloadName } from '../sheet/filename.js';
 import { exportPdfBuffer } from '../sheet/pdf.js';
+import { PrinterBusyError } from '../sheet/pooledPrinter.js';
 import { renderSheet } from '../sheet/sheet.js';
 import { renderSheetSvg } from '../sheet/svgSheet.js';
 import { StoreUnavailableError } from '../store/files.js';
 import type { StoreHandle } from '../store/handle.js';
+import { Mutex } from '../store/mutex.js';
 import { rememberStoreRoot } from '../store/settings.js';
+import { securityHeaders } from './headers.js';
 import { exportLibrary, importDesign, importLibrary } from './library.js';
+import { requestId, requestLogger } from './log.js';
+import type { Logger } from './log.js';
 import {
   ClientNotFoundError,
   ClientRepository,
@@ -27,10 +33,16 @@ import {
 } from './repository.js';
 
 /**
- * The local API. No authentication: it listens only on this machine, and the
- * designs it serves are files in a folder that the operating system has already
- * decided this person can read. Sharing happens in the folder — Drive syncs it
- * between the few people who draw pallets — not over this port.
+ * The API.
+ *
+ * It began as a local one — listening on this machine only, serving designs
+ * from a folder the operating system had already decided this person could
+ * read — and the desktop app still runs it that way. Hosted, it sits behind a
+ * reverse proxy on the same box, and what it takes for granted narrows: bodies
+ * are small unless the route is one that takes a whole library, every answer
+ * says how it may be used, a failure is written down with an id rather than
+ * described to whoever asked, and nothing that arrives over the network can
+ * move the designs folder. Who may call it at all is the next thing to add.
  */
 
 export interface AppOptions {
@@ -51,11 +63,10 @@ export interface AppOptions {
   /**
    * Which build this is, for the editor to show.
    *
-   * Worth having on screen because four people update at their own pace, and a
-   * bug report is a great deal easier to place when it says which version saw
-   * it. Absent outside the app, where there is no build to name.
+   * Worth having on screen because people update at their own pace, and a bug
+   * report is a great deal easier to place when it says which version saw it.
    */
-  version?: string;
+  version?: string | null;
   /**
    * Ask the operating system for a folder, returning null if nobody picks one.
    *
@@ -65,15 +76,46 @@ export interface AppOptions {
    * which is what lets it offer this at all.
    */
   chooseFolder?: () => Promise<string | null>;
+  /**
+   * Whether the designs folder may be changed over the API.
+   *
+   * Only the desktop app says yes: its API is on the loopback and the person
+   * at the keyboard owns the machine, so pointing the tool at a different
+   * folder is theirs to do. A hosted server never does — its folder is decided
+   * when it starts, and a route that let a browser move it, and make the new
+   * one, would be the most dangerous thing on the box.
+   */
+  allowFolderChange?: boolean;
+  /** The time zone the date on a design is stamped in. UTC without one. */
+  timezone?: string;
+  /** Where each request is written down once answered. Nowhere without one. */
+  log?: Logger;
+  /** Anything else `/healthz` should report — the printer, mostly. */
+  health?: () => Record<string, unknown>;
 }
+
+/** The two routes that take a whole library in one body. */
+const IMPORT_ROUTES = new Set(['/api/library/import', '/api/pallets/import']);
 
 export function createApp(handle: StoreHandle, options: AppOptions = {}): Express {
   const app = express();
+  app.disable('x-powered-by');
+  // Behind a reverse proxy on this machine the address of the person is in
+  // the header the proxy adds; from anywhere else that header is ignored.
+  app.set('trust proxy', 'loopback');
+
   // The repositories ask the handle which folder to use each time they are
   // used, so pointing the tool somewhere else takes effect without a restart.
   const storeNow = () => handle.require();
-  const pallets = new PalletRepository(storeNow);
-  const clients = new ClientRepository(storeNow);
+  const now = () => today(options.timezone);
+  const pallets = new PalletRepository(storeNow, { now });
+  const clients = new ClientRepository(storeNow, { now });
+  const allowFolderChange = options.allowFolderChange === true;
+
+  // The routes that rewrite many designs at once must never interleave with
+  // each other. Every write is synchronous today, so this costs nothing; it is
+  // here for the day one of them is not.
+  const writes = new Mutex();
 
   // A `rates.json` in the designs folder is the price everybody quotes at; the
   // file that shipped with the program is the fallback. Resolved per call, so
@@ -83,10 +125,17 @@ export function createApp(handle: StoreHandle, options: AppOptions = {}): Expres
     options.ratesPath ?? DEFAULT_RATES_PATH,
   );
   const rates = (): Rates => options.rates ?? ratesInUse().rates;
-  // Generous, because a whole library being imported arrives as one body and a
-  // few hundred designs is a few megabytes of it. Nothing reaches this server
-  // from outside the machine, so there is nothing for a tighter limit to guard.
-  app.use(express.json({ limit: '64mb' }));
+
+  app.use(requestLogger(options.log));
+  app.use(securityHeaders);
+
+  // A design is a few kilobytes. A whole library being imported arrives as one
+  // body, and a few hundred designs is a few megabytes of it — so the two
+  // routes that take one accept a great deal more than the rest, and the rest
+  // accept little, because anything on the internet can send a body.
+  const small = express.json({ limit: '2mb' });
+  const large = express.json({ limit: '64mb' });
+  app.use((req, res, next) => (IMPORT_ROUTES.has(req.path) ? large : small)(req, res, next));
 
   // Express 5 types a route parameter as possibly absent; on these routes it
   // never is, because the path would not have matched.
@@ -107,27 +156,62 @@ export function createApp(handle: StoreHandle, options: AppOptions = {}): Expres
   };
 
   /**
+   * Whether this server is up and can reach its designs.
+   *
+   * For whatever watches the server rather than for people: a plain yes or no
+   * with enough detail to say which half is wrong. Not under /api/, because it
+   * is not about pallets.
+   */
+  app.get('/healthz', wrap((_req, res) => {
+    fresh(res);
+    const status = handle.status();
+    res.status(status.ready ? 200 : 503).json({
+      ok: status.ready,
+      version: options.version ?? null,
+      uptimeSeconds: Math.round(process.uptime()),
+      store: {
+        ready: status.ready,
+        designs: status.designs,
+        clients: status.clients,
+        problem: status.problem,
+      },
+      ...(options.health?.() ?? {}),
+    });
+  }));
+
+  /**
    * Which folder the designs are in.
    *
    * Always answers, even when the folder cannot be reached — that is the whole
    * point of it. Everything else needs the designs; this is what the editor
    * asks when it cannot have them, so it can say where it was looking and offer
-   * somewhere else.
+   * somewhere else. A hosted server keeps its paths to itself: there is nowhere
+   * else to offer, and where on the disk the designs are is its own business.
    */
   app.get('/api/settings', wrap((_req, res) => {
     fresh(res);
+    const status = handle.status();
     // The rates come along because a folder whose prices could not be read is
     // something whoever is quoting has to be told, and this is the one call the
     // editor makes whatever else is going on.
     const prices = options.rates ? { from: 'built-in' as const, problem: null } : ratesInUse();
     res.json({
-      ...handle.status(),
-      canBrowse: options.chooseFolder !== undefined,
+      ...status,
+      root: allowFolderChange ? status.root : null,
+      managedStore: !allowFolderChange,
+      canBrowse: allowFolderChange && options.chooseFolder !== undefined,
       version: options.version ?? null,
       ratesFrom: prices.from,
       ratesProblem: prices.problem,
     });
   }));
+
+  /** The folder is the server's own. Said the same way on both routes below. */
+  const refuseFolderChange = (res: Response): void => {
+    res.status(403).json({
+      error: 'The designs folder is decided by the server and cannot be changed from here.',
+    });
+  };
 
   /**
    * Use a different folder from now on.
@@ -138,6 +222,10 @@ export function createApp(handle: StoreHandle, options: AppOptions = {}): Expres
    * gone missing is reported rather than replaced with an empty one.
    */
   app.put('/api/settings', wrap((req, res) => {
+    if (!allowFolderChange) {
+      refuseFolderChange(res);
+      return;
+    }
     const root = (req.body as { root?: unknown }).root;
     if (typeof root !== 'string' || root.trim() === '') {
       res.status(400).json({ error: 'A folder has to be given' });
@@ -168,6 +256,10 @@ export function createApp(handle: StoreHandle, options: AppOptions = {}): Expres
    * do anything.
    */
   app.post('/api/settings/browse', wrap(async (_req, res) => {
+    if (!allowFolderChange) {
+      refuseFolderChange(res);
+      return;
+    }
     if (!options.chooseFolder) {
       res.status(501).json({ error: 'Choosing a folder needs the app rather than a browser tab' });
       return;
@@ -229,13 +321,16 @@ export function createApp(handle: StoreHandle, options: AppOptions = {}): Expres
    * other half of the download below: a design mailed over, or taken off a
    * backup, arriving in the library without anything having to be open.
    */
-  app.post('/api/pallets/import', wrap((req, res) => {
+  app.post('/api/pallets/import', wrap(async (req, res) => {
     const body = req.body as { pallet?: unknown; clientId?: unknown };
     if (typeof body.clientId !== 'string') {
       res.status(400).json({ error: 'Which client the design is for has to be said' });
       return;
     }
-    res.status(201).json(importDesign(body.pallet, body.clientId, pallets, clients));
+    const clientId = body.clientId;
+    await writes.run(() => {
+      res.status(201).json(importDesign(body.pallet, clientId, pallets, clients));
+    });
   }));
 
   app.post('/api/pallets', wrap((req, res) => {
@@ -377,10 +472,12 @@ export function createApp(handle: StoreHandle, options: AppOptions = {}): Expres
    * nothing, and says how many designs it left alone so that overwriting them
    * can be asked for knowing the number.
    */
-  app.post('/api/library/import', wrap((req, res) => {
+  app.post('/api/library/import', wrap(async (req, res) => {
     const body = req.body as { library?: unknown; mode?: unknown };
     const mode = body.mode === 'replace' ? 'replace' : 'skip';
-    res.json(importLibrary(handle.require(), parseLibrary(body.library), pallets, clients, mode));
+    await writes.run(() => {
+      res.json(importLibrary(handle.require(), parseLibrary(body.library), pallets, clients, mode));
+    });
   }));
 
   if (options.staticDir && existsSync(options.staticDir)) {
@@ -390,12 +487,28 @@ export function createApp(handle: StoreHandle, options: AppOptions = {}): Expres
     });
   }
 
-  app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  app.use((error: unknown, req: Request, res: Response, _next: NextFunction) => {
     // Not a fault in this program: the designs are somewhere it cannot read.
     // Its own status, so the editor can tell it apart from a design that is
     // merely missing and offer to be pointed somewhere else.
+    //
+    // Where the folder is named in the message, that is the whole use of it —
+    // on a laptop it says which Drive folder has gone. On a server it is a
+    // path on somebody else's machine, so what is said is that the designs
+    // cannot be reached and why, and the path stays in the log.
     if (error instanceof StoreUnavailableError) {
-      res.status(503).json({ error: error.message, storeUnavailable: true });
+      res.status(503).json({
+        error: allowFolderChange
+          ? error.message
+          : `The designs cannot be reached: ${error.reason}`,
+        storeUnavailable: true,
+      });
+      return;
+    }
+    // Every sheet that can print at once is printing. Come back shortly.
+    if (error instanceof PrinterBusyError) {
+      res.setHeader('Retry-After', '5');
+      res.status(503).json({ error: error.message });
       return;
     }
     if (error instanceof PalletNotFoundError) {
@@ -422,14 +535,34 @@ export function createApp(handle: StoreHandle, options: AppOptions = {}): Expres
       res.status(422).json({ error: error.message, issues: error.issues });
       return;
     }
+    // The body could not be taken: too big, or not JSON. The parser says which
+    // with a status of its own, and its messages are written to be shown.
+    const status = (error as { status?: unknown }).status;
+    if (typeof status === 'number' && status >= 400 && status < 500) {
+      res.status(status).json({
+        error:
+          status === 413
+            ? 'That is more than this server takes in one request'
+            : error instanceof Error
+              ? error.message
+              : String(error),
+      });
+      return;
+    }
     const message = error instanceof Error ? error.message : String(error);
     // A bad document is the caller's fault; anything else is worth seeing.
     if (message.startsWith('Invalid ') || message === 'A client needs a name') {
       res.status(400).json({ error: message });
       return;
     }
-    console.error(error);
-    res.status(500).json({ error: message });
+    // Ours, and not described to whoever asked: what went wrong on a server is
+    // for the log, and the id is how a report and the log find each other.
+    const id = requestId(req);
+    console.error(`[${id}] ${req.method} ${req.path}:`, error);
+    res.status(500).json({
+      error: `Something went wrong on the server. Quote request ${id} when reporting it.`,
+      requestId: id,
+    });
   });
 
   return app;

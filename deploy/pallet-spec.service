@@ -1,0 +1,36 @@
+# /etc/systemd/system/pallet-spec.service
+[Unit]
+Description=Pallet Spec server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pallet
+Group=pallet
+WorkingDirectory=/opt/pallet-spec/current
+EnvironmentFile=/etc/pallet-spec/env
+ExecStart=/usr/bin/node dist/server/main.mjs
+Restart=on-failure
+RestartSec=3
+# The server gives the sheets it is printing 15 seconds and then goes. This is
+# the outer bound, well clear of that, so systemd never has to use SIGKILL.
+TimeoutStopSec=30
+
+# It writes the data folder and nothing else. Chromium wants somewhere it can
+# call home and a private /tmp for its profile.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/lib/pallet-spec
+Environment=HOME=/var/lib/pallet-spec/home
+# A Chromium that leaks is restarted rather than allowed to take the box down.
+# The limit counts Chromium's processes too, since they are the service's own
+# children. Two sheets printing at once measured about 500 MB of Chromium
+# beside 100 MB of Node, so this leaves room for a busy moment and still keeps
+# a third of a 4 GB machine for everything else.
+MemoryMax=2500M
+
+[Install]
+WantedBy=multi-user.target
