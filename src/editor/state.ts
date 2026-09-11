@@ -1,3 +1,4 @@
+import { DEFAULT_BRAND } from '../brand/defaults.js';
 import { nextNailCount, sameNailCrossing } from '../geometry/nails.js';
 import type { NailCrossing } from '../geometry/nails.js';
 import type { PieceSource } from '../geometry/types.js';
@@ -54,7 +55,7 @@ export type Action =
   | { type: 'patchAllCells'; layerId: string; patch: Partial<BlockCell> }
   | { type: 'fillGrid'; layerId: string; row: number; col: number }
   | { type: 'patchSheet'; layerId: string; patch: Partial<SheetSpec> }
-  | { type: 'addNail' }
+  | { type: 'addNail'; nailType?: string }
   | { type: 'removeNail'; index: number }
   | { type: 'patchNail'; index: number; patch: Partial<NailSpec> }
   | { type: 'cycleNailCrossing'; crossing: NailCrossing }
@@ -89,7 +90,8 @@ export const MAX_GRID_SIDE = 20;
  * labelled with the word that meant "do not print this".
  */
 function defaultMaterial(pallet: Pallet): string {
-  return notApplicable(pallet.species) ? 'pine' : pallet.species || 'pine';
+  const fallback = DEFAULT_BRAND.defaults.species;
+  return notApplicable(pallet.species) ? fallback : pallet.species || fallback;
 }
 
 /**
@@ -359,7 +361,9 @@ export function reducer(state: EditorState, action: Action): EditorState {
     }
 
     case 'addNail':
-      pallet.nails.push({ label: '', type: 'wire nail' });
+      // What kind of nail is a house habit, so the row starts at the one this
+      // company buys rather than at a name picked in this file.
+      pallet.nails.push({ label: '', type: action.nailType ?? DEFAULT_BRAND.defaults.nailType });
       break;
 
     case 'removeNail':

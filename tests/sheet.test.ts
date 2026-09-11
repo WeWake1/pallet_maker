@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { brandNamed } from '../src/brand/defaults.js';
 import { computeLayout } from '../src/geometry/layout.js';
 import { parsePallet } from '../src/schema.js';
 import { packLanes, Scene, TIER } from '../src/render/scene.js';
@@ -106,11 +107,22 @@ describe('the sheet', () => {
       // Once as the drawn caption; the <title> element is the accessible name.
       expect([...html.matchAll(new RegExp(`<text[^>]*>${title}</text>`, 'g'))]).toHaveLength(1);
     }
-    // Six drawings inline on the sheet: the five views, and the logo in the
-    // corner, which is vector too rather than a picture of itself. The
-    // handling block adds a mark and an icon for each method it prints.
-    expect([...html.matchAll(/<svg/g)]).toHaveLength(6 + 2 * HANDLING_METHODS.length);
-    expect([...html.matchAll(/<svg[^>]*class="logo"/g)]).toHaveLength(1);
+    // Five drawings inline on the sheet, plus a mark and an icon from the
+    // handling block for each method it prints. No sixth: whose sheet this is
+    // comes from a brand file, and this one was rendered without one.
+    expect([...html.matchAll(/<svg/g)]).toHaveLength(5 + 2 * HANDLING_METHODS.length);
+    expect([...html.matchAll(/<svg[^>]*class="logo"/g)]).toHaveLength(0);
+  });
+
+  it('makes room for a mark in the corner once a company has one', () => {
+    const branded = renderSheet(pallet, layout, { brand: brandNamed('Acme Pallets') });
+    expect([...branded.matchAll(/<svg[^>]*class="logo"/g)]).toHaveLength(0);
+
+    const withMark = renderSheet(pallet, layout, {
+      brand: { ...brandNamed('Acme Pallets'), logo: { kind: 'svg', svg: '<rect width="4" height="3"/>', width: 4, height: 3 } },
+    });
+    expect([...withMark.matchAll(/<svg/g)]).toHaveLength(6 + 2 * HANDLING_METHODS.length);
+    expect([...withMark.matchAll(/<svg[^>]*class="logo"/g)]).toHaveLength(1);
   });
 
   it('lays the views out the way a drawing office reads them', () => {
@@ -341,9 +353,8 @@ describe('the sheet', () => {
       const fixture = loadFixture(name);
       const sheet = renderSheet(fixture, computeLayout(fixture));
       expect(sheet).toContain('</html>');
-      // The five views, the logo in the corner, and the handling block's mark
-      // and icon per method.
-      expect([...sheet.matchAll(/<svg/g)]).toHaveLength(6 + 2 * HANDLING_METHODS.length);
+      // The five views, and the handling block's mark and icon per method.
+      expect([...sheet.matchAll(/<svg/g)]).toHaveLength(5 + 2 * HANDLING_METHODS.length);
     }
   });
 });

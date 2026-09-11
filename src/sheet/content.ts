@@ -1,3 +1,5 @@
+import { DEFAULT_BRAND } from '../brand/defaults.js';
+import type { Brand } from '../brand/types.js';
 import type { Layout } from '../geometry/types.js';
 import { mmLabel } from '../render/scene.js';
 import { HANDLING_METHODS, notApplicable } from '../types.js';
@@ -59,14 +61,10 @@ const PLANING: Partial<Record<Pallet['planing'], string>> = {
 export const DASH = '—';
 
 /**
- * Shop tolerances. The same on every drawing this generator produces, so they
- * are stated here rather than being one more thing to fill in per design.
+ * Shop tolerances and the projection convention are the same on every drawing
+ * a company produces, so they are settled once in its brand rather than being
+ * two more things to fill in per design.
  */
-const COMPONENT_TOLERANCE = '± 2 mm';
-const PALLET_TOLERANCE = '± 5 mm';
-
-/** The projection note, printed under the drawings. */
-export const PROJECTION_NOTE = 'First-angle projection, all dimensions in mm';
 
 /** A label and its value, as they print. */
 export type Pair = [label: string, value: string];
@@ -118,9 +116,15 @@ export interface SheetContent {
   notes: string;
   /** For the document title and the download's file name. */
   title: string;
+  /** Printed under the drawings: the projection convention and the units. */
+  projectionNote: string;
 }
 
-export function sheetContent(pallet: Pallet, layout: Layout): SheetContent {
+export function sheetContent(
+  pallet: Pallet,
+  layout: Layout,
+  brand: Brand = DEFAULT_BRAND,
+): SheetContent {
   const size = `${mmLabel(layout.overallLength)} × ${mmLabel(layout.overallWidth)} × ${mmLabel(layout.overallHeight)}`;
   // A design without a code is a normal design, so the line under the name is
   // the size alone rather than the size behind a dangling separator.
@@ -148,10 +152,11 @@ export function sheetContent(pallet: Pallet, layout: Layout): SheetContent {
     overall: overallRows(pallet, layout, size),
     components: componentTable(pallet, layout).flatMap((group) => group.rows),
     nails: nailRows(pallet),
-    material: materialRows(pallet),
+    material: materialRows(pallet, brand),
     handling: handlingRows(pallet),
     notes: pallet.notes ?? '',
     title: documentName(pallet),
+    projectionNote: brand.projectionNote,
   };
 }
 
@@ -233,13 +238,13 @@ function handlingRows(pallet: Pallet): HandlingRow[] {
   }));
 }
 
-function materialRows(pallet: Pallet): Pair[] {
+function materialRows(pallet: Pallet, brand: Brand): Pair[] {
   return [
     ...loadRow('Static load', pallet.staticLoadKg),
     ...loadRow('Dynamic load', pallet.dynamicLoadKg),
     ...stated('Species', pallet.species),
     ...stated('Planing', named(pallet.planing, PLANING)),
-    ['Component tolerance', COMPONENT_TOLERANCE],
-    ['Total pallet tolerance', PALLET_TOLERANCE],
+    ['Component tolerance', brand.tolerances.component],
+    ['Total pallet tolerance', brand.tolerances.pallet],
   ];
 }

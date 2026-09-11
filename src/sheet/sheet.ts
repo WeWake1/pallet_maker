@@ -1,5 +1,6 @@
-import { brandFontFace, BRAND_FONT_STACK, COMPANY_NAME } from '../brand/brand.js';
-import { LOGO_ASPECT, logoSvg } from '../brand/logo.js';
+import { DEFAULT_BRAND } from '../brand/defaults.js';
+import { fontFaceCss, logoBox, logoHtml, watermarkFontStack } from '../brand/markup.js';
+import type { Brand } from '../brand/types.js';
 import type { Layout } from '../geometry/types.js';
 import { renderIsometric } from '../render/isoView.js';
 import { mmLabel } from '../render/scene.js';
@@ -9,9 +10,10 @@ import type { ViewMeasure } from '../render/views.js';
 import type { ViewKind } from '../render/project.js';
 import type { Pallet } from '../types.js';
 import type { ComponentRow, HandlingRow, NailRow, Pair, SheetContent } from './content.js';
-import { PROJECTION_NOTE, sheetContent } from './content.js';
+import { sheetContent } from './content.js';
 import { HANDLING_INK, handlingIconSvg, handlingMarkSvg } from './handling.js';
-import { DRAWING, HANDLING, LOGO, mmToPx, PAGE, PX_PER_MM, SHEET, WATERMARK } from './layout.js';
+import { DRAWING, HANDLING, mmToPx, PAGE, PX_PER_MM, SHEET, WATERMARK } from './layout.js';
+import { printedWatermarkSizePt } from './watermark.js';
 
 /**
  * The specification sheet, as HTML for a browser to print. What is on it is
@@ -26,6 +28,11 @@ import { DRAWING, HANDLING, LOGO, mmToPx, PAGE, PX_PER_MM, SHEET, WATERMARK } fr
 export interface SheetOptions {
   /** Desaturate every view, to check the sheet the way the shop floor prints it. */
   greyscale?: boolean;
+  /**
+   * Whose drawing this is. Left out, the sheet carries no name and no mark —
+   * which is the honest thing for a copy of the program nobody has told.
+   */
+  brand?: Brand;
 }
 
 /** A length as CSS wants it: enough precision for the printer, no more. */
@@ -217,7 +224,8 @@ export function sheetViews(
 }
 
 export function renderSheet(pallet: Pallet, layout: Layout, options: SheetOptions = {}): string {
-  const content = sheetContent(pallet, layout);
+  const brand = options.brand ?? DEFAULT_BRAND;
+  const content = sheetContent(pallet, layout, brand);
   const rows = drawingRows(layout);
   const views = sheetViews(layout, rows, options.greyscale === true);
   const { heading } = content;
@@ -227,7 +235,7 @@ export function renderSheet(pallet: Pallet, layout: Layout, options: SheetOption
 <head>
 <meta charset="utf-8">
 <title>${esc(content.title)}</title>
-<style>${styles(rows)}</style>
+<style>${styles(rows, brand)}</style>
 </head>
 <body>
 <div class="sheet">
@@ -278,8 +286,8 @@ export function renderSheet(pallet: Pallet, layout: Layout, options: SheetOption
       <!-- The mark in the bottom right corner, where a title block's owner
            belongs on a drawing. -->
       <div class="footer">
-        <p class="projection">${esc(PROJECTION_NOTE)}</p>
-        ${logoSvg({ width: `${LOGO.height * LOGO_ASPECT}mm`, height: `${LOGO.height}mm`, title: COMPANY_NAME })}
+        <p class="projection">${esc(content.projectionNote)}</p>
+        ${logoHtml(brand)}
       </div>
     </section>
   </div>
@@ -287,11 +295,17 @@ export function renderSheet(pallet: Pallet, layout: Layout, options: SheetOption
   <!-- Whose drawing this is, corner to corner. Last, so it lies over the
        drawings: every view carries a white background of its own and a
        watermark beneath them would show only in the gaps. -->
-  <div class="watermark" aria-hidden="true"><span>${esc(COMPANY_NAME)}</span></div>
+  ${watermarkHtml(brand)}
 </div>
 </body>
 </html>
 `;
+}
+
+/** The name across the diagonal, or nothing at all when there is no name. */
+function watermarkHtml(brand: Brand): string {
+  if (!brand.watermark.enabled || brand.watermark.text.trim() === '') return '';
+  return `<div class="watermark" aria-hidden="true"><span>${esc(brand.watermark.text)}</span></div>`;
 }
 
 function componentsBlock(rows: ComponentRow[]): string {
@@ -384,10 +398,11 @@ function block(heading: string, body: string, modifier = ''): string {
   return `<div class="${cls}"><h2>${esc(heading)}</h2>${body}</div>`;
 }
 
-function styles(rows: DrawingRows): string {
+function styles(rows: DrawingRows, brand: Brand): string {
+  const box = logoBox(brand);
   return `
   @page { size: ${PAGE.width}mm ${PAGE.height}mm; margin: 0; }
-  ${brandFontFace()}
+  ${fontFaceCss(brand)}
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
   body {
@@ -420,12 +435,12 @@ function styles(rows: DrawingRows): string {
     z-index: 2;
   }
   .watermark span {
-    font-family: ${BRAND_FONT_STACK};
-    font-size: ${WATERMARK.fontSize}pt;
+    font-family: ${watermarkFontStack(brand)};
+    font-size: ${printedWatermarkSizePt(brand.watermark.text, brand.font, brand.watermark.sizePt)}pt;
     letter-spacing: ${WATERMARK.tracking}em;
     white-space: nowrap;
     color: #111;
-    opacity: ${WATERMARK.opacity};
+    opacity: ${brand.watermark.opacity};
     transform: rotate(-${WATERMARK.angle.toFixed(2)}deg);
   }
 
@@ -579,11 +594,14 @@ ${cellWidths(rows)}
     color: #333;
     text-align: center;
   }
+  /* As tall as this band, and no wider than the corner has room for — a
+     wordmark takes the width instead and the height follows. */
   .footer .logo {
     position: absolute;
     right: 0;
     bottom: 0;
     display: block;
+    ${box ? `width: ${fmtMm(box.width)}mm;\n    height: ${fmtMm(box.height)}mm;` : ''}
   }
   `;
 }

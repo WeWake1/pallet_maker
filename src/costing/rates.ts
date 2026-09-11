@@ -13,7 +13,10 @@ import { z } from 'zod';
 const RateTable = z.record(z.string(), z.number().nonnegative());
 
 export const RatesSchema = z.object({
-  currency: z.string().min(1).default('INR'),
+  // Stated, never assumed. A rates file that left this out used to mean
+  // rupees, which is a quiet way for a shop in another country to quote every
+  // pallet in a currency nobody chose.
+  currency: z.string().min(1),
   timberPerCft: RateTable,
   nailsPerThousand: RateTable,
   overhead: z

@@ -1,6 +1,7 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -18,6 +19,8 @@ import { cleanupStores, loadFixture, missingStoreRoot, tempHandle } from './help
  * take only as much as a request could honestly need, and keep what went wrong
  * on its side for the log.
  */
+
+const here = dirname(fileURLToPath(import.meta.url));
 
 let server: Server | undefined;
 let base = '';
@@ -189,5 +192,62 @@ describe('when something goes wrong on the server', () => {
     expect(status).toBe(503);
     expect(headers.get('retry-after')).toBe('5');
     expect(body.error).toMatch(/waiting to print/);
+  });
+});
+
+/**
+ * Whose drawing the server prints, and whether the editor is told the same.
+ *
+ * The editor renders the sheet itself for its preview, so the two have to
+ * agree: a preview under one name and a printout under another is the sort of
+ * thing nobody notices until a customer does.
+ */
+describe('the brand the server prints with', () => {
+  const brandsDir = resolve(here, 'fixtures', 'brands');
+
+  it('comes from the designs folder when there is one there', async () => {
+    const folder = mkdtempSync(join(tmpdir(), 'pallet-brandstore-'));
+    cpSync(join(brandsDir, 'vector'), folder, { recursive: true });
+    await serve(new StoreHandle(folder));
+
+    const { status, body } = await call('GET', '/api/brand');
+    expect(status).toBe(200);
+    expect(body.companyName).toBe('Northgate Pallets Ltd');
+    expect(body.projectionNote).toContain('Third-angle');
+    expect(body.logo.kind).toBe('svg');
+
+    // And the sheet the server prints says the same.
+    const design = await savedDesign();
+    const sheet = await call('GET', `/api/pallets/${design.id}/sheet.html`);
+    expect(sheet.text).toContain('Northgate Pallets Ltd');
+    expect(sheet.text).toContain('Third-angle projection');
+    rmSync(folder, { recursive: true, force: true });
+  });
+
+  it('is the one shipped with the program when the folder has none', async () => {
+    await serve(tempHandle(), { brandPath: resolve(here, '..', 'config', 'brand.json') });
+    const { body } = await call('GET', '/api/brand');
+    expect(body.companyName).toBe('Ambica Patterns India Pvt Ltd');
+    expect((await call('GET', '/api/settings')).body.brandFrom).toBe('built-in');
+  });
+
+  it('carries no name at all when nothing says one', async () => {
+    await serve(tempHandle());
+    const { body } = await call('GET', '/api/brand');
+    expect(body.companyName).toBe('');
+    expect(body.watermark.enabled).toBe(false);
+    expect(body.logo.kind).toBe('none');
+  });
+
+  it('says so on the settings when a folder brand will not read', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const folder = mkdtempSync(join(tmpdir(), 'pallet-brandstore-'));
+    cpSync(join(brandsDir, 'broken'), folder, { recursive: true });
+    await serve(new StoreHandle(folder));
+
+    const { body } = await call('GET', '/api/settings');
+    expect(body.brandFrom).toBe('built-in');
+    expect(body.brandProblem).toMatch(/could not be read/);
+    rmSync(folder, { recursive: true, force: true });
   });
 });

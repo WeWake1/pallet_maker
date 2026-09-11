@@ -88,6 +88,7 @@ export function Dashboard({
   sections,
   drafts,
   busy,
+  startingSize,
   actions,
   onOpenDraft,
   onDiscardDraft,
@@ -100,6 +101,8 @@ export function Dashboard({
   sections: ClientDesigns[];
   drafts: Draft[];
   busy: boolean;
+  /** The size a new design opens at, e.g. "1200 × 800", from the company's defaults. */
+  startingSize: string;
   actions: DesignActions;
   onOpenDraft: (draft: Draft) => void;
   onDiscardDraft: (id: string) => void;
@@ -201,8 +204,8 @@ export function Dashboard({
             <h3 className="text-title font-semibold text-ink">Nothing here yet</h3>
             <p className="mx-auto mt-2 max-w-md text-ui leading-relaxed text-ink-soft">
               Every design belongs to a client, so a client comes first. Add one and you can start
-              a design straight away — it opens as a complete 1200 × 800 pallet, ready to have its
-              numbers changed.
+              a design straight away — it opens as a complete {startingSize} pallet, ready to have
+              its numbers changed.
             </p>
             <div className="mt-5 flex justify-center">
               {adding ? (
@@ -232,6 +235,7 @@ export function Dashboard({
           <div className="space-y-6">
             {shown.map((section) => (
               <ClientSection
+                startingSize={startingSize}
                 key={section.client.id}
                 section={section}
                 drafts={
@@ -265,6 +269,7 @@ function ClientSection({
   held,
   busy,
   searching,
+  startingSize,
   actions,
   onOpenDraft,
   onDiscardDraft,
@@ -277,6 +282,8 @@ function ClientSection({
   drafts: Draft[];
   held: ReadonlySet<string>;
   busy: boolean;
+  /** The size a new design opens at, said on the card that starts one. */
+  startingSize: string;
   /** A search is on, so this section is a result rather than the whole client. */
   searching: boolean;
   actions: DesignActions;
@@ -411,7 +418,7 @@ function ClientSection({
                 that yet has no reason to expect it. */}
             {designs.length === 0 && (
               <span className="mt-1 text-micro leading-tight text-ink-faint">
-                starts as a complete 1200 × 800 pallet
+                starts as a complete {startingSize} pallet
               </span>
             )}
           </button>

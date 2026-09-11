@@ -97,22 +97,15 @@ export const WATERMARK = {
    */
   opacity: 0.06,
   /**
-   * Point size on the printed sheet, which carries the company face embedded.
-   * ITC Anna is condensed, so the name at this size runs most of the way to the
-   * corners without reaching them.
-   */
-  fontSize: 80,
-  /**
-   * Point size in the SVG, which carries no font.
+   * What size the name is set at is not here any more.
    *
-   * The two differ because the faces do. The SVG embeds no `@font-face` — that
-   * is a `<style>` block, and a `<style>` block is one of the things that makes
-   * a page-layout program flatten the page — so its watermark is always set in
-   * whatever sans the reader has. Helvetica at 80pt runs 110% of the diagonal
-   * and off both corners; at 64pt it runs 88%, which is what ITC Anna does at
-   * 80pt on paper. Measured, not guessed.
+   * It used to be two numbers, 80 point on paper and 64 in the SVG, each
+   * measured by eye against one company's name in one company's face. Any
+   * other name is a different length and any other face a different width per
+   * letter, so the size is worked out per sheet instead — see
+   * `src/sheet/watermark.ts`, which still reproduces exactly those two numbers
+   * for the name and the face they were measured against.
    */
-  svgFontSize: 64,
   /** Tracking, as a fraction of the size, so both renderers set it the same. */
   tracking: 0.03,
 } as const;

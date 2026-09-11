@@ -35,6 +35,13 @@ extraResources:
   # changed by shipping a new version.
   - from: config/rates.json
     to: rates.json
+  # The company's name, its mark and the face the watermark is set in. Data
+  # rather than code, so a different company is a different file rather than a
+  # different build — and a brand.json in the designs folder beats this one.
+  - from: config/brand.json
+    to: brand/brand.json
+  - from: config/brand
+    to: brand/brand
   - from: build/icon.png
     to: icon.png
 

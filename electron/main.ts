@@ -47,12 +47,23 @@ function builtInRatesPath(): string {
     : resolve(app.getAppPath(), 'config', 'rates.json');
 }
 
+/**
+ * The branding that ships with this version: the company name, the mark and
+ * the face the watermark is set in. A `brand.json` in the designs folder takes
+ * its place, which is how a company changes its own artwork without waiting
+ * for a release.
+ */
+function builtInBrandPath(): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, 'brand', 'brand.json')
+    : resolve(app.getAppPath(), 'config', 'brand.json');
+}
+
 /** The company mark, for the window and the dock. */
 function iconPath(): string | undefined {
   const candidates = app.isPackaged
     ? [join(process.resourcesPath, 'icon.png')]
-    : [resolve(app.getAppPath(), 'assets', 'icons', 'icon.png'),
-       resolve(app.getAppPath(), 'Ambica Patterns (india) Pvt.Ltd..png')];
+    : [resolve(app.getAppPath(), 'assets', 'icons', 'icon.png')];
   return candidates.find((path) => existsSync(path));
 }
 
@@ -188,6 +199,7 @@ async function main(): Promise<void> {
   const server = createApp(handle, {
     staticDir: editorDirectory(),
     ratesPath: builtInRatesPath(),
+    brandPath: builtInBrandPath(),
     version: app.getVersion(),
     chooseFolder: () => chooseFolder(window),
     // The person at the keyboard owns this machine, so the folder is theirs

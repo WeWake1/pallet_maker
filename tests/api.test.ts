@@ -223,8 +223,8 @@ describe('the API', () => {
     expect(svg.startsWith('<svg')).toBe(true);
     expect(svg.trimEnd().endsWith('</svg>')).toBe(true);
     // The whole sheet, not only the drawing: the written column is on it too.
-    expect(svg).toContain('Ambica Patterns India Pvt Ltd');
     expect(svg).toContain('Overall size');
+    expect(svg).toContain('Component tolerance');
   });
 
   it('refuses an SVG of a design that does not lay out', async () => {

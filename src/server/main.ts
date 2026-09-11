@@ -51,6 +51,7 @@ const host = process.env.HOST ?? '127.0.0.1';
 const keep = Number(process.env.PALLET_BACKUPS ?? 20);
 const staticDir = resolve(appRoot, 'dist', 'editor');
 const ratesPath = resolve(appRoot, 'config', 'rates.json');
+const brandPath = resolve(appRoot, 'config', 'brand.json');
 
 function fail(message: string): never {
   console.error(message);
@@ -116,6 +117,7 @@ usePrinter(printer.print);
 const app = createApp(handle, {
   staticDir,
   ratesPath,
+  brandPath,
   version,
   timezone,
   allowFolderChange: local,

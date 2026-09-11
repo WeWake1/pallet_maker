@@ -18,7 +18,8 @@ component.
 | [src/sheet/](src/sheet/) | The A4 sheet, its PDF export and its SVG export |
 | [src/sheet/content.ts](src/sheet/content.ts) | What the sheet says, with nothing about how it looks |
 | [src/sheet/handling.ts](src/sheet/handling.ts) | What the pallet may be moved with, and the icons for it |
-| [src/brand/](src/brand/) | The company name, the logo and the company font |
+| [src/brand/](src/brand/) | Whose sheet this is: the name, the mark, the face and the house conventions |
+| [config/brand.json](config/brand.json) | The branding this build ships with. A `brand.json` beside the designs beats it |
 | [src/editor/](src/editor/) | The React editor: form, live preview, nudge |
 | [docs/guide.ts](docs/guide.ts) | The user guide, drawings and all |
 | [src/dxf/](src/dxf/) | DXF R12 output, from `PlacedPiece[]` |
@@ -53,7 +54,8 @@ npm run sheet -- fixtures/wing-both-decks.json --out out # the spec sheet, HTML 
 npm run sheet -- fixtures/wing-both-decks.json --html-only
 npm run sheet -- fixtures/wing-both-decks.json --svg       # the same sheet as one SVG
 npm run dxf -- fixtures/wing-both-decks.json --out out    # R12 DXF
-npm run brand                                            # re-embed the company font after it changes
+npm run brand                                            # check a brand file and say what it comes out as
+npm run sheet -- fixtures/wing-both-decks.json --brand config/brand.json
 npm run costing -- fixtures/block-1000x800.json           # timber volume and cost
 npm run guide                                            # the user guide, HTML and PDF
 npm run build:server                                     # the server as one file, dist/server/main.mjs
@@ -208,10 +210,60 @@ decides what collides, `renderView` iterates until the lanes stop moving.
 
 ### Branding
 
-A sheet goes out to customers, so it says whose drawing it is: **Ambica Patterns
-India Pvt Ltd** corner to corner as a watermark, in the company's own face, and
-the mark in the bottom right corner, where a title block's owner belongs on a
-drawing.
+A sheet goes out to customers, so it says whose drawing it is: the company's
+name corner to corner as a watermark, in the company's own face, and its mark
+in the bottom right corner, where a title block's owner belongs on a drawing.
+
+**None of it is in the program.** Which company, which mark and which face are
+read from a `brand.json` — the one that ships in [config/](config/), or one
+beside the designs, which takes its place. That is the same arrangement as the
+prices, and for the same reason: a company changes its own artwork by putting a
+file in its own folder, not by waiting for a release. A copy of the program
+nobody has told prints no name and no mark at all, which is the honest thing —
+a sheet carrying whatever company the program was last built for would say
+something false about who drew it.
+
+`npm run brand` reads a brand file and says what it comes out as: the mark's
+kind and printed size, the face and how much it adds to every sheet, and the
+size the name will be set at.
+
+The file names its artwork rather than holding it:
+
+```json
+{
+  "companyName": "Acme Pallets Ltd",
+  "logo": "brand/logo.svg",
+  "font": { "family": "Acme Sans", "file": "brand/font.otf", "advanceEm": 0.49 },
+  "projectionNote": "Third-angle projection, all dimensions in mm",
+  "tolerances": { "component": "± 1 mm", "pallet": "± 3 mm" },
+  "units": { "volume": "m3" },
+  "defaults": { "species": "spruce", "nailType": "ring shank" }
+}
+```
+
+Everything in it may be left out, and a file saying nothing but a name is a
+good brand file. A brand that will not read is **not** quietly ignored: the
+built-in one is used so that work goes on, and the editor says so in a banner
+that stays — a sheet going to a customer under the wrong name, or under none,
+is not something to find out about from the customer.
+
+**A logo may be vector or a picture.** An SVG is read, held to a list of shapes
+and attributes a drawing can be made of, and its ids moved out of the sheet's
+way; anything it carries that a page-layout program would choke on — a
+stylesheet, a clip path, a filter, a `<use>` — is refused with a message saying
+to flatten it or send a PNG. A PNG or JPEG is embedded as a data URI, which
+costs that company the SVG sheet's one promise (see below) and nobody else's.
+
+**The projection note is a note, not an instruction.** Changing it does not
+rearrange the views: every view on the sheet is captioned, so which is which is
+never left to be inferred from where it sits.
+
+The watermark's **size is worked out rather than set**. It used to be two
+numbers, 80 point on paper and 64 in the SVG, measured by eye against one
+company's name in one company's face; any other name is a different length and
+any other face a different width per letter. `src/sheet/watermark.ts` works out
+what fills 88% of the diagonal, and still reproduces exactly those two numbers
+for the name and the face they were measured against.
 
 The watermark is set on the sheet's true diagonal — `atan2(210, 297)`, about
 35.3° — rather than at a round angle, so it runs to the corners of *this* page
@@ -227,25 +279,23 @@ printed sheet and the SVG can never drift apart.
 
 Both travel *inside* the document, and by different means.
 
-The **font** is base64 in [src/brand/assets.ts](src/brand/assets.ts), generated
-by `npm run brand` from the file in the project root. A sheet is handed to the
+The **font** travels as base64 inside the document. A sheet is handed to the
 printer, and to the browser, as one self-contained string with no base URL to
 resolve a file path against, so a linked face would simply not be there.
 [tests/branding.test.ts](tests/branding.test.ts) checks every `url()` on the
-sheet is a data URI.
+sheet is a data URI. A face has to be licensed for embedding before it goes in
+a brand file: every sheet carries a copy of it.
 
-The **logo is traced to geometry** in [src/brand/logo.ts](src/brand/logo.ts):
-a triangle, the stem of a P, and a bowl that is a half-*ellipse* — 194 across
-against 175.5 down — which is why it is measured off the artwork rather than
-drawn from memory. Two `<path>`s, a few hundred bytes against fifty kilobytes of
-base64, sharp at any size, and nothing raster left anywhere in the outputs:
-[tests/pdf.test.ts](tests/pdf.test.ts) is back to asserting the PDF contains no
-image XObject at all. The trace was checked against the PNG by compositing both
-over white and comparing pixels — 0.33% differ, and those are the antialiased
-edges.
+The **logo travels as the shapes it is made of** — for Ambica, two `<path>`s: a
+triangle and a P whose bowl is a half-*ellipse*, 194 across against 175.5 down.
+A few hundred bytes against fifty kilobytes of base64, sharp at any size, and
+nothing raster left anywhere in the outputs, so
+[tests/pdf.test.ts](tests/pdf.test.ts) can assert the PDF contains no image
+XObject at all. A company whose logo is only ever a picture gives that up, and
+only for its own sheets.
 
-**If the artwork ever changes, `logo.ts` has to be re-measured by hand.** Nothing
-reads the PNG at build time.
+Changing the artwork is now dropping a new file in and pointing the brand file
+at it. It used to mean re-measuring a module by hand.
 
 The watermark costs the drawings nothing, since it lies over the page rather
 than taking a band of its own. The logo costs 7 mm: the footer is that much
@@ -316,8 +366,8 @@ Two things to know about Canva specifically. Its SVG import is a Pro feature, so
 on a free plan use the PDF — Canva converts PDF to editable elements too, and
 this one is true vector. And the SVG carries no embedded font, so the company
 name in the watermark comes through in whatever sans is available; it is sized
-for that fallback (`WATERMARK.svgFontSize`, measured, not guessed) rather than
-for ITC Anna, so it still runs corner to corner instead of off the page.
+for that fallback rather than for the company's own face, so it still runs
+corner to corner instead of off the page.
 
 ## The design library
 
@@ -840,11 +890,18 @@ not take `1.0000`.
 Timber volume is the sum of `dx × dy × dz` over every placed piece, so it counts
 what the drawing shows and nothing else. 1 CFT is 28,316,846.6 mm³.
 
-Every rate is in [config/rates.json](config/rates.json) and nowhere else
-(`PALLET_RATES` to point elsewhere). Timber is priced per CFT by material and
-nails per thousand by type — a pallet with hardwood blocks under a pine deck
+Every rate is in [config/rates.json](config/rates.json), or in a `rates.json`
+beside the designs, which takes its place. Timber is priced per CFT by material
+and nails per thousand by type — a pallet with hardwood blocks under a pine deck
 costs what its parts cost — and both fall back to `default`. Overhead is a fixed
 amount per pallet plus a percentage of materials.
+
+**The currency has to be stated.** A rates file that left it out used to mean
+rupees, which is a quiet way for a shop in another country to quote every pallet
+in a currency nobody chose. A company that thinks in cubic metres sets
+`units.volume` in its brand file and the editor converts the volume for display;
+the rate stays per CFT as written, so nothing on screen can disagree with what
+is charged.
 
 The editor costs the design as it is edited, using rates it fetches from the
 server, so one file remains the only place a rate is written down. Costing never

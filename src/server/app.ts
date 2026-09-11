@@ -1,6 +1,8 @@
 import express from 'express';
 import type { Express, NextFunction, Request, Response } from 'express';
 import { existsSync } from 'node:fs';
+import { brandResolver } from '../brand/resolve.js';
+import type { Brand } from '../brand/types.js';
 import { computeCosting } from '../costing/costing.js';
 import { DEFAULT_RATES_PATH } from '../costing/load.js';
 import { ratesResolver } from '../costing/resolve.js';
@@ -60,6 +62,14 @@ export interface AppOptions {
    * is wherever the shortcut happened to be launched from.
    */
   ratesPath?: string;
+  /**
+   * The brand that ships with the program, for when the designs folder has
+   * none of its own. A `brand.json` in the folder takes its place, which is
+   * how a company changes its own logo without anybody rebuilding anything.
+   */
+  brandPath?: string;
+  /** A brand to use whatever the folder says. Only tests pass this. */
+  brand?: Brand;
   /**
    * Which build this is, for the editor to show.
    *
@@ -125,6 +135,13 @@ export function createApp(handle: StoreHandle, options: AppOptions = {}): Expres
     options.ratesPath ?? DEFAULT_RATES_PATH,
   );
   const rates = (): Rates => options.rates ?? ratesInUse().rates;
+
+  // And the same for whose name is on the sheet.
+  const brandInUse = brandResolver(
+    () => (handle.ready() ? handle.status().root : null),
+    options.brandPath,
+  );
+  const brand = (): Brand => options.brand ?? brandInUse().brand;
 
   app.use(requestLogger(options.log));
   app.use(securityHeaders);
@@ -195,6 +212,10 @@ export function createApp(handle: StoreHandle, options: AppOptions = {}): Expres
     // something whoever is quoting has to be told, and this is the one call the
     // editor makes whatever else is going on.
     const prices = options.rates ? { from: 'built-in' as const, problem: null } : ratesInUse();
+    // A sheet going out under the wrong name, or under none, is not something
+    // to discover from a customer, so a brand that would not read is carried
+    // out to be said on screen the same way the prices are.
+    const branding = options.brand ? { from: 'built-in' as const, problem: null } : brandInUse();
     res.json({
       ...status,
       root: allowFolderChange ? status.root : null,
@@ -203,6 +224,8 @@ export function createApp(handle: StoreHandle, options: AppOptions = {}): Expres
       version: options.version ?? null,
       ratesFrom: prices.from,
       ratesProblem: prices.problem,
+      brandFrom: branding.from,
+      brandProblem: branding.problem,
     });
   }));
 
@@ -279,6 +302,19 @@ export function createApp(handle: StoreHandle, options: AppOptions = {}): Expres
   // rather than only once it has been saved.
   app.get('/api/rates', wrap((_req, res) => {
     res.json(rates());
+  }));
+
+  /**
+   * Whose drawing this is, for the editor.
+   *
+   * It renders the sheet itself for the preview and for "open in a tab", so it
+   * needs the same brand the server prints with — otherwise what is on screen
+   * and what comes out of the printer would carry different names. The logo
+   * and the font come with it, already encoded.
+   */
+  app.get('/api/brand', wrap((_req, res) => {
+    fresh(res);
+    res.json(brand());
   }));
 
   // The dashboard, in one call: every client, each with their designs. Clients
@@ -388,7 +424,7 @@ export function createApp(handle: StoreHandle, options: AppOptions = {}): Expres
   app.get('/api/pallets/:id/sheet.html', wrap((req, res) => {
     const pallet = pallets.get(idOf(req));
     fresh(res);
-    res.type('html').send(renderSheet(pallet, analysePallet(pallet)));
+    res.type('html').send(renderSheet(pallet, analysePallet(pallet), { brand: brand() }));
   }));
 
   // The primary output. Named for the design and the date it was last saved,
@@ -399,7 +435,7 @@ export function createApp(handle: StoreHandle, options: AppOptions = {}): Expres
     const errors = layout.issues.filter((issue) => issue.severity === 'error');
     if (errors.length > 0) throw new PalletLayoutError(errors);
 
-    const pdf = await exportPdfBuffer(renderSheet(pallet, layout));
+    const pdf = await exportPdfBuffer(renderSheet(pallet, layout, { brand: brand() }));
     fresh(res);
     res
       .type('pdf')
@@ -423,7 +459,7 @@ export function createApp(handle: StoreHandle, options: AppOptions = {}): Expres
         'Content-Disposition',
         contentDisposition(downloadName(pallet, 'svg'), 'attachment'),
       );
-    res.send(renderSheetSvg(pallet, layout));
+    res.send(renderSheetSvg(pallet, layout, { brand: brand() }));
   }));
 
   app.get('/api/pallets/:id/costing', wrap((req, res) => {

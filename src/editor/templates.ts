@@ -1,5 +1,6 @@
+import { DEFAULT_BRAND } from '../brand/defaults.js';
+import type { BrandDefaults } from '../brand/types.js';
 import { newId, today } from '../ids.js';
-import { DEFAULT_HANDLING } from '../types.js';
 import type {
   BlockCell,
   BlockGrid,
@@ -123,16 +124,19 @@ export function newLayer(
  * every design — so it is set to the commonest one rather than to a round
  * number, which makes it right more often and no harder to change.
  */
-export function newPallet(client: { id: string; name: string }): Pallet {
+export function newPallet(
+  client: { id: string; name: string },
+  defaults: BrandDefaults = DEFAULT_BRAND.defaults,
+): Pallet {
   const { id: clientId, name: clientName } = client;
-  const species = 'pine';
-  const extent = { overallLength: 1200, overallWidth: 800 };
+  const species = defaults.species;
+  const extent = { overallLength: defaults.newPallet.length, overallWidth: defaults.newPallet.width };
   return {
     id: newId(),
     palletCode: '',
     clientId,
     clientName,
-    palletName: '1200 x 800',
+    palletName: `${extent.overallLength} x ${extent.overallWidth}`,
     overallLength: extent.overallLength,
     overallWidth: extent.overallWidth,
     overallHeight: 0,
@@ -141,7 +145,7 @@ export function newPallet(client: { id: string; name: string }): Pallet {
     entry: '4_way',
     species,
     planing: 'none',
-    handling: [...DEFAULT_HANDLING],
+    handling: [...defaults.handling],
     // Both empty: a schedule is typed only where there is one to state, and
     // every crossing takes the default nail count until one is clicked.
     nails: [],
@@ -173,7 +177,10 @@ export function newPallet(client: { id: string; name: string }): Pallet {
  * least one — so this opens saying what it still needs, which is the honest
  * description of a design nobody has built yet.
  */
-export function emptyPallet(client: { id: string; name: string }): Pallet {
+export function emptyPallet(
+  client: { id: string; name: string },
+  defaults: BrandDefaults = DEFAULT_BRAND.defaults,
+): Pallet {
   const { id: clientId, name: clientName } = client;
   return {
     id: newId(),
@@ -181,22 +188,22 @@ export function emptyPallet(client: { id: string; name: string }): Pallet {
     clientId,
     clientName,
     palletName: '',
-    overallLength: 1200,
-    overallWidth: 800,
+    overallLength: defaults.newPallet.length,
+    overallWidth: defaults.newPallet.width,
     overallHeight: 0,
     // Nothing is assumed about what this pallet is. Every one of these is
     // offered as "not stated", and that is what nobody having said yet means.
     palletType: '',
     deckType: '',
     entry: '',
-    species: 'pine',
+    species: defaults.species,
     planing: '',
     // Not the exception the fields above are. A checkbox has no "nobody has
     // said yet", and an empty list says the pallet may not be moved at all,
     // which is a stronger claim than the truth about any pallet. So even the
     // design that assumes nothing starts at the two ways nearly all of them
     // are moved, and is corrected where it is wrong.
-    handling: [...DEFAULT_HANDLING],
+    handling: [...defaults.handling],
     nails: [],
     nailPlacements: [],
     updatedAt: today(),
