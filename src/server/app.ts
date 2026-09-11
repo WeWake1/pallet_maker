@@ -3,6 +3,17 @@ import type { Express, NextFunction, Request, Response } from 'express';
 import { existsSync } from 'node:fs';
 import { brandResolver } from '../brand/resolve.js';
 import type { Brand } from '../brand/types.js';
+import { currentTenant, NoTenantContextError, runInTenant } from '../tenancy/context.js';
+import type { TenantContext } from '../tenancy/context.js';
+import { Tenants } from '../tenancy/tenants.js';
+import { Mutex } from '../store/mutex.js';
+import type { Registry } from '../tenancy/registry.js';
+import { authRoutes, NO_SIGN_IN } from './authRoutes.js';
+import {
+  checkSession,
+  requireRequestedWith,
+  unauthenticated,
+} from './auth.js';
 import { computeCosting } from '../costing/costing.js';
 import { DEFAULT_RATES_PATH } from '../costing/load.js';
 import { ratesResolver } from '../costing/resolve.js';
@@ -19,7 +30,6 @@ import { renderSheet } from '../sheet/sheet.js';
 import { renderSheetSvg } from '../sheet/svgSheet.js';
 import { StoreUnavailableError } from '../store/files.js';
 import type { StoreHandle } from '../store/handle.js';
-import { Mutex } from '../store/mutex.js';
 import { rememberStoreRoot } from '../store/settings.js';
 import { securityHeaders } from './headers.js';
 import { exportLibrary, importDesign, importLibrary } from './library.js';
@@ -102,46 +112,100 @@ export interface AppOptions {
   log?: Logger;
   /** Anything else `/healthz` should report — the printer, mostly. */
   health?: () => Record<string, unknown>;
+  /**
+   * Who may use this server.
+   *
+   * Absent, nobody is asked: that is the desktop app and the command line,
+   * where the machine has already decided who is at the keyboard. Present,
+   * every route below the door needs a session, and which company's designs
+   * those routes see comes from whose session it is.
+   */
+  auth?: AuthConfig;
+}
+
+export interface AuthConfig {
+  registry: Registry;
+  /** Signs the session cookie. At least 32 bytes, and not in the repository. */
+  secret: string;
+  /** Mark cookies Secure. True wherever the address is https. */
+  secure: boolean;
+  /** Where this server answers, for the links in invitations. */
+  publicUrl: string;
 }
 
 /** The two routes that take a whole library in one body. */
 const IMPORT_ROUTES = new Set(['/api/library/import', '/api/pallets/import']);
 
-export function createApp(handle: StoreHandle, options: AppOptions = {}): Express {
+/**
+ * The API, over one company's designs or over every company's.
+ *
+ * Given a folder, it serves that folder and asks nobody who they are: that is
+ * the desktop app, where the machine has already decided. Given the companies
+ * on a server, every request goes through the door first and the folder it
+ * then reads is whichever belongs to whoever signed in.
+ *
+ * Not one route below knows the difference. Each asks for "the designs" and
+ * gets the ones the request is entitled to, because the middleware put that
+ * answer where the repositories look — see `src/tenancy/context.ts`.
+ */
+export function createApp(source: StoreHandle | Tenants, options: AppOptions = {}): Express {
   const app = express();
   app.disable('x-powered-by');
   // Behind a reverse proxy on this machine the address of the person is in
   // the header the proxy adds; from anywhere else that header is ignored.
   app.set('trust proxy', 'loopback');
 
-  // The repositories ask the handle which folder to use each time they are
-  // used, so pointing the tool somewhere else takes effect without a restart.
-  const storeNow = () => handle.require();
-  const now = () => today(options.timezone);
+  const tenants = source instanceof Tenants ? source : null;
+  const auth = options.auth;
+  if (tenants && !auth) {
+    throw new Error('A server holding several companies has to know who may use it: pass options.auth');
+  }
+
+  /**
+   * The one company, when there is only one.
+   *
+   * The desktop app and the command line have a folder and no notion of who is
+   * asking, so they get a context made once and used for every request. The
+   * routes cannot tell, which is the point: there is one way to reach the
+   * designs and it goes through the same place either way.
+   */
+  const sole: TenantContext | null = tenants
+    ? null
+    : {
+        tenant: {
+          id: 'sole',
+          slug: 'sole',
+          name: '',
+          timezone: options.timezone ?? 'UTC',
+          status: 'active',
+          createdAt: '',
+        },
+        handle: source as StoreHandle,
+        rates: ratesResolver(
+          () => ((source as StoreHandle).ready() ? (source as StoreHandle).status().root : null),
+          options.ratesPath ?? DEFAULT_RATES_PATH,
+        ),
+        brand: brandResolver(
+          () => ((source as StoreHandle).ready() ? (source as StoreHandle).status().root : null),
+          options.brandPath,
+        ),
+        lock: new Mutex(),
+      };
+
+  // Everything below reads the company in context rather than a folder chosen
+  // when the server started.
+  const storeNow = () => currentTenant().handle.require();
+  const now = () => today(currentTenant().tenant.timezone);
   const pallets = new PalletRepository(storeNow, { now });
   const clients = new ClientRepository(storeNow, { now });
-  const allowFolderChange = options.allowFolderChange === true;
+  const allowFolderChange = options.allowFolderChange === true && tenants === null;
 
-  // The routes that rewrite many designs at once must never interleave with
-  // each other. Every write is synchronous today, so this costs nothing; it is
-  // here for the day one of them is not.
-  const writes = new Mutex();
-
-  // A `rates.json` in the designs folder is the price everybody quotes at; the
-  // file that shipped with the program is the fallback. Resolved per call, so
-  // editing the prices in the folder takes effect without a restart.
-  const ratesInUse = ratesResolver(
-    () => (handle.ready() ? handle.status().root : null),
-    options.ratesPath ?? DEFAULT_RATES_PATH,
-  );
+  const ratesInUse = () => currentTenant().rates();
   const rates = (): Rates => options.rates ?? ratesInUse().rates;
-
-  // And the same for whose name is on the sheet.
-  const brandInUse = brandResolver(
-    () => (handle.ready() ? handle.status().root : null),
-    options.brandPath,
-  );
+  const brandInUse = () => currentTenant().brand();
   const brand = (): Brand => options.brand ?? brandInUse().brand;
+  /** The company whose designs are being written, for the routes that hold it. */
+  const writes = () => currentTenant().lock;
 
   app.use(requestLogger(options.log));
   app.use(securityHeaders);
@@ -181,20 +245,104 @@ export function createApp(handle: StoreHandle, options: AppOptions = {}): Expres
    */
   app.get('/healthz', wrap((_req, res) => {
     fresh(res);
-    const status = handle.status();
-    res.status(status.ready ? 200 : 503).json({
-      ok: status.ready,
+    // Asked by whatever watches the server, before anybody has signed in, so
+    // it reports the server rather than any one company's designs. On a
+    // server holding several, that means the registry answers and the data
+    // folder is there; on a laptop, that the one folder can be reached.
+    let ok = true;
+    let detail: Record<string, unknown>;
+    if (tenants) {
+      try {
+        detail = { companies: auth!.registry.listTenants().length, foldersOpen: tenants.openCount };
+      } catch (error) {
+        ok = false;
+        detail = { registry: error instanceof Error ? error.message : String(error) };
+      }
+    } else {
+      const status = sole!.handle.status();
+      ok = status.ready;
+      detail = {
+        store: {
+          ready: status.ready,
+          designs: status.designs,
+          clients: status.clients,
+          problem: status.problem,
+        },
+      };
+    }
+    res.status(ok ? 200 : 503).json({
+      ok,
       version: options.version ?? null,
       uptimeSeconds: Math.round(process.uptime()),
-      store: {
-        ready: status.ready,
-        designs: status.designs,
-        clients: status.clients,
-        problem: status.problem,
-      },
+      ...detail,
       ...(options.health?.() ?? {}),
     });
   }));
+
+  /* ------------------------------------------------------------- the door */
+
+  if (auth) {
+    // Every request that changes something carries a header no form on
+    // another site can add. Signing in is included: without it, a form
+    // elsewhere could sign somebody into an account that is not theirs.
+    app.use('/api', requireRequestedWith);
+    // Signing in, signing out, and following an invitation: the only things
+    // that happen before anybody is known.
+    app.use(authRoutes(auth, options.log !== undefined));
+  }
+
+  /**
+   * Who is asking, and therefore whose designs these are.
+   *
+   * Everything after this runs inside one company's context. A page of the
+   * editor is allowed through without one, because the login screen is part
+   * of it and has to load; anything under `/api/` is not.
+   */
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (!auth) {
+      runInTenant(sole!, next);
+      return;
+    }
+    const { principal } = checkSession(auth.registry, req, auth.secret);
+    if (!principal) {
+      if (req.path.startsWith('/api/')) {
+        unauthenticated(res);
+        return;
+      }
+      next();
+      return;
+    }
+    req.principal = principal;
+    if (principal.tenant) {
+      runInTenant(tenants!.context(principal.tenant), next);
+      return;
+    }
+    // Somebody who looks after the service belongs to no company, so there is
+    // no folder to put them in. They may manage companies and nothing else.
+    next();
+  });
+
+  /**
+   * A route that needs designs, reached by somebody who has none.
+   *
+   * Only the vendor's own people can be here: they look after the service
+   * rather than drawing pallets, and there is no folder that is theirs.
+   */
+  const needsCompany = (_req: Request, res: Response, next: NextFunction): void => {
+    try {
+      currentTenant();
+      next();
+    } catch (error) {
+      if (error instanceof NoTenantContextError) {
+        res.status(403).json({
+          error: 'That account looks after the service and does not belong to a company.',
+        });
+        return;
+      }
+      next(error);
+    }
+  };
+  app.use('/api', needsCompany);
 
   /**
    * Which folder the designs are in.
@@ -207,7 +355,7 @@ export function createApp(handle: StoreHandle, options: AppOptions = {}): Expres
    */
   app.get('/api/settings', wrap((_req, res) => {
     fresh(res);
-    const status = handle.status();
+    const status = currentTenant().handle.status();
     // The rates come along because a folder whose prices could not be read is
     // something whoever is quoting has to be told, and this is the one call the
     // editor makes whatever else is going on.
@@ -254,21 +402,21 @@ export function createApp(handle: StoreHandle, options: AppOptions = {}): Expres
       res.status(400).json({ error: 'A folder has to be given' });
       return;
     }
-    if (handle.status().source === 'environment') {
+    if (sole!.handle.status().source === 'environment') {
       res.status(409).json({
         error: 'PALLET_STORE is set, and it decides the folder. Unset it to choose one here.',
       });
       return;
     }
 
-    const status = handle.use(root.trim());
+    const status = sole!.handle.use(root.trim());
     rememberStoreRoot(status.root!);
     res.json(status);
   }));
 
   /** Look again, for a folder that was not there when the tool started. */
   app.post('/api/settings/retry', wrap((_req, res) => {
-    res.json(handle.retry());
+    res.json(currentTenant().handle.retry());
   }));
 
   /**
@@ -290,10 +438,10 @@ export function createApp(handle: StoreHandle, options: AppOptions = {}): Expres
     const picked = await options.chooseFolder();
     if (picked === null) {
       // Cancelled. Nothing changes, and nothing has gone wrong.
-      res.json(handle.status());
+      res.json(sole!.handle.status());
       return;
     }
-    const status = handle.use(picked);
+    const status = sole!.handle.use(picked);
     rememberStoreRoot(status.root!);
     res.json(status);
   }));
@@ -316,6 +464,21 @@ export function createApp(handle: StoreHandle, options: AppOptions = {}): Expres
     fresh(res);
     res.json(brand());
   }));
+
+  /**
+   * Whether anybody has to sign in here.
+   *
+   * Registered only when nobody does — behind the door there is a fuller
+   * answer to the same question. The editor asks it first on every load,
+   * because it is the difference between showing a library and showing a
+   * sign-in screen, and a server that asks nobody still has to say so.
+   */
+  if (!auth) {
+    app.get('/api/session', wrap((_req, res) => {
+      fresh(res);
+      res.json(NO_SIGN_IN);
+    }));
+  }
 
   // The dashboard, in one call: every client, each with their designs. Clients
   // with none are included, which is why they are a record of their own.
@@ -364,7 +527,7 @@ export function createApp(handle: StoreHandle, options: AppOptions = {}): Expres
       return;
     }
     const clientId = body.clientId;
-    await writes.run(() => {
+    await writes().run(() => {
       res.status(201).json(importDesign(body.pallet, clientId, pallets, clients));
     });
   }));
@@ -511,8 +674,8 @@ export function createApp(handle: StoreHandle, options: AppOptions = {}): Expres
   app.post('/api/library/import', wrap(async (req, res) => {
     const body = req.body as { library?: unknown; mode?: unknown };
     const mode = body.mode === 'replace' ? 'replace' : 'skip';
-    await writes.run(() => {
-      res.json(importLibrary(handle.require(), parseLibrary(body.library), pallets, clients, mode));
+    await writes().run(() => {
+      res.json(importLibrary(currentTenant().handle.require(), parseLibrary(body.library), pallets, clients, mode));
     });
   }));
 

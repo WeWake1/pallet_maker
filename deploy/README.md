@@ -59,10 +59,9 @@ pallet ALL=(root) NOPASSWD: /usr/bin/systemctl restart pallet-spec
 ## 4. Caddy
 
 Copy `deploy/Caddyfile` to `/etc/caddy/Caddyfile`, put the real host name in,
-make a password hash with `caddy hash-password` and paste it in, then
-`sudo systemctl reload caddy`. The shared password is the door until people
-have logins of their own (roadmap phase 2). `/healthz` is outside it, for
-whatever watches the server.
+then `sudo systemctl reload caddy`. Nothing stands in front of the server:
+it asks who is signing in itself, and every route that touches a design is
+behind that.
 
 ## 5. The service and the timers
 
@@ -109,9 +108,50 @@ sudo -u pallet sh -c '. /etc/pallet-spec/restic.env; export RESTIC_REPOSITORY AZ
   and open `http://127.0.0.1:5999/healthz` and the dashboard. A backup nobody
   has restored is a hope, not a backup.
 
+## 7a. The first company, and the first people
+
+Nobody can sign in until somebody is invited, and nobody is invited until
+there is a company. Both are made with `pallet-tenant`, run as the service
+user with the same environment the server has:
+
+```sh
+cd /opt/pallet-spec/current
+sudo -u pallet env $(grep -v '^#' /etc/pallet-spec/env | xargs) node dist/server/tenant.mjs \
+  create --slug ambica --name "Ambica Patterns India Pvt Ltd" \
+         --timezone Asia/Kolkata --admin office@ambica.example
+```
+
+It prints a link. Send that to the person: they follow it, choose a password,
+and are signed in. **No password is ever set by an administrator**, so there is
+never one to read out over the phone or leave in a chat. The link works once
+and lasts a week.
+
+The short name is what the company's folder is called, so it is permanent —
+renaming one would leave its designs behind under the old name. The command
+makes the folder, so its branding and prices can be put in place before
+anybody signs in:
+
+```
+/var/lib/pallet-spec/tenants/ambica/brand.json     its name, logo and conventions
+/var/lib/pallet-spec/tenants/ambica/brand/         the logo and font those name
+/var/lib/pallet-spec/tenants/ambica/rates.json     its prices
+/var/lib/pallet-spec/tenants/ambica/designs/       one file per design
+```
+
+The rest of the commands:
+
+```sh
+node dist/server/tenant.mjs list                                   # every company
+node dist/server/tenant.mjs users --company ambica                 # who is in one
+node dist/server/tenant.mjs invite --company ambica --email x@y --role member
+node dist/server/tenant.mjs reset --email x@y                      # a way back in
+node dist/server/tenant.mjs suspend --company ambica               # signs them out too
+node dist/server/tenant.mjs resume --company ambica
+node dist/server/tenant.mjs vendor-admin --email you@example.com   # your own account
+```
+
 ## 8. Ambica's designs onto the server
 
-Until roadmap phase 4 (companies and a migration tool), the way in is the
-library file: in the desktop app, **Export library**, then on the server, from
-the editor, **Import library**. The startup backup and the nightly snapshot
-keep copies of it from then on.
+Until the migration tool lands, the way in is the library file: in the desktop
+app, **Export library**, then on the server, signed in as somebody at Ambica,
+**Import library**. The nightly snapshot keeps copies of it from then on.

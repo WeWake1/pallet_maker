@@ -26,6 +26,8 @@ component.
 | [src/costing/](src/costing/) | Timber volume and cost, at the rates in the config |
 | [config/rates.json](config/rates.json) | Every rate the tool knows. Edit here, nowhere else |
 | [src/server/](src/server/) | The API over the store, and the server entry point |
+| [src/server/auth.ts](src/server/auth.ts) | Passwords, sessions and cookies: who is asking |
+| [src/tenancy/](src/tenancy/) | The companies on a server, and which folder each request may see |
 | [src/sheet/pooledPrinter.ts](src/sheet/pooledPrinter.ts) | One Chromium kept open, for a server that prints all day |
 | [deploy/](deploy/) | Running it on a server: Caddy, systemd, the nightly backups |
 | [src/duplicate.ts](src/duplicate.ts) | Copying a design into one that is linked to nothing |
@@ -60,6 +62,7 @@ npm run costing -- fixtures/block-1000x800.json           # timber volume and co
 npm run guide                                            # the user guide, HTML and PDF
 npm run build:server                                     # the server as one file, dist/server/main.mjs
 npm run backup -- data/library --keep 30                 # snapshot the library, as the nightly timer does
+npm run tenant -- list                                   # the companies on a server (needs PALLET_DATA_ROOT)
 ```
 
 `views` writes each view twice, in colour and desaturated, plus an HTML contact
@@ -582,20 +585,56 @@ Run it after anything that touches the sheet or the printer.
 
 `node dist/server/main.mjs` is the same program with the laptop's habits taken
 out. It listens on the loopback for a reverse proxy; keeps everything under
-`PALLET_DATA_ROOT`, with the library in `library/` inside it; refuses to start
-if that folder is not there; and lets nobody point it at another folder over
-the API — the editor's folder screen is not offered. One Chromium stays open
-and prints two sheets at a time, the rest wait their turn, and a sheet that
-will not finish is cut off and tried once more in a fresh browser. A request
-that is not one of the two library imports may carry 2 MB and no more. Every
-request is written to stdout as one line of JSON with an id, and a failure on
-the server's side is described to the person by that id alone. `/healthz`
-says whether the designs can be reached and how the printer is doing.
+`PALLET_DATA_ROOT`; refuses to start if that folder is not there, or without a
+`SESSION_SECRET`. One Chromium stays open and prints two sheets at a time, the
+rest wait their turn, and a sheet that will not finish is cut off and tried
+once more in a fresh browser. A request that is not one of the two library
+imports may carry 2 MB and no more. Every request is written to stdout as one
+line of JSON with an id, and a failure on the server's side is described to the
+person by that id alone. `/healthz` says whether the server is well and how the
+printer is doing.
 
 `npm run serve` is the same entry point with `--local`, which is how the tool
-has always run on a laptop. [deploy/README.md](deploy/README.md) is the recipe
-for a Debian VM on Azure: Caddy for HTTPS, systemd, a nightly snapshot and a
-nightly copy off the machine.
+has always run on a laptop: one folder, and nobody asked who they are.
+[deploy/README.md](deploy/README.md) is the recipe for a Debian VM on Azure.
+
+### Several companies, on one server
+
+A company is a folder under `PALLET_DATA_ROOT/tenants/<short name>`, holding
+its designs, its `clients.json`, its prices and its branding — the same folder
+a laptop has, so a company's whole library is still something that can be
+zipped and handed back. Beside them is one small SQLite file, the **registry**,
+holding the few facts that decide which folder a request may see: the
+companies, the people, the invitations and the sessions. That is all it holds;
+nothing about pallets is in a database.
+
+Which folder a request sees is never passed as an argument. The middleware that
+works out who is asking puts the answer on an `AsyncLocalStorage`, and the one
+function every repository already called to find its folder reads it back — so
+no route had to change, and **no route can reach a folder without having gone
+through the door**. Asking outside a request throws rather than guessing, which
+is the whole of why it is safe to put a second company's designs on the same
+machine as the first. [tests/tenancy.test.ts](tests/tenancy.test.ts) holds that
+line: knowing another company's design id is not enough to read it, copy it,
+print it or delete it.
+
+Accounts are **by invitation**. Somebody is invited, follows a link, and
+chooses a password; no administrator ever sets one, so there is never a
+password for anyone else to know. The link works once and lasts a week, and
+only its hash is stored — a copy of the registry is not a drawer of working
+keys. Losing a password is answered with another link rather than with a
+reset form, for the same reason.
+
+A session is a signed, `HttpOnly`, `SameSite=Lax` cookie whose value is random
+and whose hash alone is stored. It lasts a month unused and three months
+however much it is used. Everything that changes something also has to carry a
+header a form on another site cannot add. Signing in is rate-limited by address
+and by account at once, and every way of being wrong gets the same answer —
+telling a stranger which of "no such account" and "wrong password" applies
+tells them something about somebody else.
+
+`pallet-tenant` makes companies and invites people; it is the only way in
+before anybody exists. See [deploy/README.md](deploy/README.md).
 
 ## Storage
 

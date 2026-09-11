@@ -35,21 +35,66 @@ export class StaleEdit extends Error {
   }
 }
 
+/**
+ * Nobody is signed in any more.
+ *
+ * Told apart from every other failure because it is answered by showing the
+ * sign-in screen rather than by reporting anything: a session runs out while a
+ * tab is open, and what should happen then is a login form, not an error
+ * across the top of a library that is no longer there.
+ */
+export class Unauthenticated extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'Unauthenticated';
+  }
+}
+
+/**
+ * The header the server insists on for anything that changes something.
+ *
+ * A form on another site can post to this one; it cannot add a header of its
+ * own without asking first, and the server answers no such question.
+ */
+const REQUESTED_WITH = 'pallet-editor';
+
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,
-    headers: init?.headers ?? (init?.body ? { 'content-type': 'application/json' } : undefined),
+    // The session is a cookie, and a cookie is only sent if it is asked for.
+    credentials: 'same-origin',
+    headers: {
+      'x-requested-with': REQUESTED_WITH,
+      ...(init?.body ? { 'content-type': 'application/json' } : {}),
+      ...init?.headers,
+    },
   });
   if (!response.ok) {
     const detail = (await response.json().catch(() => null)) as
-      | { error?: string; storeUnavailable?: boolean; staleEdit?: boolean }
+      | { error?: string; storeUnavailable?: boolean; staleEdit?: boolean; unauthenticated?: boolean }
       | null;
     const message = detail?.error ?? `${response.status} ${response.statusText}`;
+    if (detail?.unauthenticated) throw new Unauthenticated(message);
     if (detail?.storeUnavailable) throw new StoreUnavailable(message);
     if (detail?.staleEdit) throw new StaleEdit(message);
     throw new Error(message);
   }
   return response.status === 204 ? (undefined as T) : ((await response.json()) as T);
+}
+
+/** Who is signed in, and whether this server asks at all. */
+export interface Session {
+  signInRequired: boolean;
+  user: { id: string; email: string; name: string; role: string } | null;
+  company: { slug: string; name: string; timezone: string } | null;
+}
+
+/** What a link in an invitation is worth, before it is used. */
+export interface InvitationOffer {
+  email: string;
+  kind: 'invite' | 'reset';
+  companyName: string | null;
+  returning: boolean;
 }
 
 export const api = {
@@ -101,6 +146,20 @@ export const api = {
     call<ImportReport>('/api/library/import', {
       method: 'POST',
       body: JSON.stringify({ library, mode }),
+    }),
+
+  /** Who is signed in. The first thing the editor asks, every time it loads. */
+  session: () => call<Session>('/api/session'),
+  signIn: (email: string, password: string) =>
+    call<Session>('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  signOut: () => call<void>('/api/auth/logout', { method: 'POST' }),
+  /** What an invitation is for, without using it up. */
+  invitation: (token: string) => call<InvitationOffer>(`/api/auth/invitation/${encodeURIComponent(token)}`),
+  /** Follow it: choose a password, and be signed in. */
+  acceptInvitation: (token: string, name: string, password: string) =>
+    call<Session>('/api/auth/accept', {
+      method: 'POST',
+      body: JSON.stringify({ token, name, password }),
     }),
 
   /** Which folder the designs are in. Answers even when it cannot be reached. */
