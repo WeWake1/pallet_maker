@@ -175,6 +175,13 @@ export function StoreFolderBar({
         <strong className="font-semibold">Prices:</strong> {status.ratesProblem}
       </div>
     )}
+    {/* A sheet going to a customer under the wrong name, or under none, is
+        the other failure worth saying out loud and leaving said. */}
+    {status.brandProblem && (
+      <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-label text-amber-900">
+        <strong className="font-semibold">Branding:</strong> {status.brandProblem}
+      </div>
+    )}
     <div className="flex items-center gap-2 border-b border-line bg-ground-soft px-4 py-1.5">
       {status.managedStore ? (
         // Hosted: the folder is the server's own business, so there is no

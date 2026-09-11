@@ -1,3 +1,4 @@
+import type { Brand } from '../brand/types.js';
 import type { Rates } from '../costing/rates.js';
 import type { ImportMode, ImportReport } from '../library.js';
 import type { ClientDesigns, PalletSummary } from '../server/repository.js';
@@ -81,6 +82,13 @@ export const api = {
   duplicate: (id: string) => call<Pallet>(`/api/pallets/${id}/duplicate`, { method: 'POST' }),
   remove: (id: string) => call<void>(`/api/pallets/${id}`, { method: 'DELETE' }),
   rates: () => call<Rates>('/api/rates'),
+  /**
+   * Whose drawing this is. The editor renders the sheet itself, for the
+   * preview and for opening one in a tab, so it needs the same brand the
+   * server prints with — or what is on screen and what comes off the printer
+   * would carry different names.
+   */
+  brand: () => call<Brand>('/api/brand'),
 
   /** One design from a file, as a new design of that client's. */
   importDesign: (pallet: unknown, clientId: string) =>

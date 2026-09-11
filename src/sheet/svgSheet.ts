@@ -1,15 +1,17 @@
-import { COMPANY_NAME } from '../brand/brand.js';
-import { LOGO_ASPECT, LOGO_BOX, logoPaths } from '../brand/logo.js';
+import { DEFAULT_BRAND } from '../brand/defaults.js';
+import { logoBox, logoSvgFragment } from '../brand/markup.js';
+import type { Brand } from '../brand/types.js';
 import type { Layout } from '../geometry/types.js';
 import { mmLabel } from '../render/scene.js';
 import { el, esc, fmt, fragmentSize, line, rect, text } from '../render/svg.js';
 import type { Pallet } from '../types.js';
 import type { ComponentRow, HandlingRow, Pair, SheetContent } from './content.js';
-import { PROJECTION_NOTE, sheetContent } from './content.js';
+import { sheetContent } from './content.js';
 import { HANDLING_INK, ICON_BOX, handlingIcon, handlingMark } from './handling.js';
 import { DRAWING, HANDLING, LOGO, PAGE, PX_PER_MM, SHEET, WATERMARK, handlingHeight } from './layout.js';
 import { drawingRows, sheetViews } from './sheet.js';
 import type { DrawingRows } from './sheet.js';
+import { watermarkSizePt } from './watermark.js';
 
 /**
  * The same specification sheet, as one SVG.
@@ -63,6 +65,8 @@ const ROW = {
 
 export interface SvgSheetOptions {
   greyscale?: boolean;
+  /** Whose drawing this is. Left out, it carries no name and no mark. */
+  brand?: Brand;
 }
 
 export function renderSheetSvg(
@@ -70,7 +74,8 @@ export function renderSheetSvg(
   layout: Layout,
   options: SvgSheetOptions = {},
 ): string {
-  const content = sheetContent(pallet, layout);
+  const brand = options.brand ?? DEFAULT_BRAND;
+  const content = sheetContent(pallet, layout, brand);
   const rows = drawingRows(layout);
   const views = sheetViews(layout, rows, options.greyscale === true, true);
 
@@ -78,10 +83,10 @@ export function renderSheetSvg(
     headerBand(content),
     dataColumn(content),
     drawingColumn(views, rows),
-    footer(),
+    footer(content, brand),
     // Last, so it lies over the drawings. Each view carries a white background
     // of its own and a watermark beneath them would show only in the gaps.
-    watermark(),
+    watermark(brand),
   ].join('');
 
   return (
@@ -102,21 +107,30 @@ export function renderSheetSvg(
 
 /* ------------------------------------------------------------------ bands */
 
-/** Whose drawing this is, corner to corner in the company's own face. */
-function watermark(): string {
+/**
+ * Whose drawing this is, corner to corner.
+ *
+ * Always in a plain sans, never in the company's own face: this file carries
+ * no `@font-face`, because that is a `<style>` block and a `<style>` block is
+ * one of the things that makes a page-layout program give up and flatten the
+ * page. So the size is worked out for the sans it will actually be set in,
+ * which is a different number from the printed sheet's.
+ */
+function watermark(brand: Brand): string {
+  if (!brand.watermark.enabled || brand.watermark.text.trim() === '') return '';
   const cx = px(PAGE.width / 2);
   const cy = px(PAGE.height / 2);
+  const size = watermarkSizePt(brand.watermark.text);
   return el(
     'g',
     { transform: `rotate(-${WATERMARK.angle.toFixed(2)} ${fmt(cx)} ${fmt(cy)})` },
-    label(PAGE.width / 2, PAGE.height / 2, COMPANY_NAME, {
-      // Sized for the sans this will actually be set in — see WATERMARK.
-      size: WATERMARK.svgFontSize,
+    label(PAGE.width / 2, PAGE.height / 2, brand.watermark.text, {
+      size,
       anchor: 'middle',
       family: BODY_FONT,
-      'letter-spacing': fmt(pt(WATERMARK.svgFontSize) * WATERMARK.tracking),
+      'letter-spacing': fmt(pt(size) * WATERMARK.tracking),
       fill: INK,
-      opacity: WATERMARK.opacity,
+      opacity: brand.watermark.opacity,
       // Centred on the diagonal rather than sitting on it, which is what the
       // printed sheet's flexbox does for the same text.
       baseline: 'central',
@@ -453,32 +467,31 @@ function place(view: string, left: number, top: number, width: number, height: n
 }
 
 /** The projection note across the middle, the mark in the corner. */
-function footer(): string {
+function footer(content: SheetContent, brand: Brand): string {
   const left = PAGE.padding + SHEET.dataWidth + SHEET.columnGap;
   const bottom = PAGE.height - PAGE.padding;
   const centre = left + DRAWING.width / 2;
 
-  // Nearly square, so the height is what is set and the width follows.
-  const logoWidth = Math.min(LOGO.maxWidth, LOGO.height * LOGO_ASPECT);
+  // A vector mark becomes the shapes it is made of, which is what keeps this
+  // file takeable-apart; a raster one becomes the single <image> the file is
+  // otherwise free of.
+  const box = logoBox(brand);
+  const logo = box
+    ? logoSvgFragment(
+        brand,
+        PAGE.padding + SHEET.contentWidth - box.width,
+        bottom - box.height,
+        px,
+        fmt,
+      )
+    : '';
 
   return (
-    label(centre, bottom - SHEET.footerHeight / 2 + 1, PROJECTION_NOTE, {
+    label(centre, bottom - SHEET.footerHeight / 2 + 1, content.projectionNote, {
       size: 8.5,
       anchor: 'middle',
       fill: MUTED,
-    }) +
-    // Two plain paths, scaled out of the artwork's own 1460 x 1278 box. Not an
-    // <image>: a base64 PNG is exactly the kind of thing that makes a reader
-    // give up and flatten the page.
-    el(
-      'g',
-      {
-        transform:
-          `translate(${fmt(px(PAGE.padding + SHEET.contentWidth - logoWidth))} ${fmt(px(bottom - LOGO.height))})` +
-          ` scale(${fmt(px(logoWidth) / LOGO_BOX.width)})`,
-      },
-      logoPaths(),
-    )
+    }) + logo
   );
 }
 

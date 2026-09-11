@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { DEFAULT_BRAND } from '../brand/defaults.js';
+import type { Brand } from '../brand/types.js';
 import { computeCosting } from '../costing/costing.js';
 import type { Costing } from '../costing/costing.js';
 import type { Rates } from '../costing/rates.js';
@@ -128,6 +130,12 @@ export function App() {
   const [sections, setSections] = useState<ClientDesigns[]>([]);
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [rates, setRates] = useState<Rates | null>(null);
+  /**
+   * Until the server answers, the sheet is drawn with no name on it. That is
+   * the honest thing to show for the half-second it takes: a name that turns
+   * out to be wrong is worse than no name at all.
+   */
+  const [brand, setBrand] = useState<Brand>(DEFAULT_BRAND);
   const [open, setOpen] = useState<OpenDesign | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   // What an import did. An import that quietly succeeds looks the same as one
@@ -198,6 +206,10 @@ export function App() {
       .rates()
       .then(setRates)
       .catch(() => setRates(null));
+    void api
+      .brand()
+      .then(setBrand)
+      .catch(() => setBrand(DEFAULT_BRAND));
   }, [refresh]);
 
   /**
@@ -335,7 +347,7 @@ export function App() {
     const client = clients.find((candidate) => candidate.id === clientId);
     if (!client) return;
     setProblem(null);
-    setOpen({ pallet: newPallet(client), saved: null });
+    setOpen({ pallet: newPallet(client, brand.defaults), saved: null });
   };
 
   /** Point the tool at a folder, and open what is in it. */
@@ -426,6 +438,7 @@ export function App() {
           recoveredAt={open.recoveredAt}
           clients={clients}
           rates={rates}
+          brand={brand}
           onBack={() => {
             setOpen(null);
             // The editor writes out its pending draft as it goes; picking it up
@@ -486,6 +499,7 @@ export function App() {
             </div>
           </header>
           <Dashboard
+            startingSize={`${brand.defaults.newPallet.length} × ${brand.defaults.newPallet.width}`}
             sections={sections}
             drafts={drafts}
             busy={busy}
@@ -523,6 +537,7 @@ function Editor({
   recoveredAt,
   clients,
   rates,
+  brand,
   onBack,
   onProblem,
   onRefresh,
@@ -533,6 +548,7 @@ function Editor({
   recoveredAt?: string;
   clients: Client[];
   rates: Rates | null;
+  brand: Brand;
   onBack: () => void;
   onProblem: (message: string | null) => void;
   onRefresh: () => Promise<void>;
@@ -786,7 +802,7 @@ function Editor({
     });
 
   const openSheet = () => {
-    const html = renderSheet(pallet, layout);
+    const html = renderSheet(pallet, layout, { brand });
     const tab = window.open('', '_blank');
     if (!tab) return;
     tab.document.write(html);
@@ -1083,7 +1099,7 @@ function Editor({
                         'Clear this design back to an empty pallet? Everything drawn so far goes.',
                       )
                     ) {
-                      adopt(emptyPallet({ id: pallet.clientId, name: pallet.clientName }));
+                      adopt(emptyPallet({ id: pallet.clientId, name: pallet.clientName }, brand.defaults));
                     }
                   }}
                   note="No layers at all, to build up from nothing"
@@ -1156,7 +1172,11 @@ function Editor({
                 id={fieldId('palletCode')}
                 hint={HINTS.palletCode}
               >
-                <TextInput value={pallet.palletCode} onChange={(palletCode) => patch({ palletCode })} placeholder="AP-001" />
+                <TextInput
+                  value={pallet.palletCode}
+                  onChange={(palletCode) => patch({ palletCode })}
+                  placeholder={brand.defaults.palletCodePlaceholder}
+                />
               </Field>
               {/* The name is a copy of the client's, kept on the document so a
                   sheet can be printed from it alone. Both move together. */}
@@ -1182,7 +1202,7 @@ function Editor({
                 <TextInput
                   value={pallet.palletName}
                   onChange={(palletName) => patch({ palletName })}
-                  placeholder="1200 x 800"
+                  placeholder={`${brand.defaults.newPallet.length} x ${brand.defaults.newPallet.width}`}
                 />
               </Field>
             </div>
@@ -1268,7 +1288,7 @@ function Editor({
               <Field label="Species" id={fieldId('species')} hint={HINTS.species}>
                 <TextInput
                   value={pallet.species}
-                  placeholder="pine"
+                  placeholder={brand.defaults.species}
                   onChange={(species) => patch({ species })}
                 />
               </Field>
@@ -1378,8 +1398,8 @@ function Editor({
           </Panel>
           </div>
 
-          <Nails pallet={pallet} dispatch={dispatch} />
-          <CostingPanel costing={costing} />
+          <Nails pallet={pallet} dispatch={dispatch} nailType={brand.defaults.nailType} />
+          <CostingPanel costing={costing} volume={brand.units.volume} />
         </div>
 
         <div className="flex w-[36%] min-w-0 shrink-0 flex-col border-l border-line bg-card">
@@ -1611,9 +1631,21 @@ function NudgeControl({
   );
 }
 
-function Nails({ pallet, dispatch }: { pallet: Pallet; dispatch: (action: Action) => void }) {
+function Nails({
+  pallet,
+  dispatch,
+  nailType,
+}: {
+  pallet: Pallet;
+  dispatch: (action: Action) => void;
+  /** What this company buys, so a new row starts there. */
+  nailType: string;
+}) {
   return (
-    <Panel title="Nails" actions={<Button onClick={() => dispatch({ type: 'addNail' })}>Add</Button>}>
+    <Panel
+      title="Nails"
+      actions={<Button onClick={() => dispatch({ type: 'addNail', nailType })}>Add</Button>}
+    >
       {/* No schedule until one is typed: an empty table is a row of headings
           standing over nothing, and a pallet with no schedule prints none. */}
       {pallet.nails.length > 0 && (
@@ -1692,9 +1724,20 @@ function Nails({ pallet, dispatch }: { pallet: Pallet; dispatch: (action: Action
  * What the pallet costs at the rates in the config file. Not on the client
  * sheet, which is a specification and not a quotation.
  */
-function CostingPanel({ costing }: { costing: Costing | null }) {
+/** 1 cubic foot in cubic metres, for a shop that buys timber by the cube. */
+const M3_PER_CFT = 0.028316846592;
+
+function CostingPanel({ costing, volume }: { costing: Costing | null; volume: 'cft' | 'm3' }) {
   if (!costing) return null;
   const money = (value: number): string => `${costing.currency} ${value.toFixed(2)}`;
+  /**
+   * Timber is priced per cubic foot, which is how the Indian trade quotes.
+   * A shop that thinks in cubic metres sees the volume converted; the rate
+   * stays as it is written in the rates file, so nothing here can disagree
+   * with what is charged.
+   */
+  const cube = (cft: number): string =>
+    volume === 'm3' ? `${(cft * M3_PER_CFT).toFixed(4)} m³` : `${cft.toFixed(3)} cft`;
 
   return (
     <Panel title="Timber and cost">
@@ -1706,7 +1749,7 @@ function CostingPanel({ costing }: { costing: Costing | null }) {
                 {line.material} <span className="text-slate-400">× {line.pieces}</span>
               </td>
               <td className="text-right tabular-nums text-slate-500">
-                {line.cft.toFixed(3)} cft @ {line.ratePerCft}
+                {cube(line.cft)} @ {line.ratePerCft}/cft
               </td>
               <td className="w-24 text-right tabular-nums">{money(line.cost)}</td>
             </tr>
@@ -1730,7 +1773,7 @@ function CostingPanel({ costing }: { costing: Costing | null }) {
           <tr className="border-t border-slate-300 font-medium">
             <td>total</td>
             <td className="text-right tabular-nums text-slate-500">
-              {costing.cft.toFixed(3)} cft
+              {cube(costing.cft)}
             </td>
             <td className="text-right tabular-nums">{money(costing.total)}</td>
           </tr>
@@ -1741,8 +1784,9 @@ function CostingPanel({ costing }: { costing: Costing | null }) {
           <Hint text={HINTS.cft} />
         </span>
         <span>
-          Rates come from <code className="rounded bg-ground px-1">config/rates.json</code>. Nothing
-          here is printed on the sheet.
+          Rates come from <code className="rounded bg-ground px-1">rates.json</code> beside the
+          designs, or from the ones this version was built with. Nothing here is printed on the
+          sheet.
         </span>
       </p>
     </Panel>

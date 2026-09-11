@@ -1,0 +1,14 @@
+{
+  "companyName": "Northgate Pallets Ltd",
+  "logo": "logo.svg",
+  "projectionNote": "Third-angle projection, all dimensions in mm",
+  "tolerances": { "component": "± 1 mm", "pallet": "± 3 mm" },
+  "units": { "volume": "m3" },
+  "defaults": {
+    "palletCodePlaceholder": "NG-100",
+    "species": "spruce",
+    "nailType": "ring shank",
+    "newPallet": { "length": 1000, "width": 1200 },
+    "handling": ["forklift", "crane"]
+  }
+}

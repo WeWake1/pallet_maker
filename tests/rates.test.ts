@@ -2,6 +2,7 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_RATES_PATH } from '../src/costing/load.js';
+import { parseRates } from '../src/costing/rates.js';
 import { ratesResolver } from '../src/costing/resolve.js';
 import { cleanupStores, tempStore } from './helpers.js';
 
@@ -90,5 +91,27 @@ describe('the prices in use', () => {
     const inUse = ratesResolver(() => null, builtIn)();
     expect(inUse.from).toBe('built-in');
     expect(inUse.problem).toBeNull();
+  });
+});
+
+/**
+ * A rates file used to mean rupees when it said nothing, which is a quiet way
+ * for a shop in another country to quote every pallet in a currency nobody
+ * chose. It has to say.
+ */
+describe('the currency', () => {
+  it('is refused rather than assumed when a rates file leaves it out', () => {
+    expect(() =>
+      parseRates({ timberPerCft: { default: 100 }, nailsPerThousand: { default: 10 } }),
+    ).toThrow(/currency/);
+  });
+
+  it('is whatever the file says, not whatever this was built for', () => {
+    const rates = parseRates({
+      currency: 'GBP',
+      timberPerCft: { default: 100 },
+      nailsPerThousand: { default: 10 },
+    });
+    expect(rates.currency).toBe('GBP');
   });
 });

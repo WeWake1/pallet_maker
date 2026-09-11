@@ -17,7 +17,8 @@ import type { HandlingMethod } from '../types.js';
  * in the SVG sheet, and inside the editor's own checkbox row.
  *
  * **Every icon is geometry and none is a picture**, the same rule the company
- * mark follows in `src/brand/logo.ts` and for the same two reasons. An `<image>`
+ * mark is held to the same rule by `src/brand/logoFile.ts`, and for the same
+ * two reasons. An `<image>`
  * holding a base64 raster is one of the things a page-layout program cannot take
  * apart, and one element it cannot take apart tends to make it give up and
  * flatten the whole sheet to a picture; and a 512-pixel drawing set 6.4 mm wide

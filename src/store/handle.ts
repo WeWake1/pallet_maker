@@ -40,6 +40,10 @@ export interface StoreStatus {
   ratesFrom?: 'folder' | 'built-in';
   /** Why the folder's prices were not used, when there are some and they failed. */
   ratesProblem?: string | null;
+  /** Whether the branding came from the designs folder or from this version. */
+  brandFrom?: 'folder' | 'built-in';
+  /** Why the folder's branding was not used, when there is some and it failed. */
+  brandProblem?: string | null;
 }
 
 export interface HandleOptions {
