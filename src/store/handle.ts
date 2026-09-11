@@ -21,6 +21,17 @@ export interface StoreStatus {
   source: 'environment' | 'settings' | 'default';
   designs: number | null;
   clients: number | null;
+  /**
+   * Whether the server keeps the designs itself rather than in a folder the
+   * person at the keyboard chose.
+   *
+   * True on a hosted server, where the folder was settled when it started, is
+   * on somebody else's machine, and is nobody's to move from a browser. False
+   * in the desktop app — where the folder may still be fixed for this run, by
+   * `PALLET_STORE`, which is what `source` says and a different thing
+   * entirely.
+   */
+  managedStore?: boolean;
   /** Whether a native folder dialog can be opened, which only the app can do. */
   canBrowse?: boolean;
   /** Which build this is, when it is the app rather than a browser tab. */

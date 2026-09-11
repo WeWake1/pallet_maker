@@ -91,8 +91,25 @@ function byText(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
+/**
+ * What a repository stamps on what it writes.
+ *
+ * `now` answers with today's date in the company's own time zone; without it,
+ * UTC, which is what the tests and the command line tools expect.
+ */
+export interface RepositoryOptions {
+  now?: () => string;
+}
+
 export class ClientRepository {
-  constructor(private readonly ref: StoreRef) {}
+  private readonly now: () => string;
+
+  constructor(
+    private readonly ref: StoreRef,
+    options: RepositoryOptions = {},
+  ) {
+    this.now = options.now ?? (() => today());
+  }
 
   private get store(): FileStore {
     return typeof this.ref === 'function' ? this.ref() : this.ref;
@@ -120,7 +137,7 @@ export class ClientRepository {
   }
 
   create(name: string): Client {
-    const client: Client = { id: newId(), name: name.trim(), createdAt: today() };
+    const client: Client = { id: newId(), name: name.trim(), createdAt: this.now() };
     if (client.name === '') throw new Error('A client needs a name');
     if (this.findByName(client.name)) throw new DuplicateClientError(client.name);
     this.store.writeClients([...this.store.readClients(), client]);
@@ -163,7 +180,14 @@ export class ClientRepository {
 }
 
 export class PalletRepository {
-  constructor(private readonly ref: StoreRef) {}
+  private readonly now: () => string;
+
+  constructor(
+    private readonly ref: StoreRef,
+    options: RepositoryOptions = {},
+  ) {
+    this.now = options.now ?? (() => today());
+  }
 
   private get store(): FileStore {
     return typeof this.ref === 'function' ? this.ref() : this.ref;
@@ -258,7 +282,7 @@ export class PalletRepository {
    */
   save(input: Pallet, clients: ClientRepository, basedOn?: string): Pallet {
     if (basedOn !== undefined) this.refuseIfChanged(input.id, basedOn);
-    return this.write({ ...parsePallet(input), updatedAt: today() }, clients);
+    return this.write({ ...parsePallet(input), updatedAt: this.now() }, clients);
   }
 
   /**

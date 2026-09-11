@@ -24,7 +24,9 @@ component.
 | [src/dxf/](src/dxf/) | DXF R12 output, from `PlacedPiece[]` |
 | [src/costing/](src/costing/) | Timber volume and cost, at the rates in the config |
 | [config/rates.json](config/rates.json) | Every rate the tool knows. Edit here, nowhere else |
-| [src/server/](src/server/) | The local API over the store |
+| [src/server/](src/server/) | The API over the store, and the server entry point |
+| [src/sheet/pooledPrinter.ts](src/sheet/pooledPrinter.ts) | One Chromium kept open, for a server that prints all day |
+| [deploy/](deploy/) | Running it on a server: Caddy, systemd, the nightly backups |
 | [src/duplicate.ts](src/duplicate.ts) | Copying a design into one that is linked to nothing |
 | [src/cli/layout.ts](src/cli/layout.ts) | Loads a JSON pallet, prints `PlacedPiece[]` |
 | [src/cli/views.ts](src/cli/views.ts) | Writes the views to SVG files |
@@ -33,6 +35,7 @@ component.
 | [fixtures/](fixtures/) | Hand-written pallet documents used by the tests |
 | [fixtures/stored/](fixtures/stored/) | Documents frozen as an earlier version wrote them. Never edited |
 | [tests/](tests/) | Vitest suites |
+| [docs/commercialisation.md](docs/commercialisation.md) | What is specific to Ambica, what selling the tool needs, and the hosted multi-company roadmap |
 
 ## Commands
 
@@ -53,6 +56,8 @@ npm run dxf -- fixtures/wing-both-decks.json --out out    # R12 DXF
 npm run brand                                            # re-embed the company font after it changes
 npm run costing -- fixtures/block-1000x800.json           # timber volume and cost
 npm run guide                                            # the user guide, HTML and PDF
+npm run build:server                                     # the server as one file, dist/server/main.mjs
+npm run backup -- data/library --keep 30                 # snapshot the library, as the nightly timer does
 ```
 
 `views` writes each view twice, in colour and desaturated, plus an HTML contact
@@ -522,6 +527,25 @@ every print, but mark for mark: the inflated content streams, every string
 drawn and its order, every drawing operator counted, the paper size, and that
 nothing was rasterised. They come out identical, tagged-PDF structure and all.
 Run it after anything that touches the sheet or the printer.
+
+## Running it on a server
+
+`node dist/server/main.mjs` is the same program with the laptop's habits taken
+out. It listens on the loopback for a reverse proxy; keeps everything under
+`PALLET_DATA_ROOT`, with the library in `library/` inside it; refuses to start
+if that folder is not there; and lets nobody point it at another folder over
+the API — the editor's folder screen is not offered. One Chromium stays open
+and prints two sheets at a time, the rest wait their turn, and a sheet that
+will not finish is cut off and tried once more in a fresh browser. A request
+that is not one of the two library imports may carry 2 MB and no more. Every
+request is written to stdout as one line of JSON with an id, and a failure on
+the server's side is described to the person by that id alone. `/healthz`
+says whether the designs can be reached and how the printer is doing.
+
+`npm run serve` is the same entry point with `--local`, which is how the tool
+has always run on a laptop. [deploy/README.md](deploy/README.md) is the recipe
+for a Debian VM on Azure: Caddy for HTTPS, systemd, a nightly snapshot and a
+nightly copy off the machine.
 
 ## Storage
 

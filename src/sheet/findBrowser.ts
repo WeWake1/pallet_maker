@@ -19,8 +19,10 @@ const POSIX_CANDIDATES = [
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
   '/usr/bin/google-chrome',
+  '/usr/bin/google-chrome-stable',
   '/usr/bin/chromium',
   '/usr/bin/chromium-browser',
+  '/usr/lib/chromium/chromium',
   '/usr/bin/microsoft-edge',
 ];
 

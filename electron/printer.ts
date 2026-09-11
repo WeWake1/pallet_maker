@@ -22,6 +22,30 @@ import { PAGE } from '../src/sheet/layout.js';
 const MICRONS_PER_MM = 1000;
 
 /**
+ * How long any one step of printing gets before it is called a failure.
+ *
+ * There is a shared window and a queue behind it, so a step that never finishes
+ * does not merely lose one sheet — it stops every sheet after it, for as long
+ * as the program is running, and the only sign of it is that printing quietly
+ * stops working. Generous enough that a slow machine is never cut off, and
+ * finite so that a wedged one recovers by itself.
+ */
+const STEP_TIMEOUT_MS = 30_000;
+
+/** A step that has not finished in time, so the queue is not held by it. */
+async function within<T>(what: string, work: Promise<T>): Promise<T> {
+  let timer: NodeJS.Timeout;
+  const expiry = new Promise<never>((_, fail) => {
+    timer = setTimeout(() => fail(new Error(`${what} took longer than ${STEP_TIMEOUT_MS}ms`)), STEP_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([work, expiry]);
+  } finally {
+    clearTimeout(timer!);
+  }
+}
+
+/**
  * One hidden window, kept and reused.
  *
  * Making and destroying one per sheet is what a first version did, and printing
@@ -70,16 +94,20 @@ async function render(html: string): Promise<Buffer> {
   const page = join(scratch, 'sheet.html');
   writeFileSync(page, html, 'utf8');
 
+  let window: BrowserWindow | undefined;
   try {
-    const window = printWindow();
-    await window.loadFile(page);
+    window = printWindow();
+    await within('loading the sheet', window.loadFile(page));
 
     // The font travels inside the document, so it is decoded rather than
     // fetched — but it is still decoded, and printing before it is ready would
     // set the sheet in a fallback face.
-    await window.webContents.executeJavaScript('document.fonts.ready.then(() => true)');
+    await within(
+      'waiting for the font',
+      window.webContents.executeJavaScript('document.fonts.ready.then(() => true)'),
+    );
 
-    return await window.webContents.printToPDF({
+    return await within('printing', window.webContents.printToPDF({
       printBackground: true,
       preferCSSPageSize: true,
       // Chrome's own print pipeline tags its PDFs, and every sheet printed by
@@ -96,7 +124,14 @@ async function render(html: string): Promise<Buffer> {
       // rule win before that can matter — but relying on that would put a
       // margin on every drawing the moment it stopped being true.
       margins: { top: 0, bottom: 0, left: 0, right: 0 },
-    });
+    }));
+  } catch (error) {
+    // The window is shared and is now holding a page that did not print. Throw
+    // it away rather than hand it to the next sheet, which would inherit
+    // whatever state stopped this one; the next call makes a fresh one.
+    if (window && !window.isDestroyed()) window.destroy();
+    printer = undefined;
+    throw error;
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }

@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, Menu, shell } from 'electron';
 import type { AddressInfo } from 'node:net';
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { localTimeZone } from '../src/ids.js';
 import { createApp } from '../src/server/app.js';
 import { backupLibrary } from '../src/server/backup.js';
 import { reconcileClients } from '../src/server/repository.js';
@@ -128,24 +129,41 @@ function buildMenu(window: BrowserWindow, handle: StoreHandle): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
+/**
+ * The housekeeping a start does: adopt any client named only by their designs,
+ * and take a backup.
+ *
+ * Both read the whole folder, and neither is urgent — a backup is insurance
+ * against a week from now, not against the next thirty seconds. So this runs
+ * after the window is up rather than in front of it. It is still synchronous
+ * once it starts, and it still blocks; what has changed is that it blocks
+ * something already on screen instead of an empty desktop.
+ */
+function tidyUp(handle: StoreHandle): void {
+  if (!handle.ready()) return;
+  try {
+    const adopted = reconcileClients(handle.require());
+    if (adopted > 0) console.log(`Took in ${adopted} client(s) named only by their designs`);
+  } catch (error) {
+    console.error(
+      `Could not reconcile the clients: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  try {
+    console.log(`Backed up to ${backupLibrary(handle.require(), { keep })}`);
+  } catch (error) {
+    console.error(
+      `Could not back up the designs: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
 async function main(): Promise<void> {
   // Print through the Chromium in this app rather than hunting for one on the
   // machine. Set before anything can ask for a sheet.
   usePrinter((html) => printWithElectron(html));
 
   const handle = openStore();
-
-  if (handle.ready()) {
-    const adopted = reconcileClients(handle.require());
-    if (adopted > 0) console.log(`Took in ${adopted} client(s) named only by their designs`);
-    try {
-      console.log(`Backed up to ${backupLibrary(handle.require(), { keep })}`);
-    } catch (error) {
-      console.error(
-        `Could not back up the designs: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  }
 
   const window = new BrowserWindow({
     width: 1440,
@@ -172,6 +190,10 @@ async function main(): Promise<void> {
     ratesPath: builtInRatesPath(),
     version: app.getVersion(),
     chooseFolder: () => chooseFolder(window),
+    // The person at the keyboard owns this machine, so the folder is theirs
+    // to choose, and the date on a design is the date where they are sitting.
+    allowFolderChange: true,
+    timezone: localTimeZone(),
   }).listen(Number(process.env.PORT ?? 0), '127.0.0.1');
 
   await new Promise<void>((done) => server.once('listening', () => done()));
@@ -180,6 +202,12 @@ async function main(): Promise<void> {
   buildMenu(window, handle);
   await window.loadURL(`http://127.0.0.1:${port}/`);
   window.show();
+
+  // Everything below happens with the window already on screen. None of it is
+  // anything anybody is waiting to look at, and all of it reads or writes every
+  // design in the folder — which used to happen before the window was created,
+  // so the whole of it was dead time on a cold start.
+  setImmediate(() => tidyUp(handle));
 
   // After the window is up, so that a slow or unreachable GitHub delays nothing
   // anybody is waiting on.
