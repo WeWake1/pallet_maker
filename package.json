@@ -17,7 +17,7 @@
     "dev": "vite",
     "build": "vite build",
     "build:electron": "esbuild electron/main.ts --bundle --platform=node --format=cjs --outfile=dist/electron/main.cjs --external:electron --packages=external --alias:puppeteer-core=./electron/no-puppeteer.ts --log-level=warning",
-    "build:server": "esbuild src/server/main.ts --bundle --platform=node --format=esm --target=node22 --packages=external --outfile=dist/server/main.mjs --log-level=warning && esbuild src/cli/backup.ts --bundle --platform=node --format=esm --target=node22 --packages=external --outfile=dist/server/backup.mjs --log-level=warning",
+    "build:server": "esbuild src/server/main.ts --bundle --platform=node --format=esm --target=node22 --packages=external --outfile=dist/server/main.mjs --log-level=warning && esbuild src/cli/backup.ts --bundle --platform=node --format=esm --target=node22 --packages=external --outfile=dist/server/backup.mjs --log-level=warning && esbuild src/cli/tenant.ts --bundle --platform=node --format=esm --target=node22 --packages=external --outfile=dist/server/tenant.mjs --log-level=warning",
     "app": "npm run build && npm run build:electron && electron .",
     "pack": "npm run build && npm run build:electron",
     "dist:win": "npm run pack && electron-builder --win --publish never",
@@ -30,7 +30,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "compare:pdf": "esbuild electron/compare.ts --bundle --platform=node --format=cjs --outfile=dist/electron/compare.cjs --external:electron --packages=external --log-level=warning && electron dist/electron/compare.cjs"
+    "compare:pdf": "esbuild electron/compare.ts --bundle --platform=node --format=cjs --outfile=dist/electron/compare.cjs --external:electron --packages=external --log-level=warning && electron dist/electron/compare.cjs",
+    "tenant": "tsx src/cli/tenant.ts"
   },
   "dependencies": {
     "electron-updater": "^6.8.9",

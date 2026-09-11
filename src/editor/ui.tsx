@@ -8,7 +8,7 @@ import type { LoadKg } from '../types.js';
 
 /** Small form controls. Tailwind styles the editor chrome only. */
 
-const inputClass =
+export const inputClass =
   'w-full rounded-md border border-line bg-card px-2 py-1.5 text-ui text-ink ' +
   'transition-colors placeholder:text-slate-400 ' +
   'focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-ring/30 ' +
@@ -439,8 +439,10 @@ export function Button({
   disabled,
   title,
   label,
+  submit = false,
 }: {
-  onClick: () => void;
+  /** Absent on a button that submits the form it is in. */
+  onClick?: () => void;
   children: ReactNode;
   tone?: 'plain' | 'primary' | 'danger' | 'subtle';
   size?: 'sm' | 'md';
@@ -448,6 +450,13 @@ export function Button({
   title?: string;
   /** Said aloud where the face of the button is an arrow or a cross. */
   label?: string;
+  /**
+   * Submit the form this sits in, rather than acting on its own.
+   *
+   * Worth the extra word: a real form is what makes the enter key work and
+   * what a password manager looks for before it offers to fill anything in.
+   */
+  submit?: boolean;
 }) {
   const tones = {
     plain: 'border-line bg-card text-slate-700 shadow-xs hover:bg-ground-soft hover:border-slate-400',
@@ -463,7 +472,7 @@ export function Button({
   };
   return (
     <button
-      type="button"
+      type={submit ? 'submit' : 'button'}
       title={title}
       aria-label={label}
       disabled={disabled}

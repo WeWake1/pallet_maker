@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { StoreStatus } from './api.js';
+import type { Session, StoreStatus } from './api.js';
 import { Button, TextInput } from './ui.jsx';
 
 /**
@@ -158,12 +158,17 @@ export function StoreSetup({
  */
 export function StoreFolderBar({
   status,
+  session,
   busy,
   onChange,
+  onSignOut,
 }: {
   status: StoreStatus;
+  /** Who is signed in, where anybody has to be. */
+  session: Session | null;
   busy: boolean;
   onChange: () => void;
+  onSignOut: () => void;
 }) {
   return (
     <>
@@ -184,9 +189,30 @@ export function StoreFolderBar({
     )}
     <div className="flex items-center gap-2 border-b border-line bg-ground-soft px-4 py-1.5">
       {status.managedStore ? (
-        // Hosted: the folder is the server's own business, so there is no
-        // path to show and nothing to change.
-        <span className="ml-auto text-label text-ink-soft">Designs are kept on the server</span>
+        // Hosted: the folder is the server's own business, so there is no path
+        // to show. Whose designs these are is what matters here instead, and
+        // it matters enough to say on every screen — somebody who looks after
+        // two companies should never have to wonder which one they are in.
+        <>
+          {session?.company && (
+            <span className="font-medium text-label text-ink">{session.company.name}</span>
+          )}
+          <span className="ml-auto flex items-center gap-2">
+            {session?.user && (
+              <span className="text-label text-ink-soft" title={session.user.email}>
+                {session.user.name || session.user.email}
+              </span>
+            )}
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onSignOut}
+              className="text-label text-ink-soft underline underline-offset-2 hover:text-ink disabled:opacity-40"
+            >
+              Sign out
+            </button>
+          </span>
+        </>
       ) : (
         <>
           <span className="text-label text-ink-soft">Designs folder</span>

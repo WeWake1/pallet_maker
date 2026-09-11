@@ -13,11 +13,20 @@ import { handlingCatalogue, handlingIconSvg } from '../sheet/handling.js';
 import { renderSheet } from '../sheet/sheet.js';
 import { HANDLING_METHODS, NOT_APPLICABLE } from '../types.js';
 import type { Client, HandlingMethod, LayerKind, Pallet, Unstated } from '../types.js';
-import { api, StaleEdit, StoreUnavailable } from './api.js';
-import type { ClientDesigns, StoreStatus } from './api.js';
+import { api, StaleEdit, StoreUnavailable, Unauthenticated } from './api.js';
+import type { ClientDesigns, Session, StoreStatus } from './api.js';
+import { AcceptInvitation, invitationTokenInHash, SignIn } from './SignIn.jsx';
 import { Dashboard } from './Dashboard.jsx';
 import type { DesignActions } from './Dashboard.jsx';
-import { clearDraft, clearDrafts, draftAge, listDrafts, readDraft, writeDraft } from './drafts.js';
+import {
+  clearDraft,
+  clearDrafts,
+  draftAge,
+  draftsBelongTo,
+  listDrafts,
+  readDraft,
+  writeDraft,
+} from './drafts.js';
 import type { Draft } from './drafts.js';
 import { Help } from './Help.jsx';
 import { describePath, fieldId, HINTS, pathAnchor, sayIssue } from './hints.js';
@@ -149,6 +158,18 @@ export function App() {
    * is the state the setup screen exists for.
    */
   const [folder, setFolder] = useState<StoreStatus | null>(null);
+  /**
+   * Who is signed in, and whether this server asks at all.
+   *
+   * Null until the first answer comes back. Everything else waits on it: on a
+   * server there is nothing worth fetching until it is known whose designs
+   * they would be.
+   */
+  const [session, setSession] = useState<Session | null>(null);
+  /** Set when the address bar carries an invitation link. */
+  const [invitation, setInvitation] = useState<string | null>(() =>
+    typeof window === 'undefined' ? null : invitationTokenInHash(window.location.hash),
+  );
   /** Set from the library screen, to change folders while everything is fine. */
   const [choosing, setChoosing] = useState(false);
   const libraryFile = useRef<HTMLInputElement>(null);
@@ -171,6 +192,14 @@ export function App() {
     setDrafts(usableDrafts(next));
   }, []);
 
+  /** Nobody is signed in any more: the sign-in screen takes the window. */
+  const signedOut = useCallback(() => {
+    setSession({ signInRequired: true, user: null, company: null });
+    setSections([]);
+    setDrafts([]);
+    setOpen(null);
+  }, []);
+
   /** Anything that talks to the store: one place to hold the error it returns. */
   const attempt = useCallback(
     async <T,>(work: () => Promise<T>): Promise<T | undefined> => {
@@ -182,6 +211,13 @@ export function App() {
         await refresh();
         return result;
       } catch (error) {
+        // A session that ran out while the tab was open is answered by asking
+        // for it again, not by an error across the top of a library that is no
+        // longer there.
+        if (error instanceof Unauthenticated) {
+          signedOut();
+          return undefined;
+        }
         // The folder having gone is not a failed action to report at the top of
         // the library — there is no library to put it at the top of. Take the
         // screen over instead.
@@ -195,22 +231,59 @@ export function App() {
         setBusy(false);
       }
     },
-    [refresh],
+    [refresh, signedOut],
+  );
+
+  /**
+   * Everything the library needs, once it is known whose library it is.
+   *
+   * Kept behind the session on purpose: asking for designs before that would
+   * be asking for somebody's designs without knowing whose, and would answer
+   * with a sign-in screen's worth of failures rather than one.
+   */
+  const load = useCallback(async () => {
+    await refresh();
+    await Promise.all([
+      api.rates().then(setRates).catch(() => setRates(null)),
+      api.brand().then(setBrand).catch(() => setBrand(DEFAULT_BRAND)),
+    ]);
+  }, [refresh]);
+
+  const signedIn = useCallback(
+    (next: Session) => {
+      setSession(next);
+      setInvitation(null);
+      // Unsaved work is kept in this browser, and this browser may be used by
+      // somebody who works for two companies. Say which one before anything
+      // reads or writes a draft.
+      draftsBelongTo(next.company?.slug ?? null);
+      void load().catch((error: unknown) => {
+        setProblem(error instanceof Error ? error.message : String(error));
+      });
+    },
+    [load],
   );
 
   useEffect(() => {
-    void refresh().catch((error: unknown) => {
-      setProblem(error instanceof Error ? error.message : String(error));
-    });
+    // An invitation is answered before anything else: whoever is following one
+    // has no session yet, and asking for designs would only be refused.
+    if (invitation) return;
     void api
-      .rates()
-      .then(setRates)
-      .catch(() => setRates(null));
-    void api
-      .brand()
-      .then(setBrand)
-      .catch(() => setBrand(DEFAULT_BRAND));
-  }, [refresh]);
+      .session()
+      .then((held) => {
+        setSession(held);
+        draftsBelongTo(held.company?.slug ?? null);
+        if (held.signInRequired && !held.user) return undefined;
+        return load();
+      })
+      .catch((error: unknown) => {
+        if (error instanceof Unauthenticated) {
+          signedOut();
+          return;
+        }
+        setProblem(error instanceof Error ? error.message : String(error));
+      });
+  }, [invitation, load, signedOut]);
 
   /**
    * Open a stored design — or, where the browser held work that never reached
@@ -373,8 +446,30 @@ export function App() {
     });
   };
 
+  // Somebody following an invitation link, who has no account yet.
+  if (invitation) {
+    return (
+      <AcceptInvitation
+        token={invitation}
+        onSignedIn={signedIn}
+        onGiveUp={() => {
+          setInvitation(null);
+          signedOut();
+        }}
+      />
+    );
+  }
+
   // Until the first answer comes back there is nothing worth drawing: showing
   // an empty library for a moment would be showing something untrue.
+  if (session === null) {
+    return <div className="flex h-full flex-col bg-slate-100 text-slate-900" />;
+  }
+
+  if (session.signInRequired && !session.user) {
+    return <SignIn onSignedIn={signedIn} />;
+  }
+
   if (folder === null) {
     return <div className="flex h-full flex-col bg-slate-100 text-slate-900" />;
   }
@@ -450,7 +545,18 @@ export function App() {
         />
       ) : (
         <>
-          <StoreFolderBar status={folder} busy={busy} onChange={() => setChoosing(true)} />
+          <StoreFolderBar
+            status={folder}
+            session={session}
+            busy={busy}
+            onChange={() => setChoosing(true)}
+            onSignOut={() => {
+              void api
+                .signOut()
+                .catch(() => undefined)
+                .finally(signedOut);
+            }}
+          />
           <header className="flex items-center gap-2 border-b border-line bg-card px-4 py-2.5">
             <h1 className="text-title font-semibold tracking-tight text-ink">Pallet spec</h1>
 

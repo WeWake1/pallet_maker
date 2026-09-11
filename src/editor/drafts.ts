@@ -18,7 +18,20 @@ import type { Pallet } from '../types.js';
  * is to hold a design that is not finished enough to save.
  */
 
-const PREFIX = 'pallet-draft:';
+let PREFIX = 'pallet-draft:';
+
+/**
+ * Whose drafts these are.
+ *
+ * Unsaved work lives in the browser, and a browser may be used by somebody who
+ * works for two companies, or shared between two people at a desk. Keying the
+ * drafts by the company keeps one company's half-finished design off the
+ * other's dashboard — where it would appear as a card of a design that company
+ * has never had.
+ */
+export function draftsBelongTo(company: string | null): void {
+  PREFIX = company === null ? 'pallet-draft:' : `pallet-draft:${company}:`;
+}
 
 /** How long an abandoned draft is kept before it is cleaned up. */
 const KEEP_DAYS = 30;
