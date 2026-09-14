@@ -25,12 +25,14 @@ export const CONTENT_SECURITY_POLICY = [
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
-  "frame-ancestors 'none'",
+  // Our own pages may frame our own pages — the company settings show the
+  // sheet as it will print, in a frame — and nobody else's may.
+  "frame-ancestors 'self'",
 ].join('; ');
 
 export function securityHeaders(req: Request, res: Response, next: NextFunction): void {
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('Referrer-Policy', 'same-origin');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   if (wantsHtml(req)) res.setHeader('Content-Security-Policy', CONTENT_SECURITY_POLICY);

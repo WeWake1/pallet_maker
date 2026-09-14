@@ -162,6 +162,7 @@ export function StoreFolderBar({
   busy,
   onChange,
   onSignOut,
+  onSettings,
 }: {
   status: StoreStatus;
   /** Who is signed in, where anybody has to be. */
@@ -169,6 +170,8 @@ export function StoreFolderBar({
   busy: boolean;
   onChange: () => void;
   onSignOut: () => void;
+  /** Present for an administrator, who may look after the company. */
+  onSettings: (() => void) | null;
 }) {
   return (
     <>
@@ -198,6 +201,16 @@ export function StoreFolderBar({
             <span className="font-medium text-label text-ink">{session.company.name}</span>
           )}
           <span className="ml-auto flex items-center gap-2">
+            {onSettings && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={onSettings}
+                className="text-label text-ink-soft underline underline-offset-2 hover:text-ink disabled:opacity-40"
+              >
+                Company settings
+              </button>
+            )}
             {session?.user && (
               <span className="text-label text-ink-soft" title={session.user.email}>
                 {session.user.name || session.user.email}

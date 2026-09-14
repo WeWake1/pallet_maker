@@ -138,7 +138,16 @@ anybody signs in:
 /var/lib/pallet-spec/tenants/ambica/designs/       one file per design
 ```
 
-The rest of the commands:
+In practice only one command is needed, once: your own account.
+
+```sh
+node dist/server/tenant.mjs vendor-admin --email you@example.com
+```
+
+Follow the link it prints, choose a password, and everything after that is on
+screen: making companies, inviting their first administrator, setting up their
+branding and prices, suspending one. The other commands stay for a shell when
+that is more convenient:
 
 ```sh
 node dist/server/tenant.mjs list                                   # every company
@@ -147,7 +156,6 @@ node dist/server/tenant.mjs invite --company ambica --email x@y --role member
 node dist/server/tenant.mjs reset --email x@y                      # a way back in
 node dist/server/tenant.mjs suspend --company ambica               # signs them out too
 node dist/server/tenant.mjs resume --company ambica
-node dist/server/tenant.mjs vendor-admin --email you@example.com   # your own account
 ```
 
 ## 8. Ambica's designs onto the server

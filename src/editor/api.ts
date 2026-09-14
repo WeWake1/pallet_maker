@@ -89,6 +89,77 @@ export interface Session {
   company: { slug: string; name: string; timezone: string } | null;
 }
 
+export interface Person {
+  id: string;
+  email: string;
+  name: string;
+  role: 'vendor' | 'admin' | 'member';
+  status: 'active' | 'disabled';
+  hasPassword: boolean;
+  createdAt: string;
+  lastLoginAt: string | null;
+}
+
+export interface Invitation {
+  id: string;
+  kind: 'invite' | 'reset';
+  email: string;
+  role: 'vendor' | 'admin' | 'member';
+  expiresAt: string;
+}
+
+export interface People {
+  users: Person[];
+  invitations: Invitation[];
+}
+
+/** The brand file as it is written on disk, for the form. Paths, not artwork. */
+export interface BrandFileInput {
+  companyName?: string;
+  logo?: string | null;
+  watermark?: { enabled?: boolean; text?: string | null; opacity?: number; sizePt?: number | null };
+  font?: { family: string; file: string; advanceEm?: number } | null;
+  projectionNote?: string;
+  tolerances?: { component?: string; pallet?: string };
+  units?: { volume?: 'cft' | 'm3' };
+  defaults?: {
+    palletCodePlaceholder?: string;
+    species?: string;
+    nailType?: string;
+    newPallet?: { length?: number; width?: number };
+    handling?: string[];
+  };
+}
+
+export interface BrandSettings {
+  file: BrandFileInput | null;
+  from: 'folder' | 'built-in';
+  problem: string | null;
+  logo: string | null;
+  font: string | null;
+}
+
+export interface RatesSettings {
+  rates: Rates;
+  from: 'folder' | 'built-in';
+  problem: string | null;
+}
+
+export interface CompanySummary {
+  id: string;
+  slug: string;
+  name: string;
+  timezone: string;
+  status: 'active' | 'suspended';
+  createdAt: string;
+  people: number;
+  signedUp: number;
+  lastLogin: string | null;
+  designs: number | null;
+  clients: number | null;
+  lastSaved: string | null;
+}
+
 /** What a link in an invitation is worth, before it is used. */
 export interface InvitationOffer {
   email: string;
@@ -171,6 +242,68 @@ export const api = {
   retryStore: () => call<StoreStatus>('/api/settings/retry', { method: 'POST' }),
   /** Pick a folder in a native dialog. Only the app can do this. */
   browseForFolder: () => call<StoreStatus>('/api/settings/browse', { method: 'POST' }),
+
+  /**
+   * Looking after a company. `base` is `/api/admin` for its own administrator
+   * and `/api/vendor/companies/<slug>/admin` for the vendor working on it —
+   * the same routes either way, which is why this is a function of the base.
+   */
+  admin: (base: string) => ({
+    people: () => call<People>(`${base}/people`),
+    invite: (email: string, role: 'admin' | 'member') =>
+      call<{ invitation: Invitation; link: string }>(`${base}/invitations`, {
+        method: 'POST',
+        body: JSON.stringify({ email, role }),
+      }),
+    withdraw: (id: string) => call<void>(`${base}/invitations/${id}`, { method: 'DELETE' }),
+    resetLink: (userId: string) => call<{ link: string }>(`${base}/people/${userId}/reset`, { method: 'POST' }),
+    disable: (userId: string) => call<Person>(`${base}/people/${userId}/disable`, { method: 'POST' }),
+    enable: (userId: string) => call<Person>(`${base}/people/${userId}/enable`, { method: 'POST' }),
+    setRole: (userId: string, role: 'admin' | 'member') =>
+      call<Person>(`${base}/people/${userId}/role`, { method: 'POST', body: JSON.stringify({ role }) }),
+
+    brand: () => call<BrandSettings>(`${base}/brand`),
+    saveBrand: (file: BrandFileInput) =>
+      call<{ file: BrandFileInput }>(`${base}/brand`, { method: 'PUT', body: JSON.stringify(file) }),
+    uploadLogo: (name: string, data: string) =>
+      call<{ logo: string }>(`${base}/brand/logo`, { method: 'POST', body: JSON.stringify({ name, data }) }),
+    removeLogo: () => call<void>(`${base}/brand/logo`, { method: 'DELETE' }),
+    uploadFont: (name: string, data: string, family: string, advanceEm?: number) =>
+      call<{ font: unknown }>(`${base}/brand/font`, {
+        method: 'POST',
+        body: JSON.stringify({ name, data, family, advanceEm }),
+      }),
+    removeFont: () => call<void>(`${base}/brand/font`, { method: 'DELETE' }),
+    previewUrl: () => `${base}/preview`,
+
+    rates: () => call<RatesSettings>(`${base}/rates`),
+    saveRates: (rates: Rates) =>
+      call<RatesSettings>(`${base}/rates`, { method: 'PUT', body: JSON.stringify(rates) }),
+    useShippedRates: () => call<void>(`${base}/rates`, { method: 'DELETE' }),
+  }),
+
+  /** Looking after the service: every company, and who else looks after it. */
+  vendor: {
+    companies: () => call<CompanySummary[]>('/api/vendor/companies'),
+    createCompany: (input: { slug: string; name: string; timezone: string; adminEmail: string }) =>
+      call<{ company: CompanySummary; link: string | null }>('/api/vendor/companies', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+    suspend: (slug: string) => call<CompanySummary>(`/api/vendor/companies/${slug}/suspend`, { method: 'POST' }),
+    resume: (slug: string) => call<CompanySummary>(`/api/vendor/companies/${slug}/resume`, { method: 'POST' }),
+    rename: (slug: string, changes: { name?: string; timezone?: string }) =>
+      call<CompanySummary>(`/api/vendor/companies/${slug}`, { method: 'PATCH', body: JSON.stringify(changes) }),
+    backup: () => call<{ companies: number; failures: number }>('/api/vendor/backup', { method: 'POST' }),
+    people: () => call<People>('/api/vendor/people'),
+    invite: (email: string) =>
+      call<{ invitation: Invitation; link: string }>('/api/vendor/invitations', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      }),
+    /** Where a company's settings are reached from the vendor's side. */
+    adminBase: (slug: string) => `/api/vendor/companies/${slug}/admin`,
+  },
 
   sheetUrl: (id: string) => `/api/pallets/${id}/sheet.pdf`,
   dxfUrl: (id: string) => `/api/pallets/${id}/drawing.dxf`,

@@ -341,6 +341,22 @@ export class Registry {
     return rows.map((held) => this.mapUser(held) as User);
   }
 
+  updateTenant(id: string, changes: { name?: string; timezone?: string }): void {
+    const held = this.tenant(id);
+    if (!held) throw new RegistryError(`No company ${id}`);
+    this.db
+      .prepare('UPDATE tenants SET name = ?, timezone = ? WHERE id = ?')
+      .run(changes.name ?? held.name, changes.timezone ?? held.timezone, id);
+  }
+
+  /** Make somebody an administrator of their company, or no longer one. */
+  setUserRole(id: string, role: 'admin' | 'member'): void {
+    const changed = this.db
+      .prepare("UPDATE users SET role = ? WHERE id = ? AND role != 'vendor'")
+      .run(role, id);
+    if (changed.changes === 0) throw new RegistryError(`No user ${id} whose role can change`);
+  }
+
   setUserStatus(id: string, status: UserStatus): void {
     const changed = this.db.prepare('UPDATE users SET status = ? WHERE id = ?').run(status, id);
     if (changed.changes === 0) throw new RegistryError(`No user ${id}`);

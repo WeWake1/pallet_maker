@@ -16,6 +16,8 @@ import type { Client, HandlingMethod, LayerKind, Pallet, Unstated } from '../typ
 import { api, StaleEdit, StoreUnavailable, Unauthenticated } from './api.js';
 import type { ClientDesigns, Session, StoreStatus } from './api.js';
 import { AcceptInvitation, invitationTokenInHash, SignIn } from './SignIn.jsx';
+import { Admin } from './Admin.jsx';
+import { VendorAdmin } from './VendorAdmin.jsx';
 import { Dashboard } from './Dashboard.jsx';
 import type { DesignActions } from './Dashboard.jsx';
 import {
@@ -170,6 +172,20 @@ export function App() {
   const [invitation, setInvitation] = useState<string | null>(() =>
     typeof window === 'undefined' ? null : invitationTokenInHash(window.location.hash),
   );
+  /** An administrator looking after the company rather than drawing for it. */
+  const [settings, setSettings] = useState(false);
+
+  // A link pasted into a tab that is already open changes only the part of
+  // the address after the hash, which is not a page load. Watch for it, or
+  // the invitation would be ignored and the sign-in screen would sit there.
+  useEffect(() => {
+    const onHash = () => {
+      const token = invitationTokenInHash(window.location.hash);
+      if (token) setInvitation(token);
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
   /** Set from the library screen, to change folders while everything is fine. */
   const [choosing, setChoosing] = useState(false);
   const libraryFile = useRef<HTMLInputElement>(null);
@@ -257,6 +273,8 @@ export function App() {
       // somebody who works for two companies. Say which one before anything
       // reads or writes a draft.
       draftsBelongTo(next.company?.slug ?? null);
+      // Somebody who looks after the service has no library to load.
+      if (next.user?.role === 'vendor') return;
       void load().catch((error: unknown) => {
         setProblem(error instanceof Error ? error.message : String(error));
       });
@@ -274,6 +292,7 @@ export function App() {
         setSession(held);
         draftsBelongTo(held.company?.slug ?? null);
         if (held.signInRequired && !held.user) return undefined;
+        if (held.user?.role === 'vendor') return undefined;
         return load();
       })
       .catch((error: unknown) => {
@@ -470,6 +489,34 @@ export function App() {
     return <SignIn onSignedIn={signedIn} />;
   }
 
+  // Somebody who looks after the service belongs to no company and has no
+  // designs: what they see is the companies, and the way into any of them.
+  if (session.user?.role === 'vendor') {
+    return (
+      <VendorAdmin
+        userName={session.user.name || session.user.email}
+        onSignOut={() => {
+          void api.signOut().catch(() => undefined).finally(signedOut);
+        }}
+      />
+    );
+  }
+
+  if (settings && session.company) {
+    return (
+      <Admin
+        base="/api/admin"
+        companyName={session.company.name}
+        selfId={session.user?.id ?? null}
+        backLabel="← Library"
+        onBack={() => {
+          setSettings(false);
+          void load().catch(() => undefined);
+        }}
+      />
+    );
+  }
+
   if (folder === null) {
     return <div className="flex h-full flex-col bg-slate-100 text-slate-900" />;
   }
@@ -556,6 +603,7 @@ export function App() {
                 .catch(() => undefined)
                 .finally(signedOut);
             }}
+            onSettings={session.user?.role === 'admin' ? () => setSettings(true) : null}
           />
           <header className="flex items-center gap-2 border-b border-line bg-card px-4 py-2.5">
             <h1 className="text-title font-semibold tracking-tight text-ink">Pallet spec</h1>
