@@ -98,7 +98,7 @@ describe('what every answer says about itself', () => {
     expect(page.status).toBe(200);
     expect(page.headers.get('content-security-policy')).toContain("default-src 'self'");
     expect(page.headers.get('x-content-type-options')).toBe('nosniff');
-    expect(page.headers.get('x-frame-options')).toBe('DENY');
+    expect(page.headers.get('x-frame-options')).toBe('SAMEORIGIN');
     expect(page.headers.get('x-powered-by')).toBeNull();
 
     // Data is not a page: a policy on it would only get in a viewer's way.

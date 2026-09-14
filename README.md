@@ -633,8 +633,34 @@ and by account at once, and every way of being wrong gets the same answer —
 telling a stranger which of "no such account" and "wrong password" applies
 tells them something about somebody else.
 
-`pallet-tenant` makes companies and invites people; it is the only way in
-before anybody exists. See [deploy/README.md](deploy/README.md).
+`pallet-tenant` makes the vendor's own first account, which is the only way in
+before anybody exists. After that everything is on screen. See
+[deploy/README.md](deploy/README.md).
+
+### Looking after it, on screen
+
+Signing in as the vendor shows the companies rather than a library — the
+vendor belongs to no company and has no designs. From there: make a company
+(and be handed the link for its first administrator), suspend or resume one,
+back everything up, and **set one up**, which opens that company's own settings
+as though signed in to it. An administrator of a company reaches the same
+settings from **Company settings** on their library. They are one screen
+([src/editor/Admin.tsx](src/editor/Admin.tsx)) behind one set of routes
+([src/server/adminRoutes.ts](src/server/adminRoutes.ts)); only the address
+differs, and the middleware in front has already settled whose folder it is.
+
+Three tabs. **People**: invite by email and role, be handed the link, withdraw
+an invitation, hand out a new-password link, turn somebody off, make somebody
+an administrator — never yourself, in either direction. **Branding**: every
+field of the brand file, the logo and the face as uploads, and the sheet as it
+will print beside them, drawn afresh after every save from a design that ships
+with the program so two companies' brands are comparable. **Prices**: the
+rates file as a form, checked the way the resolver checks it, and a way back
+to the shipped prices.
+
+What these screens write is the files a person with a shell could have written
+— `brand.json`, `brand/`, `rates.json` — so there is one way a company's
+settings are stored, whichever way they got there.
 
 ## Storage
 

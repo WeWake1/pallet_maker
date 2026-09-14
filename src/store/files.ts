@@ -114,7 +114,7 @@ function isThenable(value: unknown): boolean {
 }
 
 /** Write via a temporary file and a rename, so a reader never sees half of one. */
-function writeAtomic(path: string, contents: string): void {
+export function writeAtomic(path: string, contents: string | Buffer): void {
   const temp = `${path}.tmp-${process.pid.toString(36)}-${Date.now().toString(36)}`;
   try {
     writeFileSync(temp, contents, 'utf8');

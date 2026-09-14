@@ -8,10 +8,13 @@ import type { TenantContext } from '../tenancy/context.js';
 import { Tenants } from '../tenancy/tenants.js';
 import { Mutex } from '../store/mutex.js';
 import type { Registry } from '../tenancy/registry.js';
+import { adminRoutes } from './adminRoutes.js';
 import { authRoutes, NO_SIGN_IN } from './authRoutes.js';
+import { enterCompany, vendorRoutes } from './vendorRoutes.js';
 import {
   checkSession,
   requireRequestedWith,
+  requireRole,
   unauthenticated,
 } from './auth.js';
 import { computeCosting } from '../costing/costing.js';
@@ -342,7 +345,20 @@ export function createApp(source: StoreHandle | Tenants, options: AppOptions = {
       next(error);
     }
   };
-  app.use('/api', needsCompany);
+
+  if (auth && tenants) {
+    // The vendor's routes come before the check below, because the vendor
+    // belongs to no company and the check would turn them away. Working on a
+    // company they name puts that company in context and then hands over to
+    // the very same routes an administrator of it uses.
+    const admin = adminRoutes(auth.registry, auth);
+    app.use('/api/vendor/companies/:slug/admin', requireRole('manageService'), enterCompany(auth.registry, tenants), admin);
+    app.use('/api/vendor', requireRole('manageService'), vendorRoutes(auth.registry, tenants, auth));
+    app.use('/api', needsCompany);
+    app.use('/api/admin', requireRole('manageCompany'), admin);
+  } else {
+    app.use('/api', needsCompany);
+  }
 
   /**
    * Which folder the designs are in.

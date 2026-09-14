@@ -46,7 +46,11 @@ export function requestLogger(log: Logger | undefined) {
         at: new Date().toISOString(),
         requestId: id,
         method: req.method,
-        path: req.path,
+        // As asked for, not as a mounted router left it: `req.path` inside
+        // `/api/vendor` has had `/api/vendor` taken off, and a log that said
+        // `/companies` would send whoever reads it looking for a route that
+        // does not exist. The query string is left off; it is not the route.
+        path: req.originalUrl.split('?')[0] ?? req.path,
         status: res.statusCode,
         ms: Number(process.hrtime.bigint() - started) / 1e6,
         ip: req.ip,
