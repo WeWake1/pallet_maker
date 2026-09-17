@@ -54,6 +54,13 @@ export const NailPlacementSchema = z.object({
   count: z.number().int().min(0).max(MAX_NAILS_PER_CROSSING),
 });
 
+// A cut in the underside of a board. See Notch in types.ts.
+export const NotchSchema = z.object({
+  offsetMm: z.number().int().nonnegative(),
+  lengthMm: positiveMm,
+  depthMm: positiveMm,
+});
+
 export const SlotSchema = z.object({
   length: positiveMm,
   width: positiveMm,
@@ -62,6 +69,10 @@ export const SlotSchema = z.object({
   joinedToPrev: z.boolean().default(false),
   nudgeMm: mm.default(0),
   variant: z.string().min(1).optional(),
+  // Absent on a plain board, like `variant`, rather than defaulted to an empty
+  // list: a design saved by this version then reads back byte for byte as it
+  // was, and the part signatures of every existing design stay as they were.
+  notches: z.array(NotchSchema).min(1).optional(),
 });
 
 export const BlockCellSchema = z.object({

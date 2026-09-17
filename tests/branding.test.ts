@@ -272,6 +272,7 @@ describe('the SVG stays a drawing rather than a picture of one', () => {
     for (const name of [
       'block-1000x800', 'two-top-widths', 'joined-middle-pair', 'wide-centre-block-row',
       'nudged-top-board', 'plywood-type1', 'plywood-type2', 'plywood-type3', 'stringer-2way',
+      'stringer-notched', 'gma-48x40',
     ]) {
       const fixture = loadFixture(name);
       expect(renderSheetSvg(fixture, computeLayout(fixture), { brand: vector })).toContain('</svg>');

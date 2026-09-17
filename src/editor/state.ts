@@ -14,6 +14,8 @@ import type {
   SheetSpec,
   Slot,
 } from '../types.js';
+import { notchesFor, resizeSlot } from './notches.js';
+import type { NotchPattern } from './notches.js';
 import { newCell, newGrid, newLayer, newSlot, runLength } from './templates.js';
 
 /**
@@ -50,6 +52,7 @@ export type Action =
   | { type: 'patchSlot'; layerId: string; index: number; patch: Partial<Slot> }
   | { type: 'setSlotCount'; layerId: string; count: number }
   | { type: 'patchAllSlots'; layerId: string; patch: Partial<Slot> }
+  | { type: 'setNotches'; layerId: string; pattern: NotchPattern }
   | { type: 'patchGrid'; layerId: string; patch: Partial<Omit<BlockGrid, 'cells'>> }
   | { type: 'patchCell'; layerId: string; row: number; col: number; patch: Partial<BlockCell> }
   | { type: 'patchAllCells'; layerId: string; patch: Partial<BlockCell> }
@@ -103,9 +106,26 @@ function defaultMaterial(pallet: Pallet): string {
  */
 function anotherSlot(pallet: Pallet, layer: Layer, slots: Slot[]): Slot {
   const previous = slots.at(-1);
-  return previous
-    ? { ...previous, nudgeMm: 0, joinedToPrev: false }
-    : newSlot(defaultMaterial(pallet), runLength(pallet, layer.direction));
+  if (!previous) return newSlot(defaultMaterial(pallet), runLength(pallet, layer.direction));
+  // The notches are copied, not shared: two boards pointing at one list would
+  // be one board's notches edited twice.
+  const notches = previous.notches?.map((notch) => ({ ...notch }));
+  return {
+    ...previous,
+    nudgeMm: 0,
+    joinedToPrev: false,
+    ...(notches ? { notches } : {}),
+  };
+}
+
+/**
+ * A change to a board, with its length going through `resizeSlot` so notches
+ * cut to a pattern keep their distance from the ends of the board they are in.
+ */
+function patchSlot(slot: Slot, patch: Partial<Slot>): void {
+  const { length, ...rest } = patch;
+  Object.assign(slot, rest);
+  if (length !== undefined) resizeSlot(slot, length);
 }
 
 /** Layers are ordered top to bottom, and `order` just follows the list. */
@@ -198,7 +218,7 @@ export function reducer(state: EditorState, action: Action): EditorState {
         layer.runOffsetMm = action.runOffsetMm;
         layer.runSpanMm = action.runSpanMm;
         if (layer.content.type === 'sequence') {
-          for (const slot of layer.content.slots) slot.length = action.runSpanMm;
+          for (const slot of layer.content.slots) resizeSlot(slot, action.runSpanMm);
         } else if (layer.content.type === 'sheet') {
           layer.content.sheet.length = action.runSpanMm;
         }
@@ -277,7 +297,25 @@ export function reducer(state: EditorState, action: Action): EditorState {
     case 'patchAllSlots': {
       const layer = findLayer(pallet, action.layerId);
       if (layer?.content.type === 'sequence') {
-        for (const slot of layer.content.slots) Object.assign(slot, action.patch);
+        for (const slot of layer.content.slots) patchSlot(slot, action.patch);
+      }
+      break;
+    }
+
+    /**
+     * The notches of every board in the layer, from how many, how big and how
+     * far in — worked out per board from its own length, so runners of two
+     * lengths in one layer are each cut in from their own ends. A count of
+     * nought takes the notches off. See ./notches.ts.
+     */
+    case 'setNotches': {
+      const layer = findLayer(pallet, action.layerId);
+      if (layer?.content.type === 'sequence') {
+        for (const slot of layer.content.slots) {
+          const notches = notchesFor(slot.length, action.pattern);
+          if (notches) slot.notches = notches;
+          else delete slot.notches;
+        }
       }
       break;
     }
@@ -295,7 +333,7 @@ export function reducer(state: EditorState, action: Action): EditorState {
       const layer = findLayer(pallet, action.layerId);
       if (layer?.content.type === 'sequence') {
         const slot = layer.content.slots[action.index];
-        if (slot) Object.assign(slot, action.patch);
+        if (slot) patchSlot(slot, action.patch);
       }
       break;
     }

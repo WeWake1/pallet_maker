@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { palletToDxf } from '../src/dxf/drawing.js';
 import { computeLayout } from '../src/geometry/layout.js';
+import { notchOutline } from '../src/geometry/notch.js';
 import { loadFixture } from './helpers.js';
 
 /**
@@ -120,6 +121,32 @@ describe('the DXF', () => {
     expect(outlines.filter((o) => o.layer === 'BOTTOM_BOARDS')).toHaveLength(3);
   });
 
+  it('draws a notched runner in elevation as one outline with the bites in it', () => {
+    const notched = computeLayout(loadFixture('stringer-notched'));
+    const side = readEntities(palletToDxf(notched, { view: 'side' }));
+    const runners = side.filter((entity) => entity.type === 'POLYLINE' && entity.layer === 'RUNNERS');
+    expect(runners).toHaveLength(3);
+    // Each bite is the notch's outline, rounded corners and all, so a
+    // runner is its four corners plus two outlines' worth of vertices.
+    const perNotch = notchOutline(229, 38, 38).length;
+    for (const outline of runners) {
+      expect(value(outline, 70)).toBe('1'); // still closed
+      const vertices = outline.children.filter((child) => child.type === 'VERTEX');
+      expect(vertices).toHaveLength(4 + 2 * perNotch);
+      // The bites stand on the underside, in the view's own coordinates.
+      const xs = vertices.map((vertex) => Number(value(vertex, 10)));
+      expect(xs).toEqual(expect.arrayContaining([300, 529, 671, 900]));
+    }
+    // The chain the sheet carries comes with it.
+    const texts = side.filter((entity) => entity.type === 'TEXT').map((entity) => value(entity, 1));
+    expect(texts).toEqual(expect.arrayContaining(['300', '229', '142', '38', '56']));
+    // In plan the notches are underneath, and every outline is the four corners it was.
+    const plan = readEntities(palletToDxf(notched));
+    for (const outline of plan.filter((entity) => entity.type === 'POLYLINE')) {
+      expect(outline.children.filter((child) => child.type === 'VERTEX')).toHaveLength(4);
+    }
+  });
+
   it('puts every piece exactly where the layout put it', () => {
     const outlines = entities.filter((entity) => entity.type === 'POLYLINE');
     const corners = outlines.map((outline) => {
@@ -186,6 +213,8 @@ describe('the DXF', () => {
       'plywood-type2',
       'plywood-type3',
       'stringer-2way',
+      'stringer-notched',
+      'gma-48x40',
     ]) {
       const drawing = palletToDxf(computeLayout(loadFixture(name)));
       const parsed = readEntities(drawing);

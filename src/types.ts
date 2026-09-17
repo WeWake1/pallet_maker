@@ -157,6 +157,33 @@ export interface NailPlacement {
  */
 export const MAX_NAILS_PER_CROSSING = 4;
 
+/**
+ * A rectangular cut in the underside of a board, right through its width.
+ *
+ * Runners are notched so that a fork can enter a stringer pallet from the side
+ * as well as from the ends — the "partial 4-way" pallet. Positioned along the
+ * board it is cut in, from that board's own start, so a notch stays where it was
+ * cut when the layer is offset or inset.
+ */
+export interface Notch {
+  /** From the board's start, along its run, to the near edge of the cut. */
+  offsetMm: number;
+  /** Along the board. */
+  lengthMm: number;
+  /** Up from the underside. Less than the board's thickness, or there is no board. */
+  depthMm: number;
+}
+
+/**
+ * The radius the top corners of every notch are cut to, in mm.
+ *
+ * Not a setting: a notch is cut with whatever cutter the saw has, and the
+ * shop's is the one the GMA pallet is drawn with — R1.5 in, 38 mm. The mouth
+ * corners stay square. A notch too short to take the full radius takes what
+ * fits; see `notchRadius`.
+ */
+export const NOTCH_RADIUS_MM = 38;
+
 export interface Slot {
   /** Extent along the direction the boards run. */
   length: number;
@@ -170,6 +197,11 @@ export interface Slot {
   nudgeMm: number;
   /** e.g. "outer", "inner" */
   variant?: string;
+  /**
+   * Cuts in the underside. Absent on a plain board, which is nearly every
+   * board; a runner with these is a different part from one without.
+   */
+  notches?: Notch[];
 }
 
 export interface BlockCell {

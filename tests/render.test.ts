@@ -368,6 +368,8 @@ describe('the SVG itself', () => {
       'plywood-type2',
       'plywood-type3',
       'stringer-2way',
+      'stringer-notched',
+      'gma-48x40',
     ]) {
       const fixture = computeLayout(loadFixture(name));
       for (const view of ALL_VIEWS) {

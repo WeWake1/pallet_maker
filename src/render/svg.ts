@@ -59,6 +59,14 @@ export function path(d: string, input: Attrs = {}): string {
   return el('path', { d, ...input });
 }
 
+/** A closed outline through the given corners, in px. */
+export function polygon(points: ReadonlyArray<readonly [number, number]>, input: Attrs = {}): string {
+  return el('polygon', {
+    points: points.map(([x, y]) => `${fmt(x)},${fmt(y)}`).join(' '),
+    ...input,
+  });
+}
+
 export function text(x: number, y: number, content: string, input: Attrs = {}): string {
   return el('text', { x, y, ...input }, esc(content));
 }

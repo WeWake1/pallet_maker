@@ -349,6 +349,8 @@ describe('the sheet', () => {
       'plywood-type2',
       'plywood-type3',
       'stringer-2way',
+      'stringer-notched',
+      'gma-48x40',
     ]) {
       const fixture = loadFixture(name);
       const sheet = renderSheet(fixture, computeLayout(fixture));
@@ -542,6 +544,8 @@ describe('the sheet fits its page', () => {
       'm-pallet',
       'plywood-type3',
       'stringer-2way',
+      'stringer-notched',
+      'gma-48x40',
       'wing-both-decks',
       'wide-centre-block-row',
     ]) {

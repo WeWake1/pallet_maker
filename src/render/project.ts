@@ -1,3 +1,4 @@
+import { notchOutline } from '../geometry/notch.js';
 import type { Layout, PlacedPiece } from '../geometry/types.js';
 
 /**
@@ -21,6 +22,19 @@ export const VIEW_TITLE: Record<ViewKind, string> = {
   end: 'END VIEW',
 };
 
+/** A rectangle in view coordinates, in mm. */
+export interface Cut {
+  u: number;
+  v: number;
+  du: number;
+  dv: number;
+  /** The radius of the top corners, where the rectangle is a notch. */
+  r?: number;
+}
+
+/** A box in pallet coordinates: a piece, or a notch cut from one. */
+type Box3 = Pick<PlacedPiece, 'x' | 'y' | 'z' | 'dx' | 'dy' | 'dz'>;
+
 export interface Projected {
   piece: PlacedPiece;
   /** Where this piece sits in `layout.pieces`, which is how the editor names it. */
@@ -33,6 +47,15 @@ export interface Projected {
   depth: number;
   /** Drawn solid; everything else in the view is drawn faint. */
   near: boolean;
+  /**
+   * The piece's notches as this view shows them, in its coordinates. In an
+   * elevation looking across the board they are bites out of its outline,
+   * standing on its bottom edge; in the bottom view they are recesses in its
+   * underside, to be outlined. Empty from above, where they are underneath,
+   * and in the elevation looking along the board, where the timber either side
+   * of a notch fills the outline and hides it. See `cutsOf`.
+   */
+  cuts: Cut[];
 }
 
 /** The overall outline of the pallet in this view, in mm. */
@@ -61,7 +84,8 @@ export function viewAxes(view: ViewKind): { u: 'length' | 'width'; v: 'width' | 
   }
 }
 
-function place(piece: PlacedPiece, layout: Layout, view: ViewKind) {
+/** A box — a piece, or a notch cut from one — as this view sees it. */
+function place(piece: Box3, layout: Layout, view: ViewKind) {
   const height = layout.overallHeight;
   switch (view) {
     case 'top':
@@ -91,6 +115,53 @@ function place(piece: PlacedPiece, layout: Layout, view: ViewKind) {
         depth: -piece.x,
       };
   }
+}
+
+/**
+ * The notches a view shows of a piece. From below, every one, as a recess. In
+ * an elevation, only those that do not run the whole way across the piece as
+ * seen — a notch looked at end on is hidden by the timber either side of it,
+ * and drawing it would put a hole in a face that has none.
+ */
+function cutsOf(piece: PlacedPiece, box: Cut, layout: Layout, view: ViewKind): Cut[] {
+  const notches = piece.notches ?? [];
+  if (notches.length === 0 || view === 'top') return [];
+  const placed = notches.map((notch) => {
+    const { u, v, du, dv } = place(notch, layout, view);
+    return { u, v, du, dv, r: notch.radius };
+  });
+  if (view === 'bottom') return placed;
+  return placed.filter(
+    (cut) => cut.u > box.u + TOLERANCE || cut.u + cut.du < box.u + box.du - TOLERANCE,
+  );
+}
+
+/**
+ * The outline of a piece with bites out of its bottom edge, as corners in view
+ * coordinates: along the top, down the far side, then back along the bottom
+ * going up and round each notch and down again, right to left. The sheet and
+ * the DXF both draw this, so the two cannot come to disagree about the shape.
+ */
+export function profileOf(item: Projected): Array<{ u: number; v: number }> {
+  const left = item.u;
+  const right = item.u + item.du;
+  const top = item.v;
+  const bottom = item.v + item.dv;
+  const points = [
+    { u: left, v: top },
+    { u: right, v: top },
+    { u: right, v: bottom },
+  ];
+  for (const cut of [...item.cuts].sort((a, b) => b.u - a.u)) {
+    // The outline runs mouth corner to mouth corner along the board; v runs
+    // down the page, so up from the underside is down in v.
+    const outline = notchOutline(cut.du, cut.dv, cut.r ?? 0);
+    for (const point of outline.reverse()) {
+      points.push({ u: cut.u + point.x, v: bottom - point.y });
+    }
+  }
+  points.push({ u: left, v: bottom });
+  return points;
 }
 
 /** A plan position, such as a nail dot, in view coordinates. */
@@ -160,11 +231,10 @@ export function facesOf(layout: Layout): { top: Set<string>; bottom: Set<string>
 /** Every piece, projected and sorted back to front so a painter's pass works. */
 export function projectPieces(layout: Layout, view: ViewKind): Projected[] {
   const faces = facesOf(layout);
-  const placed = layout.pieces.map((piece, index) => ({
-    piece,
-    index,
-    ...place(piece, layout, view),
-  }));
+  const placed = layout.pieces.map((piece, index) => {
+    const box = place(piece, layout, view);
+    return { piece, index, ...box, cuts: cutsOf(piece, box, layout, view) };
+  });
   const projected = placed.map((item) => ({ ...item, near: isNear(item, placed, view, faces) }));
   return projected.sort((a, b) => a.depth - b.depth);
 }
