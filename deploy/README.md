@@ -5,8 +5,11 @@ an Azure VM running Debian 12; any Debian box is the same from step 2 on.
 
 ## 1. The machine (Azure)
 
-- **VM**: Debian 12 (Gen2 image), size B2s or B2as v2 — 2 vCPU, 4 GiB. Region
-  Central India for users in India. Chromium is the only heavy thing on it.
+- **VM**: Debian 12 (Gen2 image), size **B2als_v2** — 2 vCPU, 4 GiB, about
+  $18 a month (B2ls_v2 is the same on Intel for twice the price; B2as_v2 is
+  8 GiB and more than this needs). Region Central India for users in India.
+  Chromium is the only heavy thing on it. To start on the 1 GiB B2ats_v2
+  instead, see 1a.
 - **Networking**: a static public IP; a DNS `A` record for the name you will
   use (the Caddyfile below says `pallets.example.com`); the network security
   group allows inbound 22, 80 and 443 only.
@@ -19,6 +22,62 @@ an Azure VM running Debian 12; any Debian box is the same from step 2 on.
 Avoid App Service and containers for this: the server wants Chromium and a
 folder on a disk, which a VM gives it plainly. Avoid the Ubuntu image: its
 Chromium is a snap, and snaps do not run headless under systemd without a fight.
+
+### 1a. Starting on the 1 GiB machine (B2ats_v2, about $4.50)
+
+Sized honestly the server wants 4 GiB, but at one or two companies it can be
+tried on 1 GiB first, and moving up later is *stop the VM → Size → start*, five
+minutes, nothing on the disk touched. What makes 1 GiB survivable is that only
+Chromium is big — the measured shape is about 100 MB of Node, 120 MB of idle
+Chromium, and a further 150–250 MB per sheet while it prints — so one sheet at
+a time fits, two at once do not, and a swap file catches the spikes.
+
+Three things differ from the 4 GiB recipe:
+
+1. **A swap file**, because the image ships with none and this size has no
+   temp disk to put one on. On the OS disk, once, as root:
+
+   ```sh
+   fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+   echo '/swapfile none swap sw 0 0' >> /etc/fstab
+   echo 'vm.swappiness=10' > /etc/sysctl.d/90-swap.conf && sysctl --system
+   ```
+
+   Swap on a Standard SSD is slow, so it is a net, not a floor: a print that
+   lands in swap takes seconds longer, it does not fail.
+
+2. **One sheet at a time**: `PALLET_PRINT_CONCURRENCY=1` in `/etc/pallet-spec/env`.
+   A second print waits its turn (up to 20 wait; beyond that the server says
+   503, try again in a moment) rather than starting a second Chromium.
+
+3. **A lower ceiling for the service**, so a Chromium that leaks is restarted
+   rather than allowed to push sshd and Caddy out. `systemctl edit pallet-spec`
+   and put in the drop-in:
+
+   ```ini
+   [Service]
+   MemoryMax=700M
+   ```
+
+   (The unit file's own 2500M is for the 4 GiB machine; a drop-in overrides it
+   without editing the shipped file.) Then `systemctl daemon-reload && systemctl restart pallet-spec`.
+
+**How to know whether it is coping.** After a normal day, or after opening five
+sheets in a row from two laptops:
+
+- `free -m` — `available` should stay above about 150 MB and `Swap used` below
+  a few hundred; swap climbing every day means something leaks.
+- `journalctl -k | grep -i -E 'out of memory|oom'` — must be empty. One line here
+  is the signal to move to 4 GiB; do not tune around it.
+- `curl -s https://pallets.example.com/healthz` — `printer.launches` should be
+  1; it counts Chromium restarts, so a climbing number is Chromium being killed.
+- A sheet that took under two seconds on a laptop taking more than ten here is
+  swap doing the work.
+
+When any of these turn bad, resize. The `env` value and the drop-in can stay
+as they are on the bigger machine; set concurrency back to 2 and remove the
+drop-in (`rm /etc/systemd/system/pallet-spec.service.d/override.conf`) to use
+what was paid for.
 
 ## 2. Packages
 

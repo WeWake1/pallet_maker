@@ -23,6 +23,7 @@
  *   PALLET_PUBLIC_URL    hosted only; where this answers, for invitation links
  *   PALLET_TIMEZONE      --local only; the date designs are stamped with
  *   PALLET_BROWSER       the Chromium to print with, if not one of the usual ones
+ *   PALLET_PRINT_CONCURRENCY  sheets printing at once, default 2; 1 on a 1 GB machine
  *   PALLET_BACKUPS       snapshots to keep per company, default 30
  *   PALLET_STORE         --local only: the designs folder, over the one chosen in the editor
  */
@@ -76,8 +77,16 @@ function readVersion(): string | null {
 
 const version = readVersion();
 
-/** The Chromium that prints, started at the first sheet and then kept. */
-const printer = createPooledPrinter({ executablePath: () => findBrowser() });
+/**
+ * The Chromium that prints, started at the first sheet and then kept. Each
+ * sheet printing at once is roughly a quarter of a gigabyte of Chromium, which
+ * is why a small machine is told to print one at a time.
+ */
+const printConcurrency = Number(process.env.PALLET_PRINT_CONCURRENCY ?? 2);
+if (!Number.isInteger(printConcurrency) || printConcurrency < 1) {
+  fail(`PALLET_PRINT_CONCURRENCY is "${process.env.PALLET_PRINT_CONCURRENCY}"; it has to be a whole number of at least 1.`);
+}
+const printer = createPooledPrinter({ executablePath: () => findBrowser(), concurrency: printConcurrency });
 usePrinter(printer.print);
 
 let stopHousekeeping = (): void => {};
