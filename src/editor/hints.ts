@@ -27,6 +27,10 @@ export const HINTS = {
     'A mark distinguishing two boards that are the same size but not the same part — a different notch or bevel, say. Boards with different variants get different part numbers.',
   joined:
     'This board and the one before it are one board, butted end to end, rather than two with a gap between them.',
+  notches:
+    'Two cuts in the underside of each runner, right through its width, so a fork can get into a stringer pallet from the side as well as the ends. Say how long and how deep they are and how far in from the ends they start; every runner in the layer is cut the same. The mouth corners are square and the top corners rounded to the standard radius, as the cutter leaves them.',
+  notchFromEnd:
+    'From the end of the runner to the near edge of the nearest notch, measured at the mouth of the cut, at both ends alike.',
   sameLevel:
     'This layer sits alongside the one above it in the same course of timber, not on top of it. It is how a deck whose boards run two different ways is built.',
   derivedHeight:
@@ -66,6 +70,7 @@ export const GLOSSARY: Array<{ term: string; hint: HintKey }> = [
   { term: 'Nudge', hint: 'nudge' },
   { term: 'Joined', hint: 'joined' },
   { term: 'Variant', hint: 'variant' },
+  { term: 'Notches', hint: 'notches' },
   { term: 'Same level', hint: 'sameLevel' },
   { term: 'Entry', hint: 'entry' },
   { term: 'Deck', hint: 'deckType' },
@@ -109,6 +114,8 @@ const FIELD_LABEL: Record<string, string> = {
   material: 'material',
   variant: 'variant',
   nudgeMm: 'nudge',
+  lengthMm: 'length',
+  depthMm: 'depth',
   spanMm: 'span',
   offsetMm: 'offset',
   runSpanMm: 'run span',
@@ -147,15 +154,23 @@ export function describePath(path: Array<string | number>, layerNames: string[])
     }
 
     // `content` and `slots` are how the document is shaped, not anywhere a
-    // person can be told to look. The number after them is the board.
-    if (step === 'content' || step === 'slots' || step === 'cells') {
+    // person can be told to look. The number after them is the board, and
+    // the number after `notches` is the notch in it.
+    if (step === 'content' || step === 'slots' || step === 'cells' || step === 'notches') {
       index += 1;
       continue;
     }
 
     if (typeof step === 'number') {
       const container = path[index - 1];
-      const noun = container === 'cells' ? 'block' : container === 'nails' ? 'row' : 'board';
+      const noun =
+        container === 'cells'
+          ? 'block'
+          : container === 'nails'
+            ? 'row'
+            : container === 'notches'
+              ? 'notch'
+              : 'board';
       parts.push(`${noun} ${step + 1}`);
       index += 1;
       continue;

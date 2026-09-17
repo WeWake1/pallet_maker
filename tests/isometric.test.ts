@@ -142,6 +142,8 @@ describe('the isometric view', () => {
       'wide-centre-block-row',
       'wing-both-decks',
       'nudged-top-board',
+      'stringer-notched',
+      'gma-48x40',
     ]) {
       const svg = renderIsometric(computeLayout(loadFixture(name)));
       expect(svg.startsWith('<svg')).toBe(true);

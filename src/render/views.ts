@@ -2,11 +2,18 @@ import { hasOverhang } from '../geometry/footprint.js';
 import type { LayerLayout, Layout, Overhang } from '../geometry/types.js';
 import type { LayerKind } from '../types.js';
 import { renderDimension } from './dimension.js';
-import { facesOf, projectPieces, projectPlanPoint, viewFrame, VIEW_TITLE } from './project.js';
-import type { Projected, ViewKind } from './project.js';
+import {
+  facesOf,
+  profileOf,
+  projectPieces,
+  projectPlanPoint,
+  viewFrame,
+  VIEW_TITLE,
+} from './project.js';
+import type { Cut, Projected, ViewKind } from './project.js';
 import { mmLabel, packLanes, renderTitle, Scene, TIER } from './scene.js';
 import type { DimSpec, Side } from './scene.js';
-import { circle, el, group, rect, svgDocument } from './svg.js';
+import { circle, el, group, polygon, rect, svgDocument } from './svg.js';
 import {
   LAYER_STYLE,
   NAIL_HALO,
@@ -224,22 +231,70 @@ function layOut(
   return { dims, scene };
 }
 
-function pieceRect(
+/** True in the views that look at a pallet from the side rather than from above. */
+function isElevation(view: ViewKind): boolean {
+  return view === 'side' || view === 'end';
+}
+
+/**
+ * A piece as this view outlines it. A rectangle, nearly always; in an
+ * elevation, a notched runner is the rectangle with the bites taken out of it,
+ * and what is behind shows through the bites — which is how a fork sees it.
+ */
+function pieceShape(
   scene: Scene,
   item: Projected,
   weight: Weight,
+  view: ViewKind,
   pieceIndex?: number,
 ): string {
   const style = LAYER_STYLE[item.piece.layerKind];
   const filled = weight.fillOpacity > 0;
-  return rect(scene.px(item.u), scene.py(item.v), scene.len(item.du), scene.len(item.dv), {
+  const attrs = {
     fill: filled ? style.fill : 'none',
     'fill-opacity': filled ? weight.fillOpacity : undefined,
     stroke: style.stroke,
     'stroke-width': weight.strokeWidth,
     opacity: weight.opacity,
     'data-piece': pieceIndex,
+  };
+  if (item.cuts.length === 0 || !isElevation(view)) {
+    return rect(scene.px(item.u), scene.py(item.v), scene.len(item.du), scene.len(item.dv), attrs);
+  }
+  return polygon(
+    profileOf(item).map(({ u, v }) => [scene.px(u), scene.py(v)] as const),
+    attrs,
+  );
+}
+
+/**
+ * The notches of a piece seen from underneath: each outlined on the piece, so
+ * the bottom view says where the cuts are against the boards nailed beside
+ * them. Only from below — the top view is looking at the other face.
+ */
+function recesses(scene: Scene, item: Projected, weight: Weight, view: ViewKind): string[] {
+  if (view !== 'bottom') return [];
+  return item.cuts.map((cut) => cutRect(pxBox(scene, cut), item, weight));
+}
+
+/** One recess, or the part of one, outlined in the piece's own ink. */
+function cutRect(box: Box, item: Projected, weight: Weight): string {
+  return rect(box.x, box.y, box.w, box.h, {
+    fill: 'none',
+    stroke: LAYER_STYLE[item.piece.layerKind].stroke,
+    'stroke-width': weight.strokeWidth,
+    opacity: weight.opacity,
+    'pointer-events': 'none',
   });
+}
+
+function pxBox(scene: Scene, cut: Cut): Box {
+  return {
+    x: scene.px(cut.u),
+    y: scene.py(cut.v),
+    w: scene.len(cut.du),
+    h: scene.len(cut.dv),
+  };
 }
 
 /** The selected board, outlined. Nothing about the drawing is editable. */
@@ -288,14 +343,13 @@ function drawPieces(
 ): string {
   const body = group(
     { 'shape-rendering': 'geometricPrecision' },
-    projected.map((item) =>
-      pieceRect(
-        scene,
-        item,
-        item.near ? emphasis.near : emphasis.far,
-        interactive ? item.index : undefined,
-      ),
-    ),
+    projected.flatMap((item) => {
+      const weight = item.near ? emphasis.near : emphasis.far;
+      return [
+        pieceShape(scene, item, weight, view, interactive ? item.index : undefined),
+        ...recesses(scene, item, weight, view),
+      ];
+    }),
   );
 
   if (view !== 'top' && view !== 'bottom') return body;
@@ -335,7 +389,13 @@ function drawPieces(
         behind.flatMap((item) =>
           near.flatMap((over) => {
             const box = overlap(scene, item, over);
-            return box === null ? [] : [ghostRect(box, item, ghost)];
+            if (box === null) return [];
+            // A notch shows through the board over it the same way its runner does.
+            const cuts = item.cuts.flatMap((cut) => {
+              const part = overlap(scene, cut, over);
+              return part === null ? [] : [cutRect(part, item, ghost)];
+            });
+            return [ghostRect(box, item, ghost), ...cuts];
           }),
         ),
       )
@@ -357,7 +417,10 @@ function drawPieces(
     body +
     group(
       { 'clip-path': `url(#${clipId})`, ...ghostAttrs },
-      behind.map((item) => pieceRect(scene, item, ghost)),
+      behind.flatMap((item) => [
+        pieceShape(scene, item, ghost, view),
+        ...recesses(scene, item, ghost, view),
+      ]),
     )
   );
 }
@@ -369,8 +432,8 @@ interface Box {
   h: number;
 }
 
-/** Where two projected pieces overlap on the page, in pixels, or null. */
-function overlap(scene: Scene, a: Projected, b: Projected): Box | null {
+/** Where two view rectangles overlap on the page, in pixels, or null. */
+function overlap(scene: Scene, a: Cut, b: Cut): Box | null {
   const x0 = Math.max(scene.px(a.u), scene.px(b.u));
   const x1 = Math.min(scene.px(a.u) + scene.len(a.du), scene.px(b.u) + scene.len(b.du));
   const y0 = Math.max(scene.py(a.v), scene.py(b.v));
@@ -483,6 +546,7 @@ function buildDimensions(layout: Layout, view: ViewKind, projected: Projected[])
     dims.push(...nudgeDims(layout, view, projected));
   } else {
     dims.push(...entryDims(layout, view));
+    dims.push(...notchDims(view, projected));
   }
 
   dims.push({
@@ -619,19 +683,71 @@ function entryOpening(layout: Layout, view: ViewKind): { bottom: number; top: nu
   const top = Math.max(...spacers.map((layer) => layer.zBottom + layer.thickness));
 
   const projected = projectPieces(layout, view);
-  const openings = pockets(
-    projected
-      .filter((item) => spacerIds.has(item.piece.layerId))
-      .map((item) => [item.u, item.u + item.du] as [number, number]),
-  );
+  const posts = projected.filter((item) => spacerIds.has(item.piece.layerId));
+  const openings: Opening[] = [
+    ...pockets(posts.map((item) => [item.u, item.u + item.du] as [number, number])).map(
+      ([u0, u1]) => ({ u0, u1, ceiling: top }),
+    ),
+    ...notchPockets(posts, layout.overallHeight),
+  ];
 
   // Anything sitting below the spacers, which is what a pocket can be floored by.
   const beneath = projected.filter((item) => item.piece.z + item.piece.dz <= under + TOLERANCE);
 
+  if (openings.length === 0) return top - under > TOLERANCE ? { bottom: under, top } : null;
+
   // The least generous pocket, since that is the one that has to be cleared.
-  const bottom =
-    openings.length === 0 ? under : Math.max(...openings.map((gap) => floorOf(gap, beneath)));
-  return top - bottom > TOLERANCE ? { bottom, top } : null;
+  const tightest = openings
+    .map((opening) => ({ bottom: floorOf([opening.u0, opening.u1], beneath), top: opening.ceiling }))
+    .reduce((least, opening) =>
+      opening.top - opening.bottom < least.top - least.bottom ? opening : least,
+    );
+  return tightest.top - tightest.bottom > TOLERANCE ? tightest : null;
+}
+
+/** A way in under the deck, as a view sees it: its stretch along u and its ceiling in z. */
+interface Opening {
+  u0: number;
+  u1: number;
+  ceiling: number;
+}
+
+/**
+ * The ways in *through* the spacers rather than between them: the notches.
+ *
+ * A notch in one runner is a hole in that runner, not a way into the pallet;
+ * the fork only gets in where every runner standing across the view is cut at
+ * the same place, and only as high as the lowest of those cuts. So the notches
+ * of one runner are taken as the candidates and every other post is asked in
+ * turn — a post standing clear of a candidate leaves it alone, a notched one
+ * narrows it to where the two cuts agree, and a solid one closes it.
+ */
+function notchPockets(posts: Projected[], height: number): Opening[] {
+  const first = posts.find((post) => post.cuts.length > 0);
+  if (!first) return [];
+  // v runs down the page, so a cut's ceiling in z is the height less its v.
+  const ceilingOf = (cut: Cut): number => height - cut.v;
+
+  let openings: Opening[] = first.cuts.map((cut) => ({
+    u0: cut.u,
+    u1: cut.u + cut.du,
+    ceiling: ceilingOf(cut),
+  }));
+  for (const post of posts) {
+    if (post === first) continue;
+    openings = openings.flatMap((opening) => {
+      const clear =
+        post.u + post.du <= opening.u0 + TOLERANCE || post.u >= opening.u1 - TOLERANCE;
+      if (clear) return [opening];
+      return post.cuts.flatMap((cut) => {
+        const u0 = Math.max(opening.u0, cut.u);
+        const u1 = Math.min(opening.u1, cut.u + cut.du);
+        if (u1 - u0 <= TOLERANCE) return [];
+        return [{ u0, u1, ceiling: Math.min(opening.ceiling, ceilingOf(cut)) }];
+      });
+    });
+  }
+  return openings;
 }
 
 /**
@@ -706,6 +822,67 @@ function entryDims(layout: Layout, view: ViewKind): DimSpec[] {
       label: mmLabel(opening.top - opening.bottom),
     },
   ];
+}
+
+/**
+ * The notches, dimensioned for the saw: a chain along the bottom of the runner
+ * nearest the eye — end to first notch, the notch, the timber between, and so
+ * on to the other end — and the depth on the left. Nothing is left to be
+ * measured off the drawing, since a notch in the wrong place is a fork that
+ * does not go in. Runners behind are cut the same; where one is not, the
+ * chain is still the front one's, and the components table names the other.
+ *
+ * The depth takes the left because the right already carries the entry
+ * clearance, which ends on the same line — the notch ceiling — and starts 16
+ * lower, at the ground. Side by side, 55 and 71 to the same line read as a
+ * contradiction; a side apart, they read as the cut and the hole it makes.
+ */
+function notchDims(view: ViewKind, projected: Projected[]): DimSpec[] {
+  // Back to front, so the last notched piece is the one in front.
+  const item = projected.filter((candidate) => candidate.cuts.length > 0).at(-1);
+  if (!item || !isElevation(view)) return [];
+  const cuts = [...item.cuts].sort((a, b) => a.u - b.u);
+  const underside = item.v + item.dv;
+  const dims: DimSpec[] = [];
+
+  const along = (a: number, b: number): void => {
+    if (b - a <= TOLERANCE) return;
+    dims.push({
+      side: 'bottom',
+      tier: TIER.detail,
+      lane: 0,
+      a,
+      b,
+      anchor: underside,
+      label: mmLabel(b - a),
+    });
+  };
+  let at = item.u;
+  for (const cut of cuts) {
+    along(at, cut.u);
+    along(cut.u, cut.u + cut.du);
+    at = cut.u + cut.du;
+  }
+  along(at, item.u + item.du);
+
+  // One depth per depth there is, each on the first notch cut to it, which is
+  // the one nearest the lane it is read from.
+  const seen = new Set<number>();
+  for (const cut of cuts) {
+    if (seen.has(cut.dv)) continue;
+    seen.add(cut.dv);
+    dims.push({
+      side: 'left',
+      tier: TIER.detail,
+      lane: 0,
+      a: cut.v,
+      b: underside,
+      anchor: cut.u,
+      label: mmLabel(cut.dv),
+    });
+  }
+
+  return dims;
 }
 
 /**

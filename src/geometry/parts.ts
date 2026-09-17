@@ -1,4 +1,5 @@
-import type { BlockCell, Layer, Pallet, SheetSpec, Slot } from '../types.js';
+import type { BlockCell, Layer, Notch, Pallet, SheetSpec, Slot } from '../types.js';
+import { notchRadius } from './notch.js';
 
 /**
  * Part numbers, worked out from the design rather than typed into it.
@@ -15,7 +16,13 @@ import type { BlockCell, Layer, Pallet, SheetSpec, Slot } from '../types.js';
  * maintained.
  */
 
-/** Numbers run top layer down, in the order components appear within a layer. */
+/**
+ * Numbers run top layer down, in the order components appear within a layer.
+ *
+ * Notches are part of the signature — a notched runner is not the same piece of
+ * timber as a plain one — but only where there are any, so a design without
+ * them signs exactly as it did before notches existed and nothing renumbers.
+ */
 export function partSignature(
   kind: string,
   length: number,
@@ -23,8 +30,13 @@ export function partSignature(
   thickness: number,
   material: string,
   variant?: string,
+  notches?: Notch[],
 ): string {
-  return `${kind}/${length}x${width}x${thickness}/${material}/${variant ?? ''}`;
+  const cuts =
+    notches && notches.length > 0
+      ? `/n${notches.map((n) => `${n.offsetMm}+${n.lengthMm}x${n.depthMm}`).join(',')}`
+      : '';
+  return `${kind}/${length}x${width}x${thickness}/${material}/${variant ?? ''}${cuts}`;
 }
 
 export function slotSignature(layer: Layer, slot: Slot): string {
@@ -35,7 +47,24 @@ export function slotSignature(layer: Layer, slot: Slot): string {
     slot.thickness,
     slot.material,
     slot.variant,
+    slot.notches,
   );
+}
+
+/**
+ * The notches of a part, said in words for the components table and the
+ * editor: "2 notches 229 × 35 R38" — length at the mouth, depth, and the
+ * radius the top corners are cut to. Nothing where there are none. Sizes
+ * only, since where they sit is what the drawing dimensions; where they come
+ * in more than one size, each size is named.
+ */
+export function describeNotches(notches: Notch[] | undefined): string {
+  if (!notches || notches.length === 0) return '';
+  const sizes = [
+    ...new Set(notches.map((n) => `${n.lengthMm} × ${n.depthMm} R${notchRadius(n)}`)),
+  ];
+  const count = notches.length === 1 ? '1 notch' : `${notches.length} notches`;
+  return `${count} ${sizes.join(', ')}`;
 }
 
 /** A block is stated length x width x height; its height is its thickness. */

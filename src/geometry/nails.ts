@@ -1,7 +1,7 @@
 import { MAX_NAILS_PER_CROSSING } from '../types.js';
 import type { LayerKind, NailPlacement, PieceSource } from '../types.js';
 import { EPSILON } from './distribute.js';
-import type { LayerLayout, LayoutIssue, PlacedPiece } from './types.js';
+import type { LayerLayout, LayoutIssue, PlacedNotch, PlacedPiece } from './types.js';
 
 /**
  * Where the nails go on the drawing.
@@ -159,6 +159,81 @@ function describe(layer: LayerLayout): string {
   return `the ${layer.kind.replace('_', ' ')} layer at position ${layer.order}`;
 }
 
+/** A piece named the way its layer's form names it, for a message. */
+function nameOf(piece: PlacedPiece): string {
+  const source = piece.source;
+  if (source.kind === 'slot') return `board ${source.index + 1}`;
+  if (source.kind === 'cell') return `block r${source.row + 1} c${source.col + 1}`;
+  return 'the sheet';
+}
+
+interface Box {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+/**
+ * Where an upper piece meets a lower one in plan, or null where it does not.
+ *
+ * Taken on the timber that is actually there. A notch in the upper piece is
+ * cut out of the overlap, since a nail driven up into a notch finds only air:
+ * a board that laps into a notch is nailed on the part of it outside, and a
+ * board lying wholly inside one meets nothing at all. `inNotch` says which of
+ * those a null was.
+ */
+function crossingOf(a: PlacedPiece, b: PlacedPiece): { box: Box | null; inNotch: boolean } {
+  let box: Box | null = {
+    x0: Math.max(a.x, b.x),
+    x1: Math.min(a.x + a.dx, b.x + b.dx),
+    y0: Math.max(a.y, b.y),
+    y1: Math.min(a.y + a.dy, b.y + b.dy),
+  };
+  if (box.x1 - box.x0 <= EPSILON || box.y1 - box.y0 <= EPSILON) return { box: null, inNotch: false };
+
+  for (const notch of a.notches ?? []) {
+    box = clipOut(box, notch);
+    if (box === null) return { box: null, inNotch: true };
+  }
+  return { box, inNotch: false };
+}
+
+/**
+ * The overlap with a notch taken out of it. A notch spans its piece right
+ * across, so it cuts the overlap along the run: what is left is the stretch
+ * before the notch, the stretch after it, or nothing. Where both are left — a
+ * board wider than the notch is long, lying over it — the wider one is the
+ * crossing, since a crossing is one place and the nails go where the timber
+ * is thickest on the ground.
+ */
+function clipOut(box: Box, notch: PlacedNotch): Box | null {
+  const nx0 = notch.x;
+  const nx1 = notch.x + notch.dx;
+  const ny0 = notch.y;
+  const ny1 = notch.y + notch.dy;
+  if (nx1 - box.x0 <= EPSILON || box.x1 - nx0 <= EPSILON) return box;
+  if (ny1 - box.y0 <= EPSILON || box.y1 - ny0 <= EPSILON) return box;
+
+  const coversY = ny0 <= box.y0 + EPSILON && ny1 >= box.y1 - EPSILON;
+  const coversX = nx0 <= box.x0 + EPSILON && nx1 >= box.x1 - EPSILON;
+  if (coversY) {
+    const before = nx0 - box.x0;
+    const after = box.x1 - nx1;
+    if (before <= EPSILON && after <= EPSILON) return null;
+    return before >= after ? { ...box, x1: nx0 } : { ...box, x0: nx1 };
+  }
+  if (coversX) {
+    const before = ny0 - box.y0;
+    const after = box.y1 - ny1;
+    if (before <= EPSILON && after <= EPSILON) return null;
+    return before >= after ? { ...box, y1: ny0 } : { ...box, y0: ny1 };
+  }
+  // A corner of the notch inside the overlap: most of the timber is there, and
+  // the nails find it.
+  return box;
+}
+
 /**
  * Which crossings sit at a corner of the pallet: outermost in both directions in
  * plan, which is the four of them on a rectangular pallet.
@@ -193,6 +268,8 @@ export function computeNails(
 ): { dots: NailDot[]; crossings: NailCrossing[]; issues: LayoutIssue[] } {
   const crossings: NailCrossing[] = [];
   const issues: LayoutIssue[] = [];
+  // A board in a notch is said once, however many notched runners it is under.
+  const reportedInNotch = new Set<string>();
 
   // A joint is between two courses of timber, not between two layers. A deck
   // whose boards run two ways is several layers at one height, and every one of
@@ -215,11 +292,21 @@ export function computeNails(
         const between: NailCrossing[] = [];
         for (const a of uppers) {
           for (const b of lowers) {
-            const x0 = Math.max(a.x, b.x);
-            const x1 = Math.min(a.x + a.dx, b.x + b.dx);
-            const y0 = Math.max(a.y, b.y);
-            const y1 = Math.min(a.y + a.dy, b.y + b.dy);
-            if (x1 - x0 <= EPSILON || y1 - y0 <= EPSILON) continue;
+            const { box, inNotch } = crossingOf(a, b);
+            if (box === null) {
+              const key = `${lower.layerId}/${JSON.stringify(b.source)}/${upper.layerId}`;
+              if (inNotch && !reportedInNotch.has(key)) {
+                reportedInNotch.add(key);
+                issues.push({
+                  severity: 'warning',
+                  code: 'board_in_notch',
+                  layerId: lower.layerId,
+                  layerKind: lower.kind,
+                  message: `${nameOf(b)} of ${describe(lower)} lies in a notch of ${describe(upper)}, so it has nothing to nail to there and blocks the fork`,
+                });
+              }
+              continue;
+            }
             between.push({
               face: face ?? 'top',
               upperLayerId: upper.layerId,
@@ -228,10 +315,7 @@ export function computeNails(
               lowerLayerId: lower.layerId,
               lowerSource: b.source,
               lowerKind: lower.kind,
-              x0,
-              y0,
-              x1,
-              y1,
+              ...box,
               z: face === 'bottom' ? b.z : a.z + a.dz,
               count: DEFAULT_NAIL_COUNT,
               defaultCount: DEFAULT_NAIL_COUNT,

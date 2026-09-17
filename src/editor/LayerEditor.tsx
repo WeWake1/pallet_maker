@@ -1,13 +1,17 @@
 import { useEffect, useRef } from 'react';
 import { fitRun } from '../geometry/fit.js';
+import { describeNotches } from '../geometry/parts.js';
 import type { LayerLayout, Layout } from '../geometry/types.js';
 import { mmLabel } from '../render/scene.js';
 import { LAYER_STYLE } from '../render/theme.js';
 import type { LayerStyle } from '../render/theme.js';
+import { NOTCH_RADIUS_MM } from '../types.js';
 import type { BlockCell, Direction, Layer, LayerContent, SheetSpec, Slot } from '../types.js';
 import type { Action, Selection } from './state.js';
 import { MAX_GRID_SIDE, MAX_SLOTS, sameSource } from './state.js';
 import { HINTS } from './hints.js';
+import { NOTCHES_PER_BOARD, defaultNotchPattern, notchPattern } from './notches.js';
+import type { NotchPattern } from './notches.js';
 import {
   Button,
   Check,
@@ -346,6 +350,109 @@ function AllBoards({
   );
 }
 
+/**
+ * The notches, for the whole layer at once: whether the runners are notched
+ * — which means two notches each, one for each fork — how big, and how far
+ * in from the ends. A stringer is specified that way and every runner in it
+ * is cut alike, so there is no per-board table under this row. A board
+ * notched differently by hand in the document reads here as "mixed", and
+ * typing anything cuts every board to what is typed.
+ *
+ * Only offered on runners — the boards that are notched — and on any layer
+ * that already carries notches, so nothing loaded is left uneditable.
+ */
+function Notches({
+  layer,
+  slots,
+  dispatch,
+  accent,
+}: {
+  layer: Layer;
+  slots: Slot[];
+  dispatch: (action: Action) => void;
+  accent?: LayerStyle;
+}) {
+  const patterns = slots.map(notchPattern);
+  const known = patterns.filter((pattern): pattern is NotchPattern => pattern !== null);
+  const custom = known.length < patterns.length;
+  const shared = (read: (pattern: NotchPattern) => number): number =>
+    custom ? Number.NaN : sharedNumber(known, read);
+
+  // Notched is every board having notches; a layer where some have and some
+  // have not reads as not, and ticking it cuts them all alike.
+  const count = shared((pattern) => pattern.count);
+  const notched = !custom && count > 0;
+  // What the three fields fall back to where they read "mixed", so a tick
+  // over a muddle still cuts something sensible.
+  const fallback = defaultNotchPattern(slots[0]?.length ?? 0);
+  const settled = (read: (pattern: NotchPattern) => number, base: number): number => {
+    const value = shared(read);
+    return Number.isNaN(value) ? base : value;
+  };
+  const set = (patch: Partial<NotchPattern>): void =>
+    dispatch({
+      type: 'setNotches',
+      layerId: layer.id,
+      pattern: {
+        count: settled((pattern) => pattern.count, 0),
+        lengthMm: settled((pattern) => pattern.lengthMm, fallback.lengthMm),
+        depthMm: settled((pattern) => pattern.depthMm, fallback.depthMm),
+        fromEndMm: settled((pattern) => pattern.fromEndMm, fallback.fromEndMm),
+        ...patch,
+      },
+    });
+
+  return (
+    <KeyFields
+      caption="Notches"
+      note={
+        notched
+          ? `two in the underside of every board here, the same on each, R${NOTCH_RADIUS_MM} at the top corners`
+          : 'none — tick to cut two into every board'
+      }
+      accent={accent}
+    >
+      <div className="mb-2 flex items-center gap-1.5">
+        <Check
+          checked={notched}
+          label="Notched — two cuts in the underside, so a fork gets in from the side"
+          onChange={(on) => set({ count: on ? NOTCHES_PER_BOARD : 0 })}
+        />
+        <Hint text={HINTS.notches} />
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        <Field label="Length">
+          <NumberInput
+            value={shared((pattern) => pattern.lengthMm)}
+            min={1}
+            disabled={!notched}
+            placeholder={MIXED}
+            onChange={(lengthMm) => set({ lengthMm })}
+          />
+        </Field>
+        <Field label="Depth">
+          <NumberInput
+            value={shared((pattern) => pattern.depthMm)}
+            min={1}
+            disabled={!notched}
+            placeholder={MIXED}
+            onChange={(depthMm) => set({ depthMm })}
+          />
+        </Field>
+        <Field label="From end" hint={HINTS.notchFromEnd}>
+          <NumberInput
+            value={shared((pattern) => pattern.fromEndMm)}
+            min={0}
+            disabled={!notched}
+            placeholder={MIXED}
+            onChange={(fromEndMm) => set({ fromEndMm })}
+          />
+        </Field>
+      </div>
+    </KeyFields>
+  );
+}
+
 function Slots({
   layer,
   slots,
@@ -359,14 +466,19 @@ function Slots({
   dispatch: (action: Action) => void;
   accent?: LayerStyle;
 }) {
-  const sizes = slots.map((slot) => `${slot.length}x${slot.width}x${slot.thickness}`);
+  // Two boards of one size cut differently are two sizes to the summary too.
+  const sizes = slots.map(
+    (slot) => `${slot.length}x${slot.width}x${slot.thickness} ${describeNotches(slot.notches)}`,
+  );
   // A board picked on the drawing has to be reachable, so a selection inside
   // this layer opens the table rather than hiding the row it just focused.
   const selectedHere = selection?.layerId === layer.id && selection.source.kind === 'slot';
+  const notched = layer.kind === 'runner' || slots.some((slot) => (slot.notches?.length ?? 0) > 0);
 
   return (
     <div className="mt-3 space-y-2">
       <AllBoards layer={layer} slots={slots} dispatch={dispatch} accent={accent} />
+      {notched && <Notches layer={layer} slots={slots} dispatch={dispatch} accent={accent} />}
       <Disclosure
         summary={componentSummary('board', sizes)}
         defaultOpen={sizeCount(sizes) > 1}

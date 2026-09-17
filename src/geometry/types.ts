@@ -15,6 +15,26 @@ import type { NailCrossing, NailDot } from './nails.js';
 /** Defined with the document types, since a nail placement is stored against one. */
 export type { PieceSource };
 
+/**
+ * A notch, placed: the box of timber that is not there, in pallet coordinates.
+ * Lies inside its piece's box, on the underside, and spans the piece right
+ * across. A renderer that knows nothing of notches draws the piece whole and is
+ * merely out of date; one that does cuts the bite out of the silhouette.
+ */
+export interface PlacedNotch {
+  x: number;
+  y: number;
+  z: number;
+  dx: number;
+  dy: number;
+  dz: number;
+  /**
+   * The radius its top corners are rounded to. The box above is the mouth
+   * and the depth; the shape of the cut inside it is `notchOutline`.
+   */
+  radius: number;
+}
+
 export interface PlacedPiece {
   /**
    * Which part this piece is one of. Derived from its kind, size, material and
@@ -36,6 +56,13 @@ export interface PlacedPiece {
   variant?: string;
   /** True when a manual nudge moved this piece off its evenly spaced position. */
   nudged: boolean;
+  /**
+   * Cuts in the underside, in the order they run along the piece. Absent on a
+   * plain box, which is every piece but a notched runner. The box above is the
+   * whole stick, notches included: bounds, footprints and painter ordering all
+   * read the box, since a notch never reaches outside it.
+   */
+  notches?: PlacedNotch[];
 }
 
 /**

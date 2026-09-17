@@ -1,11 +1,11 @@
 import type { Layout } from '../geometry/types.js';
-import { projectPieces, viewFrame } from '../render/project.js';
-import type { ViewKind } from '../render/project.js';
+import { profileOf, projectPieces, viewFrame } from '../render/project.js';
+import type { Projected, ViewKind } from '../render/project.js';
 import { TIER } from '../render/scene.js';
 import type { DimSpec } from '../render/scene.js';
 import { viewDimensions } from '../render/views.js';
 import type { LayerKind } from '../types.js';
-import { document, line, rectangle, text } from './writer.js';
+import { document, line, polyline, rectangle, text } from './writer.js';
 import type { LayerDefinition, Pair, Point } from './writer.js';
 
 /**
@@ -66,9 +66,7 @@ export function palletToDxf(layout: Layout, options: DxfOptions = {}): string {
 
   for (const item of projected) {
     kinds.add(item.piece.layerKind);
-    entities.push(
-      ...rectangle(LAYER_NAME[item.piece.layerKind], item.u, item.v, item.du, item.dv),
-    );
+    entities.push(...outline(LAYER_NAME[item.piece.layerKind], item, view));
   }
 
   // One lane per tier: detail dimensions inside, overall ones outside.
@@ -95,6 +93,21 @@ export function palletToDxf(layout: Layout, options: DxfOptions = {}): string {
       max: { x: frame.uSpan + reach, y: frame.vSpan + reach },
     },
   });
+}
+
+/**
+ * One closed outline per piece. A rectangle, except a notched runner seen in
+ * elevation, which is the rectangle with the bites out of its underside — the
+ * profile the sheet draws, from the same walk, in the view's own coordinates
+ * whichever way up the view happens to land in CAD.
+ */
+function outline(layer: string, item: Projected, view: ViewKind): Pair[] {
+  const bites = view === 'side' || view === 'end' ? item.cuts : [];
+  if (bites.length === 0) return rectangle(layer, item.u, item.v, item.du, item.dv);
+  return polyline(
+    layer,
+    profileOf(item).map(({ u, v }) => ({ x: u, y: v })),
+  );
 }
 
 /**

@@ -1,0 +1,174 @@
+{
+  "id": "fix-stringer-notched",
+  "palletCode": "AP-009",
+  "clientName": "Demo Client",
+  "palletName": "1200 x 1000 notched stringer",
+  "notes": "The stringer pallet with its runners notched underneath, so a fork can get in from the sides as well as the ends. Two notches per runner, 229 long and 38 deep, starting 300 from each end; the bottom boards sit clear of them.",
+  "overallLength": 1200,
+  "overallWidth": 1000,
+  "palletType": "stringer_2way",
+  "deckType": "double_face_non_reversible",
+  "entry": "partial_4way",
+  "species": "pine",
+  "planing": "none",
+  "staticLoadKg": 3000,
+  "dynamicLoadKg": 1000,
+  "layers": [
+    {
+      "id": "top",
+      "kind": "top_deck",
+      "order": 1,
+      "direction": "across_width",
+      "content": {
+        "type": "sequence",
+        "slots": [
+          {
+            "length": 1000,
+            "width": 120,
+            "thickness": 18,
+            "material": "pine",
+            "variant": "outer"
+          },
+          {
+            "length": 1000,
+            "width": 100,
+            "thickness": 18,
+            "material": "pine",
+            "variant": "inner"
+          },
+          {
+            "length": 1000,
+            "width": 100,
+            "thickness": 18,
+            "material": "pine",
+            "variant": "inner"
+          },
+          {
+            "length": 1000,
+            "width": 100,
+            "thickness": 18,
+            "material": "pine",
+            "variant": "inner"
+          },
+          {
+            "length": 1000,
+            "width": 100,
+            "thickness": 18,
+            "material": "pine",
+            "variant": "inner"
+          },
+          {
+            "length": 1000,
+            "width": 100,
+            "thickness": 18,
+            "material": "pine",
+            "variant": "inner"
+          },
+          {
+            "length": 1000,
+            "width": 120,
+            "thickness": 18,
+            "material": "pine",
+            "variant": "outer"
+          }
+        ]
+      }
+    },
+    {
+      "id": "runners",
+      "kind": "runner",
+      "order": 2,
+      "direction": "along_length",
+      "content": {
+        "type": "sequence",
+        "slots": [
+          {
+            "length": 1200,
+            "width": 100,
+            "thickness": 90,
+            "material": "pine",
+            "notches": [
+              {
+                "offsetMm": 300,
+                "lengthMm": 229,
+                "depthMm": 38
+              },
+              {
+                "offsetMm": 671,
+                "lengthMm": 229,
+                "depthMm": 38
+              }
+            ]
+          },
+          {
+            "length": 1200,
+            "width": 100,
+            "thickness": 90,
+            "material": "pine",
+            "notches": [
+              {
+                "offsetMm": 300,
+                "lengthMm": 229,
+                "depthMm": 38
+              },
+              {
+                "offsetMm": 671,
+                "lengthMm": 229,
+                "depthMm": 38
+              }
+            ]
+          },
+          {
+            "length": 1200,
+            "width": 100,
+            "thickness": 90,
+            "material": "pine",
+            "notches": [
+              {
+                "offsetMm": 300,
+                "lengthMm": 229,
+                "depthMm": 38
+              },
+              {
+                "offsetMm": 671,
+                "lengthMm": 229,
+                "depthMm": 38
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "bottom",
+      "kind": "bottom_deck",
+      "order": 3,
+      "direction": "across_width",
+      "content": {
+        "type": "sequence",
+        "slots": [
+          {
+            "length": 1000,
+            "width": 100,
+            "thickness": 18,
+            "material": "pine"
+          },
+          {
+            "length": 1000,
+            "width": 100,
+            "thickness": 18,
+            "material": "pine"
+          },
+          {
+            "length": 1000,
+            "width": 100,
+            "thickness": 18,
+            "material": "pine"
+          }
+        ]
+      }
+    }
+  ],
+  "clientId": "client-c28b5710",
+  "updatedAt": "2026-01-01"
+}

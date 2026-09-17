@@ -51,7 +51,13 @@ export interface Costing {
   total: number;
 }
 
-/** Timber volume alone, for anyone who only wants the CFT. */
+/**
+ * Timber volume alone, for anyone who only wants the CFT.
+ *
+ * The whole box of every piece, notches included: a notched runner is bought
+ * at its full length and the notch is offcut, so the full stick is what it
+ * costs.
+ */
 export function timberVolumeMm3(layout: Layout): number {
   return layout.pieces.reduce((sum, piece) => sum + piece.dx * piece.dy * piece.dz, 0);
 }

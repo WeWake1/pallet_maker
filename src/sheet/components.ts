@@ -39,7 +39,14 @@ export interface ComponentGroup {
   rows: ComponentRow[];
 }
 
-/** Domain vocabulary, used verbatim on the sheet. */
+/**
+ * Domain vocabulary, used verbatim on the sheet.
+ *
+ * A notched board is named as one — "Notched runners" — and no more: the
+ * sheet says what the part is, and the side view says what the cut measures.
+ * Where a layer is only partly notched, the rows are numbered off by their
+ * own descriptions, so the notched one still says so.
+ */
 const HEADING: Record<LayerKind, string> = {
   panel: 'Plywood sheet',
   top_deck: 'Top boards',
@@ -57,6 +64,10 @@ const DESCRIPTION: Record<LayerKind, string> = {
   runner: 'Runner',
   bottom_deck: 'Bottom board',
 };
+
+function notchedName(name: string): string {
+  return `Notched ${name.charAt(0).toLowerCase()}${name.slice(1)}`;
+}
 
 export function componentTable(pallet: Pallet, layout: Layout): ComponentGroup[] {
   const ordered = [...pallet.layers].sort((a, b) => a.order - b.order);
@@ -77,10 +88,12 @@ export function componentTable(pallet: Pallet, layout: Layout): ComponentGroup[]
     };
 
     const content = layer.content;
+    const notched = (slot: { notches?: unknown[] }): boolean => (slot.notches?.length ?? 0) > 0;
     if (content.type === 'sequence') {
       for (const slot of content.slots) {
+        const description = DESCRIPTION[layer.kind];
         add(slotSignature(layer, slot), {
-          description: DESCRIPTION[layer.kind],
+          description: notched(slot) ? notchedName(description) : description,
           variant: slot.variant ?? '',
           length: slot.length,
           width: slot.width,
@@ -108,11 +121,16 @@ export function componentTable(pallet: Pallet, layout: Layout): ComponentGroup[]
       });
     }
 
-    const heading = content.type === 'sheet' ? 'Plywood sheet' : HEADING[layer.kind];
+    const allNotched = content.type === 'sequence' && content.slots.every(notched);
+    const heading =
+      content.type === 'sheet'
+        ? 'Plywood sheet'
+        : allNotched
+          ? notchedName(HEADING[layer.kind])
+          : HEADING[layer.kind];
     const listed = [...rows.values()].sort((a, b) => a.partNo - b.partNo);
-    const singular = content.type === 'sheet' ? 'Plywood sheet' : DESCRIPTION[layer.kind];
     for (const [index, row] of listed.entries()) {
-      row.name = listed.length === 1 ? heading : `${singular}-${index + 1}`;
+      row.name = listed.length === 1 ? heading : `${row.description}-${index + 1}`;
     }
 
     return { layerId: layer.id, heading, rows: listed };

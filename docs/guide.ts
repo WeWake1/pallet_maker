@@ -163,6 +163,18 @@ ${page(`
     built, if it is easier to change one than to build one.
   </p>
 
+  <h2>A stringer pallet a fork can enter from the side</h2>
+  <p>
+    Runners take a fork from the two ends only. To let one in from the sides
+    as well, the runners are notched underneath. On the <strong>Runners</strong>
+    layer, tick <strong>Notched</strong> — every runner gets two — then say how
+    long and how deep the notches are and how far in from the ends they start.
+    The top corners are rounded to the standard radius on their own. The side
+    view draws them and dimensions them for the saw, and the sheet lists the
+    runner as a notched part. Start from example… → <code>gma-48x40</code> is
+    the American 48 × 40 GMA pallet, built exactly that way.
+  </p>
+
   <h2>Saving, and keeping an old design</h2>
   <p>
     <strong>Save</strong> overwrites the design. There is no history and nothing

@@ -97,7 +97,7 @@ const absent = {
     'note',
     'updatedAt',
   ],
-  slot: ['joinedToPrev', 'nudgeMm', 'variant'],
+  slot: ['joinedToPrev', 'nudgeMm', 'variant', 'notches'],
   layer: ['spanMm', 'offsetMm', 'runSpanMm', 'runOffsetMm'],
 } as const;
 

@@ -1,0 +1,193 @@
+{
+  "id": "fix-gma-48x40",
+  "palletCode": "GMA-48x40",
+  "clientName": "Demo Client",
+  "palletName": "48 x 40 GMA",
+  "notes": "The 48 x 40 in GMA stringer pallet to the NWPCA Pallet Design System sheet, in whole millimetres. Inner bottom boards sit between the notches, the outer two butted to the notch mouths.",
+  "overallLength": 1219,
+  "overallWidth": 1016,
+  "palletType": "stringer_2way",
+  "deckType": "double_face_non_reversible",
+  "entry": "partial_4way",
+  "species": "mixed hardwood",
+  "planing": "none",
+  "staticLoadKg": 3100,
+  "dynamicLoadKg": 1590,
+  "layers": [
+    {
+      "id": "top",
+      "kind": "top_deck",
+      "order": 1,
+      "direction": "across_width",
+      "content": {
+        "type": "sequence",
+        "slots": [
+          {
+            "length": 1016,
+            "width": 140,
+            "thickness": 16,
+            "material": "hardwood",
+            "variant": "lead"
+          },
+          {
+            "length": 1016,
+            "width": 89,
+            "thickness": 16,
+            "material": "hardwood",
+            "variant": "inner"
+          },
+          {
+            "length": 1016,
+            "width": 89,
+            "thickness": 16,
+            "material": "hardwood",
+            "variant": "inner"
+          },
+          {
+            "length": 1016,
+            "width": 89,
+            "thickness": 16,
+            "material": "hardwood",
+            "variant": "inner"
+          },
+          {
+            "length": 1016,
+            "width": 89,
+            "thickness": 16,
+            "material": "hardwood",
+            "variant": "inner"
+          },
+          {
+            "length": 1016,
+            "width": 89,
+            "thickness": 16,
+            "material": "hardwood",
+            "variant": "inner"
+          },
+          {
+            "length": 1016,
+            "width": 140,
+            "thickness": 16,
+            "material": "hardwood",
+            "variant": "lead"
+          }
+        ]
+      }
+    },
+    {
+      "id": "stringers",
+      "kind": "runner",
+      "order": 2,
+      "direction": "along_length",
+      "content": {
+        "type": "sequence",
+        "slots": [
+          {
+            "length": 1219,
+            "width": 35,
+            "thickness": 89,
+            "material": "hardwood",
+            "notches": [
+              {
+                "offsetMm": 152,
+                "lengthMm": 229,
+                "depthMm": 35
+              },
+              {
+                "offsetMm": 838,
+                "lengthMm": 229,
+                "depthMm": 35
+              }
+            ]
+          },
+          {
+            "length": 1219,
+            "width": 35,
+            "thickness": 89,
+            "material": "hardwood",
+            "notches": [
+              {
+                "offsetMm": 152,
+                "lengthMm": 229,
+                "depthMm": 35
+              },
+              {
+                "offsetMm": 838,
+                "lengthMm": 229,
+                "depthMm": 35
+              }
+            ]
+          },
+          {
+            "length": 1219,
+            "width": 35,
+            "thickness": 89,
+            "material": "hardwood",
+            "notches": [
+              {
+                "offsetMm": 152,
+                "lengthMm": 229,
+                "depthMm": 35
+              },
+              {
+                "offsetMm": 838,
+                "lengthMm": 229,
+                "depthMm": 35
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "bottom",
+      "kind": "bottom_deck",
+      "order": 3,
+      "direction": "across_width",
+      "content": {
+        "type": "sequence",
+        "slots": [
+          {
+            "length": 1016,
+            "width": 140,
+            "thickness": 16,
+            "material": "hardwood",
+            "variant": "lead"
+          },
+          {
+            "length": 1016,
+            "width": 89,
+            "thickness": 16,
+            "material": "hardwood",
+            "variant": "inner",
+            "nudgeMm": 73
+          },
+          {
+            "length": 1016,
+            "width": 89,
+            "thickness": 16,
+            "material": "hardwood",
+            "variant": "inner"
+          },
+          {
+            "length": 1016,
+            "width": 89,
+            "thickness": 16,
+            "material": "hardwood",
+            "variant": "inner",
+            "nudgeMm": -73
+          },
+          {
+            "length": 1016,
+            "width": 140,
+            "thickness": 16,
+            "material": "hardwood",
+            "variant": "lead"
+          }
+        ]
+      }
+    }
+  ],
+  "clientId": "client-c28b5710",
+  "updatedAt": "2026-01-01"
+}

@@ -2,6 +2,7 @@ import type {
   BlockGrid,
   Direction,
   Layer,
+  Notch,
   Pallet,
   SheetSpec,
   Slot,
@@ -9,11 +10,13 @@ import type {
 import { EPSILON, distribute, distributeEvenly } from './distribute.js';
 import { boundingBox, overhangOf } from './footprint.js';
 import { computeNails } from './nails.js';
+import { notchRadius } from './notch.js';
 import { cellSignature, partNumbers, sheetSignature, slotSignature } from './parts.js';
 import type {
   Layout,
   LayerLayout,
   LayoutIssue,
+  PlacedNotch,
   PlacedPiece,
 } from './types.js';
 import { PalletLayoutError } from './types.js';
@@ -335,7 +338,7 @@ function placeSequence(
   slots.forEach((slot, i) => {
     const across = spread.positions[i]!;
     checkRun(pallet, layer, slot.length, issues);
-    pieces.push({
+    const piece: PlacedPiece = {
       partNo: parts.get(slotSignature(layer, slot)) ?? 0,
       layerKind: layer.kind,
       layerId: layer.id,
@@ -349,7 +352,12 @@ function placeSequence(
       material: slot.material,
       ...(slot.variant !== undefined ? { variant: slot.variant } : {}),
       nudged: slot.nudgeMm !== 0,
-    });
+    };
+    if (slot.notches && slot.notches.length > 0) {
+      checkNotches(layer, slot, i, issues);
+      piece.notches = placeNotches(piece, slot.notches, run);
+    }
+    pieces.push(piece);
   });
 
   return {
@@ -489,6 +497,74 @@ function placeGrid(
     rows,
     cols,
   };
+}
+
+/**
+ * A slot's notches as boxes cut from its placed piece. Each runs from the
+ * piece's own start along its run, spans it right across, and stands its depth
+ * up from the underside. In the order they run, whatever order they were typed.
+ */
+function placeNotches(piece: PlacedPiece, notches: Notch[], run: 'x' | 'y'): PlacedNotch[] {
+  return [...notches]
+    .sort((a, b) => a.offsetMm - b.offsetMm)
+    .map((notch) =>
+      run === 'x'
+        ? {
+            x: piece.x + notch.offsetMm,
+            y: piece.y,
+            z: piece.z,
+            dx: notch.lengthMm,
+            dy: piece.dy,
+            dz: notch.depthMm,
+            radius: notchRadius(notch),
+          }
+        : {
+            x: piece.x,
+            y: piece.y + notch.offsetMm,
+            z: piece.z,
+            dx: piece.dx,
+            dy: notch.lengthMm,
+            dz: notch.depthMm,
+            radius: notchRadius(notch),
+          },
+    );
+}
+
+/**
+ * A notch has to be cut from timber that is there: inside the board's length,
+ * shallower than the board, and clear of the other notches. Each is an error,
+ * since a runner drawn with a notch past its end or right through it is not a
+ * runner that can be made.
+ */
+function checkNotches(layer: Layer, slot: Slot, index: number, issues: LayoutIssue[]): void {
+  const board = `board ${index + 1} of ${describe(layer)}`;
+  const notches = [...(slot.notches ?? [])].sort((a, b) => a.offsetMm - b.offsetMm);
+  const fail = (code: string, message: string): void => {
+    issues.push({ severity: 'error', code, layerId: layer.id, layerKind: layer.kind, message });
+  };
+
+  notches.forEach((notch, i) => {
+    const end = notch.offsetMm + notch.lengthMm;
+    if (end - slot.length > EPSILON) {
+      fail(
+        'notch_overrun',
+        `${board} has a notch running to ${end} along a board only ${slot.length} long`,
+      );
+    }
+    if (notch.depthMm - slot.thickness >= -EPSILON) {
+      fail(
+        'notch_too_deep',
+        `${board} has a notch ${notch.depthMm} deep in a board only ${slot.thickness} thick, which cuts it in two`,
+      );
+    }
+    const next = notches[i + 1];
+    if (next && next.offsetMm - end < -EPSILON) {
+      fail(
+        'notch_overlap',
+        `${board} has a notch starting at ${next.offsetMm}, inside the one that runs to ${end}`,
+      );
+    }
+  });
 }
 
 function reportOverfull(

@@ -1,5 +1,5 @@
 import type { PlacedPiece } from '../geometry/types.js';
-import { paintOrder } from './isometric.js';
+import { paintOrder, pieceFaces } from './isometric.js';
 import type { IsoPoint } from './isometric.js';
 
 /**
@@ -158,38 +158,16 @@ export interface Face {
 }
 
 /**
- * The three faces of a piece that face the eye: one per axis, at whichever end
- * of that axis the eye is on. A face square to the screen projects to a line,
- * which is right — that is what a box looks like edge on.
+ * The faces of a piece that face the eye: for a box, one per axis, at whichever
+ * end of that axis the eye is on; for a notched runner, its notches too. See
+ * `pieceFaces`. A face square to the screen projects to a line, which is
+ * right — that is what a box looks like edge on.
  */
 export function visibleFaces(p: PlacedPiece, view: View): Face[] {
-  const x0 = p.x;
-  const x1 = p.x + p.dx;
-  const y0 = p.y;
-  const y1 = p.y + p.dy;
-  const z0 = p.z;
-  const z1 = p.z + p.dz;
-  const x = view.eye.x >= 0 ? x1 : x0;
-  const y = view.eye.y >= 0 ? y1 : y0;
-  const z = view.eye.z >= 0 ? z1 : z0;
-  const at = (px: number, py: number, pz: number): IsoPoint => project(view, px, py, pz);
-  return [
-    {
-      // The face square to the width.
-      name: 'left',
-      points: [at(x0, y, z0), at(x1, y, z0), at(x1, y, z1), at(x0, y, z1)],
-    },
-    {
-      // Square to the length.
-      name: 'right',
-      points: [at(x, y0, z0), at(x, y1, z0), at(x, y1, z1), at(x, y0, z1)],
-    },
-    {
-      // Square to the height: the deck face, or the underside from below.
-      name: 'top',
-      points: [at(x0, y0, z), at(x1, y0, z), at(x1, y1, z), at(x0, y1, z)],
-    },
-  ];
+  return pieceFaces(p, view.eye).map((face) => ({
+    name: face.name,
+    points: face.corners.map(([x, y, z]) => project(view, x, y, z)),
+  }));
 }
 
 const EPSILON = 1e-6;

@@ -258,6 +258,8 @@ describe('the 3D view', () => {
       'nudged-top-board',
       'plywood-type3',
       'stringer-2way',
+      'stringer-notched',
+      'gma-48x40',
     ]) {
       const svg = renderOrbit(computeLayout(loadFixture(name)), {
         orientation: { yaw: 1.3, pitch: 0.35 },

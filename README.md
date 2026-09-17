@@ -847,6 +847,7 @@ Everything below falls out of that; none of it is a code path of its own.
 |---|---|
 | Block, 4-way | Top boards, centre boards, a 3 x 3 block grid, bottom boards |
 | Stringer, 2-way | Runners in place of the block layer: full length pieces along the pallet, so forks go in from two sides only |
+| Stringer, partial 4-way | The same, with the runners notched underneath so a fork gets in from the sides too. Notches on the runners, not a pallet type of its own. `gma-48x40` is the 48 × 40 in GMA pallet, to the NWPCA sheet |
 | Wing | Any of these with the deck wider than the base. Span and offset, not a special case |
 | Plywood type 1 | A sheet straight onto the blocks |
 | Plywood type 2 | A sheet onto centre boards that connect the blocks |
@@ -892,6 +893,78 @@ that arithmetic: it reads the run left free by the boards sharing the level and
 writes the run span, the run offset and the board lengths together, so the three
 cannot disagree. It fills the fields in and leaves them yours to change; nothing
 is applied behind the form.
+
+### Notched runners
+
+A stringer pallet takes a fork from its two ends. To take one from the sides as
+well — the *partial 4-way* pallet — the runners are notched: two cuts in the
+underside of each, right through its width, deep enough for a tine to pass and
+long enough for it to be aimed. The notch is on the board, not on the pallet: a
+board carries `notches`, each with an `offsetMm` from the board's own start, a
+`lengthMm` at the mouth and a `depthMm`. A board without any is exactly the
+document it was before, so nothing already saved changes and no part renumbers;
+a notched runner is a different part from a plain one, and the components table
+names it so — *Notched runners* — and no more: the side view carries the sizes.
+
+The cut has square corners at the mouth, where the saw goes in, and rounded
+corners at the top, where the cutter comes round from the wall onto the
+ceiling. The radius is not a setting: it is `NOTCH_RADIUS_MM`, 38 mm, the R1.5
+in of the GMA pallet, and a notch too short for it takes what fits
+(`notchRadius`). That radius is deeper than the GMA's 1.38 in cut, which is
+what the real notch looks like — no straight wall at all, one sweep from the
+mouth corner up to the flat ceiling. [src/geometry/notch.ts](src/geometry/notch.ts)
+works the outline out once, from the mouth corner round to the other, and every
+drawing below reads it.
+
+The editor asks for them the way a stringer is specified: on a runner layer,
+tick **Notched** — a notched runner has two, one for each fork, so there is
+nothing to count — then how long, how deep, and how far in from the ends, and
+every runner in the layer is cut alike. Cut a runner to a new length and
+notches set by that row keep their distance from its ends; notches placed by
+hand in the document stay where they are, and the layout says if they no longer
+fit (`notch_overrun`, `notch_too_deep`, `notch_overlap`).
+
+This is the first piece that is not a box, and it is carried as a box with the
+timber that is not there listed on it (`PlacedPiece.notches`), so everything
+that reads the box — footprints, overhangs, painter ordering, volume — is
+untouched, and only what draws the piece had to learn the shape:
+
+- **The side view** draws the runner as its profile, bites and all, and
+  dimensions them for the saw: a chain along the underside — end to notch,
+  notch, the timber between, all measured at the mouth — and the depth, on the
+  left. The entry clearance, which on a 2-way stringer was the blind face, is
+  now measured through the notches: the lowest notch ceiling to whatever floors
+  the pocket, and only where *every* runner is cut — one notched runner is a
+  hole in a runner, not a way in. It sits on the right with the overall height,
+  a side away from the depth: both end on the notch ceiling and differ by the
+  bottom board, and next to each other they read as a contradiction.
+- **The end view and the top view** are unchanged: end on, the timber either
+  side of a notch fills the outline, and from above it is underneath. The
+  bottom view outlines each notch on the runner, so the cuts can be read
+  against the bottom boards beside them.
+- **The isometric and the 3D view** draw the profile, and the inside of each
+  notch as a run of strips across the board — wall, rounded corner, ceiling —
+  each shown when it faces the eye; from underneath, the underside comes in
+  pieces between the notches. What is behind a runner shows through its bites.
+- **Nails.** A crossing is taken on the timber that is there; a bottom board
+  lying wholly in a notch has nothing to be nailed to, blocks the fork, and is
+  reported (`board_in_notch`).
+- **The DXF** writes the same profile as one closed polyline in an elevation.
+  The plan, which is the default, is unchanged.
+
+Costing still counts the whole stick. The runner is bought at its full length
+and the notch is offcut, so that is what it costs.
+
+`fixtures/gma-48x40.json` is the 48 × 40 in GMA pallet as the NWPCA Pallet
+Design System draws it, in whole millimetres: 35 × 89 stringers notched 229 ×
+35 at 152 from each end, R38; 16 mm deck boards, leads 140 wide and the rest
+89; and the bottom deck's inner boards clustered between the notches, the outer
+two butted to the notch mouths, which here is a nudge of 73 on each. The loads
+are the PDS sheet's safe figures for that build in mixed hardwood — stacked one
+high, and on forks. Its nail schedule (84 × 2 in helically threaded) is left
+off, as on the other examples: the schedule is the estimator's to type, and
+with it the data column overruns the page. It is in the editor's *Start from an
+example* list with the rest.
 
 ## Nails
 
