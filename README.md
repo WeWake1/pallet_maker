@@ -112,6 +112,14 @@ the bearer over the board it holds up. Pieces that overlap on screen are ordered
 pairwise instead — one is behind another when it is entirely on the far side
 along one axis — and the result is topologically sorted.
 
+The editor's 3D view (`src/render/orbitView.ts`) is the same drawing with the
+eye placed by two angles, and the picture on a library card
+(`src/render/thumbnail.ts`) is that view at the isometric's angle, fitted to
+the card so that it can be spun about the vertical without ever leaving its
+box. Cards are drawn in the browser from the design itself, fetched as each
+card scrolls into view and kept; only the card under the pointer is ever
+redrawn (`src/editor/Thumbnail.tsx`).
+
 Lengths in the SVG are CSS pixels, so a view embedded at its natural size puts 1
 unit at 1/96 inch on paper and the stroke weights above land as drawn. Pass
 `scale` to force one scale across several views, or `maxScale` to cap it while
