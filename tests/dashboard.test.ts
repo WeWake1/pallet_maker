@@ -15,6 +15,7 @@ function design(fields: Partial<PalletSummary> & { id: string }): PalletSummary 
     palletCode: '',
     palletName: '',
     updatedAt: '2026-01-01',
+    fingerprint: '00000000',
     ...fields,
   };
 }

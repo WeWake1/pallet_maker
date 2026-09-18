@@ -31,6 +31,12 @@ export interface PalletSummary {
   palletCode: string;
   palletName: string;
   updatedAt: string;
+  /**
+   * Which version of the design this is a summary of. The date is only a
+   * date, so it is what tells the dashboard that a picture it drew this
+   * morning is of a design that has since been saved again.
+   */
+  fingerprint: string;
 }
 
 /** A client and every design of theirs: one section of the dashboard. */
@@ -207,6 +213,7 @@ export class PalletRepository {
         palletCode: design.palletCode,
         palletName: design.palletName,
         updatedAt: design.updatedAt,
+        fingerprint: fingerprint(design),
       }))
       .sort(
         (a, b) =>

@@ -1,7 +1,10 @@
 import { useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
+import { analysePallet } from '../geometry/layout.js';
 import type { ClientDesigns, PalletSummary } from './api.js';
 import { draftAge } from './drafts.js';
 import type { Draft } from './drafts.js';
+import { Thumbnail, useDesignLayout, useInView } from './Thumbnail.jsx';
 import { Button, Menu, MenuItem } from './ui.jsx';
 
 /**
@@ -19,6 +22,10 @@ import { Button, Menu, MenuItem } from './ui.jsx';
  * A card carries what is most often wanted of a design that is not being
  * changed — its sheet, a copy of it, the design itself as a file, and its
  * removal — so that none of them needs the editor opened first.
+ *
+ * Every card has a picture of its pallet, because "1200 x 800" is what half
+ * the cards on the shelf say and the picture is what tells a block pallet
+ * from a stringer one at a glance. See Thumbnail.tsx for where it comes from.
  */
 
 /**
@@ -34,6 +41,13 @@ const SORTS: Array<[SortOrder, string]> = [
   ['recent', 'Recently edited'],
   ['name', 'Code and name'],
 ];
+
+/**
+ * One size for every card in a row — design, recovered draft and the blank one
+ * that starts a new design — so the rows stay rows. Tall enough for the
+ * picture and, under it, the name, the code and two short lines.
+ */
+const CARD = 'h-47 w-44';
 
 export interface DesignActions {
   onOpen: (id: string) => void;
@@ -408,9 +422,9 @@ function ClientSection({
             disabled={busy}
             onClick={() => onCreate(client.id)}
             title={`New design for ${client.name}`}
-            className="flex h-28 w-44 flex-col items-center justify-center rounded-card border-2 border-dashed
+            className={`flex ${CARD} flex-col items-center justify-center rounded-card border-2 border-dashed
                        border-line bg-card px-3 text-center text-ink-faint transition-colors
-                       hover:border-accent hover:bg-blue-50/40 hover:text-accent disabled:opacity-40"
+                       hover:border-accent hover:bg-blue-50/40 hover:text-accent disabled:opacity-40`}
           >
             <span className="text-2xl leading-none">+</span>
             <span className="mt-1 text-label font-medium">New design</span>
@@ -450,28 +464,37 @@ function DesignCard({
   actions: DesignActions;
 }) {
   const name = design.palletName || 'Untitled';
+  const card = useRef<HTMLDivElement>(null);
+  // The picture is of the design the store holds, which is what the card is
+  // a card of; a draft's own changes are seen by opening it.
+  const layout = useDesignLayout(design.id, design.fingerprint, useInView(card));
+  const [resting, setResting] = useState(false);
 
   return (
     <div
-      className={`group relative flex h-28 w-44 flex-col rounded-card border bg-card shadow-card
+      ref={card}
+      className={`group relative flex ${CARD} flex-col overflow-hidden rounded-card border bg-card shadow-card
                   transition-all hover:-translate-y-0.5 hover:shadow-raised ${
                     unsaved ? 'border-amber-400' : 'border-line'
                   }`}
+      // A mouse resting on the card turns the pallet. A finger cannot rest,
+      // and a tap that set the pallet turning would leave it turning.
+      onPointerEnter={(event) => setResting(event.pointerType === 'mouse')}
+      onPointerLeave={() => setResting(false)}
     >
       <button
         type="button"
         onClick={() => actions.onOpen(design.id)}
         title={unsaved ? 'Has changes that were never saved. Opening it picks them up.' : `Open ${name}`}
-        className="flex min-h-0 flex-1 flex-col rounded-card p-3 pb-2 pr-8 text-left"
+        className="flex min-h-0 flex-1 flex-col text-left"
       >
-        <span className="truncate text-ui font-semibold text-ink">{name}</span>
-        <span className="truncate text-label text-ink-faint">{design.palletCode || 'no code'}</span>
-        {/* The date reads with the design rather than with the buttons: it is
-            something the card says, not something the card does. */}
-        <span className="mt-auto flex items-center gap-1.5 text-micro">
-          <span className="whitespace-nowrap tabular-nums text-slate-400">{design.updatedAt}</span>
+        <Thumbnail layout={layout} turning={resting} />
+        <CardWords name={name} code={design.palletCode}>
+          {/* The date reads with the design rather than with the buttons: it is
+              something the card says, not something the card does. */}
+          <span className="tabular-nums text-slate-400">{design.updatedAt}</span>
           {unsaved && <span className="font-medium text-amber-700">unsaved</span>}
-        </span>
+        </CardWords>
       </button>
 
       {/* What is most often wanted of a design that is not being changed: its
@@ -545,15 +568,22 @@ function DraftCard({
   onDiscard: () => void;
 }) {
   const { pallet } = draft;
+  // The design is right here, so there is nothing to fetch.
+  const layout = useMemo(() => analysePallet(pallet), [pallet]);
+  const [resting, setResting] = useState(false);
+
   return (
-    <div className="relative flex h-28 w-44 flex-col rounded-card border border-dashed border-amber-400 bg-amber-50 shadow-card transition-all hover:-translate-y-0.5 hover:shadow-raised">
-      <button type="button" onClick={onOpen} className="flex flex-1 flex-col rounded-card p-3 text-left">
-        <span className="truncate pr-5 text-ui font-semibold text-ink">
-          {pallet.palletName || 'Untitled'}
-        </span>
-        <span className="truncate text-label text-ink-faint">{pallet.palletCode || 'no code'}</span>
-        <span className="mt-auto text-micro font-medium text-amber-700">never saved</span>
-        <span className="text-micro text-ink-faint">edited {draftAge(draft.at)}</span>
+    <div
+      className={`relative flex ${CARD} flex-col overflow-hidden rounded-card border border-dashed border-amber-400 bg-amber-50 shadow-card transition-all hover:-translate-y-0.5 hover:shadow-raised`}
+      onPointerEnter={(event) => setResting(event.pointerType === 'mouse')}
+      onPointerLeave={() => setResting(false)}
+    >
+      <button type="button" onClick={onOpen} className="flex min-h-0 flex-1 flex-col text-left">
+        <Thumbnail layout={layout} turning={resting} />
+        <CardWords name={pallet.palletName || 'Untitled'} code={pallet.palletCode}>
+          <span className="font-medium text-amber-700">never saved</span>
+          <span className="text-ink-faint">edited {draftAge(draft.at)}</span>
+        </CardWords>
       </button>
       <button
         type="button"
@@ -565,6 +595,34 @@ function DraftCard({
         ×
       </button>
     </div>
+  );
+}
+
+/**
+ * What a card says, under its picture: the name, the code, and at the foot
+ * the date on a stored design or the state of a recovered one.
+ *
+ * The foot is a row of short things — a date and "unsaved", or "never saved"
+ * and how long ago — that sit together when they fit and go one under the
+ * other when they do not, each kept whole.
+ */
+function CardWords({
+  name,
+  code,
+  children,
+}: {
+  name: string;
+  code: string;
+  children: ReactNode;
+}) {
+  return (
+    <span className="flex min-h-0 w-full flex-1 flex-col border-t border-line-soft px-3 pb-2.5 pt-2">
+      <span className="truncate text-ui font-semibold text-ink">{name}</span>
+      <span className="truncate text-label text-ink-faint">{code || 'no code'}</span>
+      <span className="mt-auto flex flex-wrap items-center gap-x-1.5 text-micro whitespace-nowrap">
+        {children}
+      </span>
+    </span>
   );
 }
 

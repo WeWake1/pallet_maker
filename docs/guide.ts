@@ -62,7 +62,7 @@ ${page(`
 
   <h2>The screen</h2>
   <table class="plain">
-    <tr><th>Designs</th><td>The screen you land on: every client in turn, with their designs as cards. Click a card to open it.</td></tr>
+    <tr><th>Designs</th><td>The screen you land on: every client in turn, with their designs as cards. Each card shows its pallet as it is drawn on the sheet; rest the mouse on one and the pallet turns round. Click a card to open it.</td></tr>
     <tr><th>+ Client</th><td>Adds a customer. They get a section of their own straight away, even before anything is drawn for them.</td></tr>
     <tr><th>+ New design</th><td>The blank card at the end of a client's row. Starts a fresh design for that client.</td></tr>
     <tr><th>Middle</th><td>The form. This is where all the typing happens.</td></tr>

@@ -50,7 +50,7 @@ export function Preview({
   selection: Selection | null;
   dispatch: (action: Action) => void;
 }) {
-  const [mode, setMode] = useState<Mode>('top');
+  const [mode, setMode] = useState<Mode>('orbit');
   const [orientation, setOrientation] = useState<Orientation>(ISO_ORIENTATION);
   const [zoom, setZoom] = useState(1);
   const [placingNails, setPlacingNails] = useState(false);

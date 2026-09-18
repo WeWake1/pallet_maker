@@ -33,6 +33,16 @@ export interface OrbitOptions {
   /** Multiplies the fitted scale. */
   zoom?: number;
   /**
+   * Px per mm, in place of the fit to the diagonal. The drawing is still
+   * centred on the pallet; what falls outside the box is the caller's to
+   * have allowed for. `zoom` is ignored.
+   */
+  scale?: number;
+  /** Draw the nails of the face the eye is on. Default true. */
+  nails?: boolean;
+  /** Name the drawing in a `<title>`. Default true. */
+  title?: boolean;
+  /**
    * Tag each piece with its index in `layout.pieces`, so a click can be taken
    * back to the row that produced it. Selection only, as in the flat views.
    */
@@ -50,7 +60,7 @@ export function renderOrbit(layout: Layout, options: OrbitOptions): string {
   const idPrefix = `${options.idPrefix ?? 'view'}-orbit`;
   const width = Math.max(options.width, 2 * MARGIN + 1);
   const height = Math.max(options.height, 2 * MARGIN + 1);
-  const blank = { width, height, idPrefix, title: ORBIT_TITLE };
+  const blank = { width, height, idPrefix, title: options.title === false ? '' : ORBIT_TITLE };
 
   if (layout.pieces.length === 0) return svgDocument({ ...blank, body: '' });
 
@@ -64,7 +74,7 @@ export function renderOrbit(layout: Layout, options: OrbitOptions): string {
   const diagonal =
     Math.hypot(extent.x1 - extent.x0, extent.y1 - extent.y0, extent.z1 - extent.z0) || 1;
   const room = Math.min(width - 2 * MARGIN, height - 2 * MARGIN);
-  const scale = (room / diagonal) * (options.zoom ?? 1);
+  const scale = options.scale ?? (room / diagonal) * (options.zoom ?? 1);
 
   // The centre of that box is the pivot, so turning the view rotates the pallet
   // in place instead of swinging it about the origin.
@@ -99,7 +109,7 @@ export function renderOrbit(layout: Layout, options: OrbitOptions): string {
 
   const body =
     group({ 'shape-rendering': 'geometricPrecision' }, solid) +
-    drawNails(layout, view, px, py) +
+    (options.nails === false ? '' : drawNails(layout, view, px, py)) +
     drawSelection(layout, options.selectedPiece, view, points);
 
   return svgDocument({ ...blank, body });
