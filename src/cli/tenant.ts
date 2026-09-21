@@ -97,7 +97,7 @@ try {
       const folder = new Tenants(dataRoot, registry).context(tenant).handle.require().root;
       console.log(`Made ${tenant.name} (${tenant.slug}), dates in ${tenant.timezone}.`);
       console.log(`Its designs are in ${folder}`);
-      console.log(`Put its branding in ${join(folder, 'brand.json')} and its prices in ${join(folder, 'rates.json')}.`);
+      console.log(`Put its branding in ${join(folder, 'brand.json')}.`);
 
       const admin = flag(argv, 'admin');
       if (admin) offer('invite', tenant.id, admin, 'admin');

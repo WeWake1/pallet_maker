@@ -13,7 +13,6 @@ import type { LayerKind, Pallet } from '../types.js';
  *
  * No material per row: the pallet states its species once, and where a part is
  * made of something else — the panel on a plywood pallet — the part names it.
- * Costing reads material off the pieces, not off this table.
  */
 
 export interface ComponentRow {

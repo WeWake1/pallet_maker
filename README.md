@@ -23,8 +23,6 @@ component.
 | [src/editor/](src/editor/) | The React editor: form, live preview, nudge |
 | [docs/guide.ts](docs/guide.ts) | The user guide, drawings and all |
 | [src/dxf/](src/dxf/) | DXF R12 output, from `PlacedPiece[]` |
-| [src/costing/](src/costing/) | Timber volume and cost, at the rates in the config |
-| [config/rates.json](config/rates.json) | Every rate the tool knows. Edit here, nowhere else |
 | [src/server/](src/server/) | The API over the store, and the server entry point |
 | [src/server/auth.ts](src/server/auth.ts) | Passwords, sessions and cookies: who is asking |
 | [src/tenancy/](src/tenancy/) | The companies on a server, and which folder each request may see |
@@ -58,7 +56,6 @@ npm run sheet -- fixtures/wing-both-decks.json --svg       # the same sheet as o
 npm run dxf -- fixtures/wing-both-decks.json --out out    # R12 DXF
 npm run brand                                            # check a brand file and say what it comes out as
 npm run sheet -- fixtures/wing-both-decks.json --brand config/brand.json
-npm run costing -- fixtures/block-1000x800.json           # timber volume and cost
 npm run guide                                            # the user guide, HTML and PDF
 npm run build:server                                     # the server as one file, dist/server/main.mjs
 npm run backup -- data/library --keep 30                 # snapshot the library, as the nightly timer does
@@ -147,8 +144,13 @@ blank it prints as a dash and stays on the sheet, because a question nobody has
 answered yet is one the shop should be able to see is open. Set to `na` — typed
 into a field, or picked as *not applicable* from a list — the whole row comes
 off the sheet and the rows below it close up. Species, planing, both loads,
-type, entry and deck all work this way; the overall size and the two tolerances
-are on every sheet whatever the design.
+type, entry, deck and the two tolerances all work this way; the overall size is
+on every sheet whatever the design.
+
+The two tolerances start at `± 2 mm` for a component and `± 5 mm` overall,
+which is what they were when they were house conventions rather than the
+design's own. A design that has never touched them prints exactly what it
+always printed.
 
 ### Handling
 
@@ -227,12 +229,17 @@ in the bottom right corner, where a title block's owner belongs on a drawing.
 
 **None of it is in the program.** Which company, which mark and which face are
 read from a `brand.json` — the one that ships in [config/](config/), or one
-beside the designs, which takes its place. That is the same arrangement as the
-prices, and for the same reason: a company changes its own artwork by putting a
-file in its own folder, not by waiting for a release. A copy of the program
+beside the designs, which takes its place. A company's branding is set once,
+when it is taken on, and then left alone; it is changed by putting a file in
+that company's folder, not by waiting for a release. A copy of the program
 nobody has told prints no name and no mark at all, which is the honest thing —
 a sheet carrying whatever company the program was last built for would say
 something false about who drew it.
+
+**Only the vendor sets it.** A company's own administrator looks after its
+people and nothing else: the brand routes are not mounted under `/api/admin` at
+all, so a sheet's identity is not something the company on it can retype. See
+[Who may do what](#who-may-do-what).
 
 `npm run brand` reads a brand file and says what it comes out as: the mark's
 kind and printed size, the face and how much it adds to every sheet, and the
@@ -246,14 +253,15 @@ The file names its artwork rather than holding it:
   "logo": "brand/logo.svg",
   "font": { "family": "Acme Sans", "file": "brand/font.otf", "advanceEm": 0.49 },
   "projectionNote": "Third-angle projection, all dimensions in mm",
-  "tolerances": { "component": "± 1 mm", "pallet": "± 3 mm" },
-  "units": { "volume": "m3" },
   "defaults": { "species": "spruce", "nailType": "ring shank" }
 }
 ```
 
 Everything in it may be left out, and a file saying nothing but a name is a
-good brand file. A brand that will not read is **not** quietly ignored: the
+good brand file. Keys it no longer knows — `tolerances` and `units`, which
+moved onto the design and out of the program — are ignored, so a brand file
+written before that still reads. A brand that will not read is **not** quietly
+ignored: the
 built-in one is used so that work goes on, and the editor says so in a banner
 that stays — a sheet going to a customer under the wrong name, or under none,
 is not something to find out about from the customer.
@@ -422,9 +430,9 @@ drawing was rebuilt, not because anything moved the drawing.
 
 ### Undo, and the keyboard
 
-Every change is a change to the document, and the drawing, the costing and the
-problem list are all regenerated from it, so a step backwards is just an older
-document put back — there is no second thing to unwind.
+Every change is a change to the document, and the drawing and the problem list
+are both regenerated from it, so a step backwards is just an older document put
+back — there is no second thing to unwind.
 [src/editor/history.ts](src/editor/history.ts) keeps the list of them.
 
 | | |
@@ -526,68 +534,19 @@ Fast Refresh: editing a component reloads the page. `@vitejs/plugin-react`
 requires Vite 8 while Vitest pins Vite 5, and one fewer dependency to keep in
 step is worth more here than hot reload.
 
-## Running it as an application
-
-`npm run app` builds the editor, builds the Electron main process and opens the
-window. Inside is the same program `npm run serve` runs — the API and the editor,
-unchanged — on a loopback port nobody else can reach. Electron supplies the two
-things a browser tab cannot: a Chromium of its own to print with, and a folder
-dialog.
-
-Nothing in [electron/](electron/) knows anything about pallets. It opens a
-window, starts the server in its own process, and says which printer to use.
-
-### Building the installer
-
-`npm run dist:win` writes `release/Pallet Spec Setup <version>.exe` — a 64-bit
-Windows installer, about 96 MB, most of which is Electron. It builds on macOS as
-well as on Windows, and needs no Wine.
-
-The installer is **not signed**. A certificate costs a few hundred a year and
-there are four users, so Windows shows "protected your PC" on the first run of
-each version: "More info", then "Run anyway".
-
-`npm run dist:mac` builds a macOS app, which is what makes it possible to run a
-packaged build on a Mac while working on the tool. Nobody has to use it.
-
-### Updates
-
-The app looks for a new version when it opens, downloads it quietly, and puts it
-in place the next time it starts — so nobody is interrupted mid-design, and four
-copies do not drift onto four different versions.
-
-Releases live on the repository, which is public, so there is no token in the
-app and none on anybody's machine. To ship one:
-
-1. `npm version patch`
-2. `npm run release:win`
-3. Publish the release on GitHub
-
-A laptop with no internet is the ordinary case here rather than a fault — the
-whole design is for somebody working on a Sunday — so a failed check is written
-down and otherwise ignored.
-
-### Printing
+## Printing
 
 [src/sheet/pdf.ts](src/sheet/pdf.ts) names no printer. Whichever entry point
 knows what it is running inside chooses one:
 
 | Running as | Printer | Chromium |
 | --- | --- | --- |
-| The app | [electron/printer.ts](electron/printer.ts) | the one inside Electron |
-| `npm run serve`, the CLI, the tests | [src/sheet/browserPrinter.ts](src/sheet/browserPrinter.ts) | Chrome or Edge on the machine |
+| The server | [src/sheet/pooledPrinter.ts](src/sheet/pooledPrinter.ts) | one kept open across every sheet |
+| The CLI, the tests | [src/sheet/browserPrinter.ts](src/sheet/browserPrinter.ts) | Chrome or Edge on the machine |
 
-Both are the same engine — only the copy differs. The app carrying its own is
-what stops a sheet depending on which browser a particular laptop has, which had
-already caused one round of inconsistent output.
-
-`npm run compare:pdf` is the check that they agree. It prints the reference
-designs through Electron and compares them with PDFs printed the old way — not
-byte for byte, since a PDF carries a creation date and an id that change on
-every print, but mark for mark: the inflated content streams, every string
-drawn and its order, every drawing operator counted, the paper size, and that
-nothing was rasterised. They come out identical, tagged-PDF structure and all.
-Run it after anything that touches the sheet or the printer.
+Both are the same engine — only whether the copy is found once or every time
+differs. Naming neither in `pdf.ts` is what lets the printer be swapped for a
+fake in a test without touching anything that prints.
 
 ## Running it on a server
 
@@ -609,9 +568,9 @@ has always run on a laptop: one folder, and nobody asked who they are.
 ### Several companies, on one server
 
 A company is a folder under `PALLET_DATA_ROOT/tenants/<short name>`, holding
-its designs, its `clients.json`, its prices and its branding — the same folder
-a laptop has, so a company's whole library is still something that can be
-zipped and handed back. Beside them is one small SQLite file, the **registry**,
+its designs, its `clients.json` and its branding — the same shape a folder has
+when the tool is run locally, so a company's whole library is still something
+that can be zipped and handed back. Beside them is one small SQLite file, the **registry**,
 holding the few facts that decide which folder a request may see: the
 companies, the people, the invitations and the sessions. That is all it holds;
 nothing about pallets is in a database.
@@ -657,18 +616,23 @@ settings from **Company settings** on their library. They are one screen
 ([src/server/adminRoutes.ts](src/server/adminRoutes.ts)); only the address
 differs, and the middleware in front has already settled whose folder it is.
 
-Three tabs. **People**: invite by email and role, be handed the link, withdraw
-an invitation, hand out a new-password link, turn somebody off, make somebody
-an administrator — never yourself, in either direction. **Branding**: every
-field of the brand file, the logo and the face as uploads, and the sheet as it
-will print beside them, drawn afresh after every save from a design that ships
-with the program so two companies' brands are comparable. **Prices**: the
-rates file as a form, checked the way the resolver checks it, and a way back
-to the shipped prices.
+Two tabs, and not everybody sees both. **People**: invite by email and role, be
+handed the link, withdraw an invitation, hand out a new-password link, turn
+somebody off, make somebody an administrator — never yourself, in either
+direction. **Branding**: every field of the brand file, the logo and the face as
+uploads, and the sheet as it will print beside them, drawn afresh after every
+save from a design that ships with the program so two companies' brands are
+comparable.
+
+A company's own administrator sees People only. Branding is the vendor's, and
+not merely hidden: `adminRoutes` takes a scope, and under `/api/admin` the
+brand routes answer 404 rather than being mounted. A screen is not a lock, and
+the thing worth preventing — a company retyping the name its sheets go out
+under — is prevented at the route.
 
 What these screens write is the files a person with a shell could have written
-— `brand.json`, `brand/`, `rates.json` — so there is one way a company's
-settings are stored, whichever way they got there.
+— `brand.json` and `brand/` — so there is one way a company's settings are
+stored, whichever way they got there.
 
 ## Storage
 
@@ -710,48 +674,20 @@ version each save is judged against is a hash of the document itself, in
 [src/store/fingerprint.ts](src/store/fingerprint.ts) — not the date, because the
 date is only a date, and two edits on the same afternoon share it.
 
-### Prices
+### Which folder, and what happens when it is not there
 
-`rates.json` in the designs folder takes the place of the one that ships with
-the program. The folder is shared, so a price written there is the price
-everybody quotes at from the afternoon it is saved, rather than everybody
-quoting at whatever their copy was built with. There need not be one — without
-it, the built-in prices are used and nothing is amiss.
+The folder is settled when the server starts and is never moved from a browser:
+`PALLET_DATA_ROOT` hosted, `PALLET_STORE` or `data/library` locally. `PUT
+/api/settings` answers 403 rather than being removed, so an older editor asking
+to move it is told plainly instead of being handed the page.
 
-A `rates.json` in the folder that will not read is **not** quietly ignored. The
-built-in prices are used so that costing goes on working, and the editor says so
-in a banner that does not go away. The failure worth guarding against here is
-not a missing file; it is somebody quoting at prices they were never told they
-were quoting at. When the folder's prices are in use, the designs folder bar
-says **shared prices**.
-
-### Which folder, and where that is remembered
-
-The folder is chosen on the setup screen and written to this machine's own
-settings — `%APPDATA%` on Windows, `~/Library/Application Support` on macOS,
-`$XDG_CONFIG_HOME` otherwise. Deliberately not in the designs folder itself: the
-designs are shared, but the path to them is not, because Drive mounts somewhere
-different on every machine.
-
-**A folder that has gone missing is reported, never re-made.** Drive not started
-yet, a renamed folder and an unplugged disk all look exactly like a fresh
-install, and quietly making an empty one shows an empty library — which is how
-somebody comes to redraw designs that were never lost, only for Drive to come
-back and leave two of everything. So the tool starts, says which folder it could
-not reach and why, and offers "Look again" for when Drive is simply slow. A
-folder is only created when somebody has just named one.
-
-The chosen folder can be changed while the tool is running, from **Change** on
-the designs folder bar. `PALLET_STORE` overrides the choice when it is set, and
-the editor says so rather than letting a change be made that the next start
-would undo.
-
-### Coming from the database
-
-Earlier versions kept one SQLite file. `npm run convert -- data/pallets.sqlite data/library`
-writes its contents into a folder, ids and dates and all. It reads a copy, so
-the database it converts is left exactly as it was, and running it twice is
-safe.
+**A folder that has gone missing is reported, never re-made.** An unplugged
+disk and a mount that has not come back look exactly like a fresh install, and
+quietly making an empty one shows an empty library — which is how somebody
+comes to redraw designs that were never lost. So the server starts, says which
+folder it could not reach and why, and offers "Look again" for when the disk is
+simply slow. Hosted, the path stays in the log: it is on somebody else's
+machine, and what the screen says is that the designs cannot be reached.
 
 A design is edited in place. Saving overwrites it and there is no history: to
 keep an old design, **duplicate it before reworking it** — the copy is a separate
@@ -822,9 +758,7 @@ looks — the sheet is rendered fresh from the document every time it is asked
 for, and nothing about it is stored. Renaming a field, removing one, or
 tightening what an existing one will accept is not safe, and needs the stored
 designs rewritten to match — the way the change that removed revisions did,
-which rewrote every design rather than dropping any. That migration now lives in
-the converter, [src/cli/convert.ts](src/cli/convert.ts), because it is only ever
-reached on the way out of the old database.
+which rewrote every design rather than dropping any.
 
 Two guards, in [tests/compatibility.test.ts](tests/compatibility.test.ts):
 
@@ -884,7 +818,7 @@ between. The M pallet's bottom deck is two layers: `bottom-ends` across the
 width, and `bottom-inner` along the length with a run of 1000 from 100.
 
 That widens the model rather than adding a branch, so everything downstream
-follows for free — costing, DXF, part numbers and the drawings all read the same
+follows for free — the DXF, the part numbers and the drawings all read the same
 piece list. Three things did have to learn that a *course* is not a *layer*:
 
 - **Nails.** A joint is between two courses. The M pallet's bottom joint is the
@@ -960,9 +894,6 @@ untouched, and only what draws the piece had to learn the shape:
 - **The DXF** writes the same profile as one closed polyline in an elevation.
   The plan, which is the default, is unchanged.
 
-Costing still counts the whole stick. The runner is bought at its full length
-and the notch is offcut, so that is what it costs.
-
 `fixtures/gma-48x40.json` is the 48 × 40 in GMA pallet as the NWPCA Pallet
 Design System draws it, in whole millimetres: 35 × 89 stringers notched 229 ×
 35 at 152 from each end, R38; 16 mm deck boards, leads 140 wide and the rest
@@ -1001,7 +932,7 @@ face; the editor's 3D view swaps to the underside as soon as the eye is dragged
 below it.
 
 **How many are bought** is the schedule on the sheet: label, type, size and
-quantity, typed by hand and printed as written. Costing prices that table.
+quantity, typed by hand and printed as written.
 
 A pallet starts with no schedule at all. Nothing can be read off the drawing, so
 there is nothing honest to fill the rows in with: the editor shows no table and
@@ -1031,35 +962,13 @@ verbosity being paid for. Group codes are typed: flags and colours are written
 as integers, coordinates as reals, because a reader expecting an integer will
 not take `1.0000`.
 
-## Costing
-
-Timber volume is the sum of `dx × dy × dz` over every placed piece, so it counts
-what the drawing shows and nothing else. 1 CFT is 28,316,846.6 mm³.
-
-Every rate is in [config/rates.json](config/rates.json), or in a `rates.json`
-beside the designs, which takes its place. Timber is priced per CFT by material
-and nails per thousand by type — a pallet with hardwood blocks under a pine deck
-costs what its parts cost — and both fall back to `default`. Overhead is a fixed
-amount per pallet plus a percentage of materials.
-
-**The currency has to be stated.** A rates file that left it out used to mean
-rupees, which is a quiet way for a shop in another country to quote every pallet
-in a currency nobody chose. A company that thinks in cubic metres sets
-`units.volume` in its brand file and the editor converts the volume for display;
-the rate stays per CFT as written, so nothing on screen can disagree with what
-is charged.
-
-The editor costs the design as it is edited, using rates it fetches from the
-server, so one file remains the only place a rate is written down. Costing never
-appears on the sheet: that is a specification, not a quotation.
-
 ## Build stage
 
 Stages 1 to 7 are complete: geometry, flat views, isometric, sheet and PDF,
-editor, storage, DXF and costing.
+editor, storage and DXF.
 
 The fixtures in [fixtures/](fixtures/) are the shapes the model has been taken
-all the way through, from layout to sheet, DXF and costing: a plain block
+all the way through, from layout to sheet and DXF: a plain block
 pallet, two board widths, a joined pair, a deeper centre block row, a wing with
 both decks overhanging, a nudged board, a plywood panel deck, and runners in
 place of blocks. More special cases will surface. The layer and slot model is

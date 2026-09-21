@@ -159,7 +159,6 @@ describe('two companies on one server', () => {
       `/api/pallets/${design.id}/design.json`,
       `/api/pallets/${design.id}/sheet.html`,
       `/api/pallets/${design.id}/sheet.svg`,
-      `/api/pallets/${design.id}/costing`,
       `/api/pallets/${design.id}/drawing.dxf`,
     ]) {
       expect((await call('GET', path, northCookie)).status, path).toBe(404);
@@ -186,7 +185,7 @@ describe('two companies on one server', () => {
     expect(theirs.text).not.toContain('Acme 1200');
   }, 20_000);
 
-  it('keep their own prices and their own name on the sheet', async () => {
+  it('keep their own name on the sheet', async () => {
     const registry = tempRegistry();
     const acme = await seedTenant(registry, { slug: 'acme', email: 'a@acme.test' });
     const northgate = await seedTenant(registry, { slug: 'northgate', email: 'n@northgate.test' });
@@ -206,19 +205,8 @@ describe('two companies on one server', () => {
       join(dataRoot, 'tenants', 'northgate', 'brand.json'),
       JSON.stringify({ companyName: 'Northgate Crates' }),
     );
-    writeFileSync(
-      join(dataRoot, 'tenants', 'acme', 'rates.json'),
-      JSON.stringify({ currency: 'INR', timberPerCft: { default: 850 }, nailsPerThousand: { default: 900 } }),
-    );
-    writeFileSync(
-      join(dataRoot, 'tenants', 'northgate', 'rates.json'),
-      JSON.stringify({ currency: 'GBP', timberPerCft: { default: 40 }, nailsPerThousand: { default: 12 } }),
-    );
-
     expect((await call('GET', '/api/brand', acmeCookie)).body.companyName).toBe('Acme Pallets Ltd');
     expect((await call('GET', '/api/brand', northCookie)).body.companyName).toBe('Northgate Crates');
-    expect((await call('GET', '/api/rates', acmeCookie)).body.currency).toBe('INR');
-    expect((await call('GET', '/api/rates', northCookie)).body.currency).toBe('GBP');
 
     const { design } = await addDesign(acmeCookie, 'Biocon', 'Acme 1200');
     const sheet = await call('GET', `/api/pallets/${design.id}/sheet.svg`, acmeCookie);

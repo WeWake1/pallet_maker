@@ -86,7 +86,7 @@ export function VendorAdmin({ userName, onSignOut }: { userName: string; onSignO
       setSlug('');
       setName('');
       setAdminEmail('');
-    }, 'Made. Its folder is ready for a brand and prices.');
+    }, 'Made. Its folder is ready for its branding.');
 
   if (inside) {
     return (
@@ -94,6 +94,7 @@ export function VendorAdmin({ userName, onSignOut }: { userName: string; onSignO
         base={api.vendor.adminBase(inside.slug)}
         companyName={inside.name}
         selfId={null}
+        canBrand
         backLabel="← All companies"
         onBack={() => {
           setInside(null);

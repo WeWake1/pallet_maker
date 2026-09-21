@@ -1,6 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { BrandInUse } from '../brand/resolve.js';
-import type { RatesInUse } from '../costing/resolve.js';
 import type { StoreHandle } from '../store/handle.js';
 import type { Mutex } from '../store/mutex.js';
 import type { Tenant } from './registry.js';
@@ -26,8 +25,6 @@ export interface TenantContext {
   tenant: Tenant;
   /** The folder this company's designs are in. */
   handle: StoreHandle;
-  /** Their prices: the ones in their folder, or the ones this build ships. */
-  rates: () => RatesInUse;
   /** Their name, mark and house conventions, resolved the same way. */
   brand: () => BrandInUse;
   /** Held by anything that rewrites many designs at once. */

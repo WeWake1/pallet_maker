@@ -83,7 +83,7 @@ describe('/healthz', () => {
   });
 
   it('says no, with a status a monitor understands, when they cannot', async () => {
-    await serve(new StoreHandle(missingStoreRoot(), { source: 'settings' }));
+    await serve(new StoreHandle(missingStoreRoot(), { source: 'default' }));
     const { status, body } = await call('GET', '/healthz');
     expect(status).toBe(503);
     expect(body.ok).toBe(false);
@@ -168,13 +168,14 @@ describe('what a request may carry', () => {
 describe('when something goes wrong on the server', () => {
   it('says so with an id, and keeps the detail for the log', async () => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
-    await serve(tempHandle(), {
-      allowFolderChange: true,
-      chooseFolder: async () => {
-        throw new Error('ENOSPC on /srv/secret-volume');
-      },
+    await serve(tempHandle());
+    const design = await savedDesign();
+    // Any failure nothing has a considered answer for. The printer is the one
+    // that fails for reasons outside this program, so it stands for the rest.
+    usePrinter(async () => {
+      throw new Error('ENOSPC on /srv/secret-volume');
     });
-    const { status, body, headers } = await call('POST', '/api/settings/browse');
+    const { status, body, headers } = await call('GET', `/api/pallets/${design.id}/sheet.pdf`);
     expect(status).toBe(500);
     expect(body.error).not.toContain('secret');
     expect(body.requestId).toBe(headers.get('x-request-id'));

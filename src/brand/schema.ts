@@ -50,19 +50,6 @@ export const BrandFileSchema = z.object({
 
   projectionNote: z.string().default(DEFAULT_BRAND.projectionNote),
 
-  tolerances: z
-    .object({
-      component: z.string().default(DEFAULT_BRAND.tolerances.component),
-      pallet: z.string().default(DEFAULT_BRAND.tolerances.pallet),
-    })
-    .default({}),
-
-  units: z
-    .object({
-      volume: z.enum(['cft', 'm3']).default(DEFAULT_BRAND.units.volume),
-    })
-    .default({}),
-
   defaults: z
     .object({
       palletCodePlaceholder: z.string().default(DEFAULT_BRAND.defaults.palletCodePlaceholder),

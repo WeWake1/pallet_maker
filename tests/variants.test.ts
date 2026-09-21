@@ -1,6 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { computeCosting } from '../src/costing/costing.js';
-import { parseRates } from '../src/costing/rates.js';
 import { palletToDxf } from '../src/dxf/drawing.js';
 import { computeLayout } from '../src/geometry/layout.js';
 import { renderIsometric } from '../src/render/isoView.js';
@@ -14,15 +12,8 @@ import { loadFixture } from './helpers.js';
  * Shapes the model has to carry that are not the plain block pallet: the three
  * plywood pallets, and runners in place of blocks. All of them are meant to be
  * data rather than a code path, so each is taken the whole way through to the
- * sheet, the DXF and the costing.
+ * sheet and the DXF.
  */
-
-const rates = parseRates({
-  currency: 'INR',
-  timberPerCft: { default: 850, pine: 850, plywood: 2200 },
-  nailsPerThousand: { default: 900 },
-  overhead: { perPallet: 60, percentOfMaterial: 8 },
-});
 
 describe('the three plywood pallets', () => {
   const type1 = computeLayout(loadFixture('plywood-type1'));
@@ -133,13 +124,12 @@ describe('the three plywood pallets', () => {
     }
   });
 
-  it('prices the sheet at the plywood rate, not the timber one', () => {
-    const pallet = loadFixture('plywood-type2');
-    const costing = computeCosting(pallet, type2, rates);
-    const plywood = costing.materials.find((line) => line.material === 'plywood')!;
-    expect(plywood.ratePerCft).toBe(2200);
-    expect(plywood.pieces).toBe(1);
-    expect(costing.materials.find((line) => line.material === 'pine')!.ratePerCft).toBe(850);
+  it('keeps the sheet a plywood piece and the rest timber', () => {
+    // The material is carried on the piece rather than inferred from the layer,
+    // which is what lets one drawing hold two materials at once.
+    const plywood = type2.pieces.filter((piece) => piece.material === 'plywood');
+    expect(plywood).toHaveLength(1);
+    expect(type2.pieces.some((piece) => piece.material === 'pine')).toBe(true);
   });
 
   it('draws in every output', () => {

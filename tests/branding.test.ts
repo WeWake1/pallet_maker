@@ -76,10 +76,8 @@ describe('a sheet nobody has put a name on', () => {
     expect(svg).not.toContain('data:');
   });
 
-  it('still states the conventions every pallet shop needs', () => {
+  it('still states the convention every pallet shop needs', () => {
     expect(html).toContain(DEFAULT_BRAND.projectionNote);
-    expect(html).toContain(DEFAULT_BRAND.tolerances.component);
-    expect(html).toContain(DEFAULT_BRAND.tolerances.pallet);
   });
 });
 
@@ -119,11 +117,20 @@ describe('a sheet for a company with a drawn mark', () => {
     expect(svg).not.toContain('<image');
   });
 
-  it('states this company\'s own conventions, not the default ones', () => {
+  it('states this company\'s own projection, not the default one', () => {
     expect(html).toContain('Third-angle projection');
-    expect(html).toContain('± 1 mm');
-    expect(html).toContain('± 3 mm');
     expect(html).not.toContain('First-angle');
+  });
+
+  /**
+   * That brand file still carries `tolerances` and `units`, as every brand
+   * file written before those moved off the brand does. Keeping them here is
+   * the check that such a file still reads: the keys are ignored, and the
+   * tolerances printed are the design's own.
+   */
+  it('ignores tolerances left in an older brand file', () => {
+    expect(html).toContain('± 2 mm');
+    expect(html).not.toContain('± 1 mm');
   });
 });
 

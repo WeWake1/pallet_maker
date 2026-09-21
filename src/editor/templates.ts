@@ -1,6 +1,7 @@
 import { DEFAULT_BRAND } from '../brand/defaults.js';
 import type { BrandDefaults } from '../brand/types.js';
 import { newId, today } from '../ids.js';
+import { DEFAULT_COMPONENT_TOLERANCE, DEFAULT_PALLET_TOLERANCE } from '../types.js';
 import type {
   BlockCell,
   BlockGrid,
@@ -145,6 +146,8 @@ export function newPallet(
     entry: '4_way',
     species,
     planing: 'none',
+    componentTolerance: DEFAULT_COMPONENT_TOLERANCE,
+    palletTolerance: DEFAULT_PALLET_TOLERANCE,
     handling: [...defaults.handling],
     // Both empty: a schedule is typed only where there is one to state, and
     // every crossing takes the default nail count until one is clicked.
@@ -198,6 +201,8 @@ export function emptyPallet(
     entry: '',
     species: defaults.species,
     planing: '',
+    componentTolerance: DEFAULT_COMPONENT_TOLERANCE,
+    palletTolerance: DEFAULT_PALLET_TOLERANCE,
     // Not the exception the fields above are. A checkbox has no "nobody has
     // said yet", and an empty list says the pallet may not be moved at all,
     // which is a stronger claim than the truth about any pallet. So even the

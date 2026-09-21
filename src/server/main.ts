@@ -12,9 +12,8 @@
  * that folder was made on purpose, and inventing an empty one would show an
  * empty library.
  *
- * `--local` is the mode this program has always run in on a laptop: the folder
- * chosen in the editor, or `PALLET_STORE`, or `data/library`, and no sign-in.
- * Still loopback only.
+ * `--local` is one folder and no sign-in, for working on the tool itself:
+ * `PALLET_STORE`, or `data/library`. Still loopback only.
  *
  *   PORT                 5179
  *   HOST                 127.0.0.1
@@ -25,7 +24,7 @@
  *   PALLET_BROWSER       the Chromium to print with, if not one of the usual ones
  *   PALLET_PRINT_CONCURRENCY  sheets printing at once, default 2; 1 on a 1 GB machine
  *   PALLET_BACKUPS       snapshots to keep per company, default 30
- *   PALLET_STORE         --local only: the designs folder, over the one chosen in the editor
+ *   PALLET_STORE         --local only: the folder the designs are in
  */
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -35,7 +34,6 @@ import { findBrowser } from '../sheet/findBrowser.js';
 import { usePrinter } from '../sheet/pdf.js';
 import { createPooledPrinter } from '../sheet/pooledPrinter.js';
 import { StoreHandle } from '../store/handle.js';
-import { configuredStoreRoot } from '../store/settings.js';
 import { Registry } from '../tenancy/registry.js';
 import { startHousekeeping } from '../tenancy/housekeeping.js';
 import { Tenants } from '../tenancy/tenants.js';
@@ -58,7 +56,6 @@ const port = Number(process.env.PORT ?? 5179);
 const host = process.env.HOST ?? '127.0.0.1';
 const keep = Number(process.env.PALLET_BACKUPS ?? (local ? 20 : 30));
 const staticDir = resolve(appRoot, 'dist', 'editor');
-const ratesPath = resolve(appRoot, 'config', 'rates.json');
 const brandPath = resolve(appRoot, 'config', 'brand.json');
 
 function fail(message: string): never {
@@ -99,19 +96,18 @@ function localApp() {
   if (!isTimeZone(timezone)) {
     fail(`PALLET_TIMEZONE is "${timezone}", which is not a time zone name. Use one like Asia/Kolkata.`);
   }
-  const chosen = process.env.PALLET_STORE ?? configuredStoreRoot();
+  const chosen = process.env.PALLET_STORE;
   const handle = new StoreHandle(chosen ?? resolve(appRoot, 'data', 'library'), {
     create: chosen === undefined,
-    source: process.env.PALLET_STORE ? 'environment' : chosen ? 'settings' : 'default',
+    source: chosen ? 'environment' : 'default',
   });
 
   const app = createApp(handle, {
     staticDir,
-    ratesPath,
     brandPath,
     version,
     timezone,
-    allowFolderChange: true,
+    local: true,
     log: jsonLogger(),
     health: () => ({ printer: printer.status() }),
   });
@@ -126,7 +122,7 @@ function describeLocal(handle: StoreHandle, timezone: string): void {
     console.log(`Backups in ${backupDirectoryFor(status.root!)}, keeping ${keep}`);
   } else {
     console.error(`Cannot reach the designs folder ${status.root}: ${status.problem}`);
-    console.error('Open the editor and choose a folder, or set PALLET_STORE.');
+    console.error('Set PALLET_STORE to the folder the designs are in.');
   }
 }
 
@@ -169,7 +165,7 @@ function hostedApp() {
   const publicUrl = process.env.PALLET_PUBLIC_URL ?? `http://${host}:${port}`;
 
   registry = new Registry(resolve(dataRoot, 'registry.sqlite'));
-  const tenants = new Tenants(dataRoot, registry, { ratesPath, brandPath });
+  const tenants = new Tenants(dataRoot, registry, { brandPath });
   const auth: AuthConfig = {
     registry,
     secret,
@@ -181,7 +177,6 @@ function hostedApp() {
 
   const app = createApp(tenants, {
     staticDir,
-    ratesPath,
     brandPath,
     version,
     auth,

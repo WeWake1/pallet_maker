@@ -54,7 +54,6 @@ try {
     console.log('Watermark    off');
   }
   console.log(`Projection   ${brand.projectionNote}`);
-  console.log(`Tolerances   ${brand.tolerances.component} component, ${brand.tolerances.pallet} overall`);
   console.log(`Files read   ${marks.map((m) => m.path).join('\n             ')}`);
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));

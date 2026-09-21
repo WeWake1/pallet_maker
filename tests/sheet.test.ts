@@ -282,13 +282,36 @@ describe('the sheet', () => {
     expect(text).toContain('wire nail');
   });
 
-  it('states the two tolerances on every sheet, whatever the design', () => {
+  it('states the usual tolerances on a design that has not changed them', () => {
+    // They were house conventions until they became the design's own; a
+    // document written before that says nothing, and has to print as it did.
     for (const name of ['block-1000x800', 'plywood-type2', 'stringer-2way']) {
       const other = loadFixture(name);
       const text = textOf(renderSheet(other, computeLayout(other)));
       expect(text).toContain('Component tolerance ± 2 mm');
       expect(text).toContain('Total pallet tolerance ± 5 mm');
     }
+  });
+
+  it('prints the tolerances this design was given, not the usual ones', () => {
+    const tighter = {
+      ...pallet,
+      componentTolerance: '± 0.5 mm',
+      palletTolerance: '+0 / -3 mm',
+    };
+    const text = textOf(renderSheet(tighter, computeLayout(tighter)));
+    expect(text).toContain('Component tolerance ± 0.5 mm');
+    expect(text).toContain('Total pallet tolerance +0 / -3 mm');
+    expect(text).not.toContain('± 2 mm');
+  });
+
+  it('takes a tolerance off the sheet entirely when it is na', () => {
+    const none = { ...pallet, componentTolerance: 'na', palletTolerance: 'na' };
+    const text = textOf(renderSheet(none, computeLayout(none)));
+    expect(text).not.toContain('Component tolerance');
+    expect(text).not.toContain('Total pallet tolerance');
+    // The rows above it are untouched.
+    expect(text).toContain('Planing');
   });
 
   it('drops the surface row, which the components table already says', () => {
@@ -409,7 +432,6 @@ describe('an attribute the design does not state', () => {
     const text = sheetText({ species: 'na', staticLoadKg: 'na' });
     expect(text).toContain('Dynamic load');
     expect(text).toContain('Planing None');
-    // The two tolerances are the same on every sheet and are never dropped.
     expect(text).toContain('Component tolerance ± 2 mm');
   });
 

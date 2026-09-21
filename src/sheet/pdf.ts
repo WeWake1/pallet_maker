@@ -7,11 +7,10 @@ import { writeFile } from 'node:fs/promises';
  * honour it, so there are no margins beyond the template's own. Nothing is
  * rasterised anywhere: the drawings are SVG and the text stays selectable.
  *
- * Which Chromium does the printing depends on how the tool is being run. The
- * app has one inside it and uses that; the command line tools and the tests go
- * looking for one on the machine. Neither is written here, so that the app can
- * be built without a line of `puppeteer-core` in it, and the tests can print
- * without an Electron to do it in.
+ * Which Chromium does the printing is not written here. The server keeps one
+ * open and prints every sheet through it; the command line tools and the tests
+ * go looking for one on the machine. Naming neither is what lets the printer
+ * be swapped for a fake in a test without touching anything that prints.
  */
 
 /** Render sheet HTML to a PDF. Writes to `outPath` as well when given one. */

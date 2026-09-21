@@ -291,11 +291,17 @@ Goal: several companies on one server, each seeing only its own folder.
 - Ambica: `create --slug ambica --timezone Asia/Kolkata`; `brand --logo ambica-logo.svg --font "ITC Anna Regular.otf" --family "Ambica Brand" --watermark-size 80 --code-placeholder AP-001`; `rates --from config/rates.json` (or the Drive folder's file); `import --from <library.json>` taken with the existing `GET /api/library.json` (ids preserved, `updatedAt` kept); `verify`: counts (30 designs / 14 clients as of now), every id present, `fingerprint()` equal per design, `reconcileClients` reports 0, one rendered sheet carries the name and the logo.
 - Cut-over: freeze the Drive folder, take the final export, `import --mode replace`, send the invitation links, mark the Drive folder read-only as the archive. The last desktop build stays installed but unused for a week.
 
-### Phase 5 — Polish and retirement (3–4 days)
+### Phase 5 — Polish and retirement (3–4 days) — done 2026-09-21
 
-- Rewrite `docs/guide.ts` for the hosted product (login, companies, no folders, no `npm start`, no SQLite); fix `Help.tsx:35,51,183-186`, `hints.ts:50`, `App.tsx:459-460,1744`; update `tests/guide.test.ts`.
-- Remove Electron (A9), `StoreFolder.tsx`, `src/store/settings.ts`, `src/server/db.ts` + `src/cli/convert.ts` + `tests/migration.test.ts` + `better-sqlite3`, the Ambica assets from the tree, and the `AP-` codes in fixtures (rename to `PL-0xx`); `tsconfig.json` drops `electron`.
-- README: replace the Branding, Installer/Updates and Storage sections with the hosted model; add a Deploy section; one product name, one spelling, everywhere. Optional: SMTP for invitations and self-service reset.
+Done, with two changes of scope decided at the time:
+
+- **Pricing removed entirely**, rather than kept. `src/costing/`, `config/rates.json`, `rates.json` per tenant, the Prices tab, `/api/rates`, `/api/pallets/:id/costing` and the `costing` CLI are gone, and so is the CFT volume that was computed with them. Nothing printed on a sheet changes: costing never appeared on one.
+- **Branding is the vendor's alone.** `adminRoutes` takes a scope; under `/api/admin` the brand and preview routes answer 404 rather than being mounted, so a company cannot retype the name its sheets go out under. A company's own administrator sees People and nothing else.
+- **Tolerances moved onto the design**, out of the brand file. Free text, defaulting to the old house values (`± 2 mm` / `± 5 mm`), `na` to take a row off the sheet — the same three states species and the loads already had. Designs written before the change print exactly as they did.
+- Electron, `electron-builder.yml`, `StoreFolder.tsx`, `src/store/settings.ts`, `src/server/db.ts`, `src/cli/convert.ts`, `tests/migration.test.ts` and `better-sqlite3` are gone; `tsconfig.json` drops `electron`. `StoreHandle.use()` went with them, and `PUT /api/settings` now refuses for everyone. `--local` stays as the way to work on the tool: one folder from `PALLET_STORE` or `data/library`, no sign-in.
+- `docs/guide.ts` rewritten for the hosted product; README's costing, prices, desktop-app, installer and storage sections replaced.
+
+Still open: the Ambica assets in the tree, the `AP-` codes in fixtures, SMTP for invitations and self-service reset.
 
 ### Risks and how each is held
 

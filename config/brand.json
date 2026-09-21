@@ -11,11 +11,6 @@
     "advanceEm": 0.391078
   },
   "projectionNote": "First-angle projection, all dimensions in mm",
-  "tolerances": {
-    "component": "± 2 mm",
-    "pallet": "± 5 mm"
-  },
-  "units": { "volume": "cft" },
   "defaults": {
     "palletCodePlaceholder": "AP-001",
     "species": "pine",

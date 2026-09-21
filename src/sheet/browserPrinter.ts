@@ -5,13 +5,12 @@ import { PAGE } from './layout.js';
 /**
  * Printing through a browser already on the machine.
  *
- * This is what the command line tools and the tests use, and what `npm run
- * serve` uses when the tool is run as a web page rather than as the app. The
- * app itself does not come this way: Electron carries its own Chromium, so it
- * prints through that and never has to go looking (see `electron/printer.ts`).
+ * Finding a Chromium on the machine, for the command line tools and the tests.
+ * The server does not come this way: it keeps one open across every sheet it
+ * prints, rather than starting one per sheet (see `pooledPrinter.ts`).
  *
  * Both are the same engine. Chromium renders the PDF either way — the only
- * difference is which copy of it, and whose job it is to find one.
+ * difference is whether the copy of it is found once or every time.
  */
 export async function printWithBrowser(html: string, outPath?: string): Promise<Buffer> {
   const browser = await puppeteer.launch({

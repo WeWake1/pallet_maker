@@ -17,10 +17,6 @@ import {
   requireRole,
   unauthenticated,
 } from './auth.js';
-import { computeCosting } from '../costing/costing.js';
-import { DEFAULT_RATES_PATH } from '../costing/load.js';
-import { ratesResolver } from '../costing/resolve.js';
-import type { Rates } from '../costing/rates.js';
 import { palletToDxf } from '../dxf/drawing.js';
 import { analysePallet } from '../geometry/layout.js';
 import { PalletLayoutError } from '../geometry/types.js';
@@ -33,7 +29,6 @@ import { renderSheet } from '../sheet/sheet.js';
 import { renderSheetSvg } from '../sheet/svgSheet.js';
 import { StoreUnavailableError } from '../store/files.js';
 import type { StoreHandle } from '../store/handle.js';
-import { rememberStoreRoot } from '../store/settings.js';
 import { securityHeaders } from './headers.js';
 import { exportLibrary, importDesign, importLibrary } from './library.js';
 import { requestId, requestLogger } from './log.js';
@@ -52,29 +47,17 @@ import {
  *
  * It began as a local one — listening on this machine only, serving designs
  * from a folder the operating system had already decided this person could
- * read — and the desktop app still runs it that way. Hosted, it sits behind a
- * reverse proxy on the same box, and what it takes for granted narrows: bodies
- * are small unless the route is one that takes a whole library, every answer
- * says how it may be used, a failure is written down with an id rather than
- * described to whoever asked, and nothing that arrives over the network can
- * move the designs folder. Who may call it at all is the next thing to add.
+ * read — and `--local` still runs it that way for working on the tool itself.
+ * Hosted, it sits behind a reverse proxy on the same box, and what it takes
+ * for granted narrows: bodies are small unless the route is one that takes a
+ * whole library, every answer says how it may be used, a failure is written
+ * down with an id rather than described to whoever asked, and nothing that
+ * arrives over the network can move the designs folder.
  */
 
 export interface AppOptions {
   /** Built editor to serve, when there is one. */
   staticDir?: string;
-  /**
-   * Rates to cost with, fixed. Only tests pass this; everything else lets the
-   * designs folder or the built-in file decide.
-   */
-  rates?: Rates;
-  /**
-   * The rates that ship with the program, for when the designs folder has none
-   * of its own. Defaults to the config file beside the working directory, which
-   * is right everywhere except an installed app — where the working directory
-   * is wherever the shortcut happened to be launched from.
-   */
-  ratesPath?: string;
   /**
    * The brand that ships with the program, for when the designs folder has
    * none of its own. A `brand.json` in the folder takes its place, which is
@@ -91,24 +74,15 @@ export interface AppOptions {
    */
   version?: string | null;
   /**
-   * Ask the operating system for a folder, returning null if nobody picks one.
+   * Whether this is a single folder on the operator's own machine.
    *
-   * Only the app can do this — a web page has no way to open a native dialog —
-   * so it is absent when the tool is being run as a page, and the editor falls
-   * back to a typed path. The server is running inside the app's own process,
-   * which is what lets it offer this at all.
+   * `npm run serve --local` says yes: one folder, nobody asked who they are,
+   * and the path is worth showing because it is the reader's own. A hosted
+   * server says no — its folder is on somebody else's machine, so the path
+   * stays in the log and the screen says only that the designs cannot be
+   * reached. Neither can move the folder; that is settled at startup.
    */
-  chooseFolder?: () => Promise<string | null>;
-  /**
-   * Whether the designs folder may be changed over the API.
-   *
-   * Only the desktop app says yes: its API is on the loopback and the person
-   * at the keyboard owns the machine, so pointing the tool at a different
-   * folder is theirs to do. A hosted server never does — its folder is decided
-   * when it starts, and a route that let a browser move it, and make the new
-   * one, would be the most dangerous thing on the box.
-   */
-  allowFolderChange?: boolean;
+  local?: boolean;
   /** The time zone the date on a design is stamped in. UTC without one. */
   timezone?: string;
   /** Where each request is written down once answered. Nowhere without one. */
@@ -118,10 +92,10 @@ export interface AppOptions {
   /**
    * Who may use this server.
    *
-   * Absent, nobody is asked: that is the desktop app and the command line,
-   * where the machine has already decided who is at the keyboard. Present,
-   * every route below the door needs a session, and which company's designs
-   * those routes see comes from whose session it is.
+   * Absent, nobody is asked: that is `--local` and the command line, where the
+   * machine has already decided who is at the keyboard. Present, every route
+   * below the door needs a session, and which company's designs those routes
+   * see comes from whose session it is.
    */
   auth?: AuthConfig;
 }
@@ -143,9 +117,9 @@ const IMPORT_ROUTES = new Set(['/api/library/import', '/api/pallets/import']);
  * The API, over one company's designs or over every company's.
  *
  * Given a folder, it serves that folder and asks nobody who they are: that is
- * the desktop app, where the machine has already decided. Given the companies
- * on a server, every request goes through the door first and the folder it
- * then reads is whichever belongs to whoever signed in.
+ * `--local`, where the machine has already decided. Given the companies on a
+ * server, every request goes through the door first and the folder it then
+ * reads is whichever belongs to whoever signed in.
  *
  * Not one route below knows the difference. Each asks for "the designs" and
  * gets the ones the request is entitled to, because the middleware put that
@@ -167,7 +141,7 @@ export function createApp(source: StoreHandle | Tenants, options: AppOptions = {
   /**
    * The one company, when there is only one.
    *
-   * The desktop app and the command line have a folder and no notion of who is
+   * `--local` and the command line have a folder and no notion of who is
    * asking, so they get a context made once and used for every request. The
    * routes cannot tell, which is the point: there is one way to reach the
    * designs and it goes through the same place either way.
@@ -184,10 +158,6 @@ export function createApp(source: StoreHandle | Tenants, options: AppOptions = {
           createdAt: '',
         },
         handle: source as StoreHandle,
-        rates: ratesResolver(
-          () => ((source as StoreHandle).ready() ? (source as StoreHandle).status().root : null),
-          options.ratesPath ?? DEFAULT_RATES_PATH,
-        ),
         brand: brandResolver(
           () => ((source as StoreHandle).ready() ? (source as StoreHandle).status().root : null),
           options.brandPath,
@@ -201,10 +171,8 @@ export function createApp(source: StoreHandle | Tenants, options: AppOptions = {
   const now = () => today(currentTenant().tenant.timezone);
   const pallets = new PalletRepository(storeNow, { now });
   const clients = new ClientRepository(storeNow, { now });
-  const allowFolderChange = options.allowFolderChange === true && tenants === null;
+  const local = options.local === true && tenants === null;
 
-  const ratesInUse = () => currentTenant().rates();
-  const rates = (): Rates => options.rates ?? ratesInUse().rates;
   const brandInUse = () => currentTenant().brand();
   const brand = (): Brand => options.brand ?? brandInUse().brand;
   /** The company whose designs are being written, for the routes that hold it. */
@@ -351,11 +319,17 @@ export function createApp(source: StoreHandle | Tenants, options: AppOptions = {
     // belongs to no company and the check would turn them away. Working on a
     // company they name puts that company in context and then hands over to
     // the very same routes an administrator of it uses.
-    const admin = adminRoutes(auth.registry, auth);
-    app.use('/api/vendor/companies/:slug/admin', requireRole('manageService'), enterCompany(auth.registry, tenants), admin);
+    app.use(
+      '/api/vendor/companies/:slug/admin',
+      requireRole('manageService'),
+      enterCompany(auth.registry, tenants),
+      adminRoutes(auth.registry, auth, { brand: true }),
+    );
     app.use('/api/vendor', requireRole('manageService'), vendorRoutes(auth.registry, tenants, auth));
     app.use('/api', needsCompany);
-    app.use('/api/admin', requireRole('manageCompany'), admin);
+    // A company's administrator looks after its people and nothing else: the
+    // same router, mounted without the branding.
+    app.use('/api/admin', requireRole('manageCompany'), adminRoutes(auth.registry, auth, { brand: false }));
   } else {
     app.use('/api', needsCompany);
   }
@@ -365,107 +339,45 @@ export function createApp(source: StoreHandle | Tenants, options: AppOptions = {
    *
    * Always answers, even when the folder cannot be reached — that is the whole
    * point of it. Everything else needs the designs; this is what the editor
-   * asks when it cannot have them, so it can say where it was looking and offer
-   * somewhere else. A hosted server keeps its paths to itself: there is nowhere
-   * else to offer, and where on the disk the designs are is its own business.
+   * asks when it cannot have them, so it can say what is wrong. A hosted
+   * server keeps its paths to itself: where on the disk the designs are is its
+   * own business, and the path stays in the log.
    */
   app.get('/api/settings', wrap((_req, res) => {
     fresh(res);
     const status = currentTenant().handle.status();
-    // The rates come along because a folder whose prices could not be read is
-    // something whoever is quoting has to be told, and this is the one call the
-    // editor makes whatever else is going on.
-    const prices = options.rates ? { from: 'built-in' as const, problem: null } : ratesInUse();
     // A sheet going out under the wrong name, or under none, is not something
     // to discover from a customer, so a brand that would not read is carried
-    // out to be said on screen the same way the prices are.
+    // out to be said on screen. It is the one call the editor makes whatever
+    // else is going on, which is what makes it the place to say it.
     const branding = options.brand ? { from: 'built-in' as const, problem: null } : brandInUse();
     res.json({
       ...status,
-      root: allowFolderChange ? status.root : null,
-      managedStore: !allowFolderChange,
-      canBrowse: allowFolderChange && options.chooseFolder !== undefined,
+      root: local ? status.root : null,
+      managedStore: !local,
       version: options.version ?? null,
-      ratesFrom: prices.from,
-      ratesProblem: prices.problem,
       brandFrom: branding.from,
       brandProblem: branding.problem,
     });
   }));
 
-  /** The folder is the server's own. Said the same way on both routes below. */
-  const refuseFolderChange = (res: Response): void => {
+  /**
+   * The folder is the server's own, wherever it is running.
+   *
+   * It is settled when the server starts — `PALLET_DATA_ROOT` hosted,
+   * `PALLET_STORE` or the default folder locally — and stays refused rather
+   * than removed, so an older editor asking to move it is told plainly instead
+   * of being handed the page and left to wonder.
+   */
+  app.put('/api/settings', wrap((_req, res) => {
     res.status(403).json({
       error: 'The designs folder is decided by the server and cannot be changed from here.',
     });
-  };
-
-  /**
-   * Use a different folder from now on.
-   *
-   * The folder is made if it is not there: somebody typing a path has said so
-   * on purpose, and a first run has to be able to start a library somewhere.
-   * That is the opposite of what happens at startup, where a folder that has
-   * gone missing is reported rather than replaced with an empty one.
-   */
-  app.put('/api/settings', wrap((req, res) => {
-    if (!allowFolderChange) {
-      refuseFolderChange(res);
-      return;
-    }
-    const root = (req.body as { root?: unknown }).root;
-    if (typeof root !== 'string' || root.trim() === '') {
-      res.status(400).json({ error: 'A folder has to be given' });
-      return;
-    }
-    if (sole!.handle.status().source === 'environment') {
-      res.status(409).json({
-        error: 'PALLET_STORE is set, and it decides the folder. Unset it to choose one here.',
-      });
-      return;
-    }
-
-    const status = sole!.handle.use(root.trim());
-    rememberStoreRoot(status.root!);
-    res.json(status);
   }));
 
-  /** Look again, for a folder that was not there when the tool started. */
+  /** Look again, for a folder that was not there when the server started. */
   app.post('/api/settings/retry', wrap((_req, res) => {
     res.json(currentTenant().handle.retry());
-  }));
-
-  /**
-   * Pick a folder in a native dialog, and use it.
-   *
-   * Answers 501 when there is no dialog to open, which is how the editor knows
-   * to ask for a typed path instead rather than offering a button that cannot
-   * do anything.
-   */
-  app.post('/api/settings/browse', wrap(async (_req, res) => {
-    if (!allowFolderChange) {
-      refuseFolderChange(res);
-      return;
-    }
-    if (!options.chooseFolder) {
-      res.status(501).json({ error: 'Choosing a folder needs the app rather than a browser tab' });
-      return;
-    }
-    const picked = await options.chooseFolder();
-    if (picked === null) {
-      // Cancelled. Nothing changes, and nothing has gone wrong.
-      res.json(sole!.handle.status());
-      return;
-    }
-    const status = sole!.handle.use(picked);
-    rememberStoreRoot(status.root!);
-    res.json(status);
-  }));
-
-  // Rates go to the editor so it can cost a design as it is being changed,
-  // rather than only once it has been saved.
-  app.get('/api/rates', wrap((_req, res) => {
-    res.json(rates());
   }));
 
   /**
@@ -641,11 +553,6 @@ export function createApp(source: StoreHandle | Tenants, options: AppOptions = {
     res.send(renderSheetSvg(pallet, layout, { brand: brand() }));
   }));
 
-  app.get('/api/pallets/:id/costing', wrap((req, res) => {
-    const pallet = pallets.get(idOf(req));
-    res.json(computeCosting(pallet, analysePallet(pallet), rates()));
-  }));
-
   app.get('/api/pallets/:id/drawing.dxf', wrap((req, res) => {
     const pallet = pallets.get(idOf(req));
     const layout = analysePallet(pallet);
@@ -713,9 +620,7 @@ export function createApp(source: StoreHandle | Tenants, options: AppOptions = {
     // cannot be reached and why, and the path stays in the log.
     if (error instanceof StoreUnavailableError) {
       res.status(503).json({
-        error: allowFolderChange
-          ? error.message
-          : `The designs cannot be reached: ${error.reason}`,
+        error: local ? error.message : `The designs cannot be reached: ${error.reason}`,
         storeUnavailable: true,
       });
       return;

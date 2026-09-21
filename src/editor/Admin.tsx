@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, ReactNode } from 'react';
-import type { Rates } from '../costing/rates.js';
 import { HANDLING_METHODS } from '../types.js';
 import type { HandlingMethod } from '../types.js';
 import { api } from './api.js';
-import type { BrandFileInput, BrandSettings, Invitation, People, Person, RatesSettings } from './api.js';
+import type { BrandFileInput, BrandSettings, Invitation, People, Person } from './api.js';
 import { HANDLING_LABEL } from '../sheet/handling.js';
 import { Button, Check, Field, inputClass, NumberInput, Panel, Select, TextInput } from './ui.jsx';
 
@@ -18,12 +17,13 @@ import { Button, Check, Field, inputClass, NumberInput, Panel, Select, TextInput
  * requests go to.
  */
 
-type Tab = 'people' | 'brand' | 'rates';
+type Tab = 'people' | 'brand';
 
 export function Admin({
   base,
   companyName,
   selfId,
+  canBrand,
   onBack,
   backLabel,
 }: {
@@ -31,6 +31,12 @@ export function Admin({
   companyName: string;
   /** Whoever is at the keyboard, who is not offered the buttons that would act on themselves. */
   selfId: string | null;
+  /**
+   * Whether branding is this screen's to change, which only the vendor's
+   * mount allows. The server refuses it either way; this is what keeps a tab
+   * off the screen that would only fail when used.
+   */
+  canBrand: boolean;
   onBack: () => void;
   backLabel: string;
 }) {
@@ -44,11 +50,12 @@ export function Admin({
         <h1 className="text-title font-semibold tracking-tight text-ink">{companyName}</h1>
         <nav className="ml-6 flex gap-1">
           {(
-            [
-              ['people', 'People'],
-              ['brand', 'Branding'],
-              ['rates', 'Prices'],
-            ] as Array<[Tab, string]>
+            canBrand
+              ? ([
+                  ['people', 'People'],
+                  ['brand', 'Branding'],
+                ] as Array<[Tab, string]>)
+              : ([['people', 'People']] as Array<[Tab, string]>)
           ).map(([key, label]) => (
             <button
               key={key}
@@ -66,8 +73,7 @@ export function Admin({
       <div className="flex-1 overflow-auto">
         <div className="mx-auto max-w-4xl px-4 py-6">
           {tab === 'people' && <PeopleTab calls={calls} selfId={selfId} />}
-          {tab === 'brand' && <BrandTab calls={calls} />}
-          {tab === 'rates' && <RatesTab calls={calls} />}
+          {tab === 'brand' && canBrand && <BrandTab calls={calls} />}
         </div>
       </div>
     </div>
@@ -341,9 +347,6 @@ interface BrandForm {
   fontFamily: string;
   fontAdvanceEm: number | null;
   projectionNote: string;
-  toleranceComponent: string;
-  tolerancePallet: string;
-  volume: 'cft' | 'm3';
   codePlaceholder: string;
   species: string;
   nailType: string;
@@ -361,9 +364,6 @@ const EMPTY_FORM: BrandForm = {
   fontFamily: '',
   fontAdvanceEm: null,
   projectionNote: 'First-angle projection, all dimensions in mm',
-  toleranceComponent: '± 2 mm',
-  tolerancePallet: '± 5 mm',
-  volume: 'cft',
   codePlaceholder: '',
   species: 'pine',
   nailType: 'wire nail',
@@ -383,9 +383,6 @@ function formFrom(file: BrandFileInput | null): BrandForm {
     fontFamily: file.font?.family ?? '',
     fontAdvanceEm: file.font?.advanceEm ?? null,
     projectionNote: file.projectionNote ?? EMPTY_FORM.projectionNote,
-    toleranceComponent: file.tolerances?.component ?? EMPTY_FORM.toleranceComponent,
-    tolerancePallet: file.tolerances?.pallet ?? EMPTY_FORM.tolerancePallet,
-    volume: file.units?.volume ?? 'cft',
     codePlaceholder: file.defaults?.palletCodePlaceholder ?? '',
     species: file.defaults?.species ?? EMPTY_FORM.species,
     nailType: file.defaults?.nailType ?? EMPTY_FORM.nailType,
@@ -410,8 +407,6 @@ function fileFrom(form: BrandForm, held: BrandSettings): BrandFileInput {
       ? { family: form.fontFamily || 'Company face', file: held.font, ...(form.fontAdvanceEm ? { advanceEm: form.fontAdvanceEm } : {}) }
       : null,
     projectionNote: form.projectionNote,
-    tolerances: { component: form.toleranceComponent, pallet: form.tolerancePallet },
-    units: { volume: form.volume },
     defaults: {
       palletCodePlaceholder: form.codePlaceholder,
       species: form.species,
@@ -563,25 +558,6 @@ function BrandTab({ calls }: { calls: Calls }) {
                   disabled={busy}
                 />
               </Field>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Component tolerance">
-                  <TextInput value={form.toleranceComponent} onChange={(toleranceComponent) => patch({ toleranceComponent })} disabled={busy} />
-                </Field>
-                <Field label="Overall tolerance">
-                  <TextInput value={form.tolerancePallet} onChange={(tolerancePallet) => patch({ tolerancePallet })} disabled={busy} />
-                </Field>
-              </div>
-              <Field label="Timber is bought by the">
-                <Select<'cft' | 'm3'>
-                  value={form.volume}
-                  onChange={(volume) => patch({ volume })}
-                  options={[
-                    ['cft', 'cubic foot'],
-                    ['m3', 'cubic metre'],
-                  ]}
-                  disabled={busy}
-                />
-              </Field>
             </div>
           </Panel>
 
@@ -721,149 +697,6 @@ function SheetPreview({ src, refreshKey }: { src: string; refreshKey: number }) 
         }}
       />
     </div>
-  );
-}
-
-/* ------------------------------------------------------------------- rates */
-
-function RatesTab({ calls }: { calls: Calls }) {
-  const [held, setHeld] = useState<RatesSettings | null>(null);
-  const [currency, setCurrency] = useState('');
-  const [timber, setTimber] = useState<Array<[string, number]>>([]);
-  const [nails, setNails] = useState<Array<[string, number]>>([]);
-  const [perPallet, setPerPallet] = useState(0);
-  const [percent, setPercent] = useState(0);
-  const [problem, setProblem] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  const take = (settings: RatesSettings) => {
-    setHeld(settings);
-    setCurrency(settings.rates.currency);
-    setTimber(Object.entries(settings.rates.timberPerCft));
-    setNails(Object.entries(settings.rates.nailsPerThousand));
-    setPerPallet(settings.rates.overhead.perPallet);
-    setPercent(settings.rates.overhead.percentOfMaterial);
-  };
-  const refresh = useCallback(() => calls.rates().then(take), [calls]);
-  useEffect(() => {
-    void refresh().catch((e: unknown) => setProblem(e instanceof Error ? e.message : String(e)));
-  }, [refresh]);
-
-  const run = (work: () => Promise<unknown>, done: string) => {
-    setBusy(true);
-    setProblem(null);
-    setNotice(null);
-    void work()
-      .then(refresh)
-      .then(() => setNotice(done))
-      .catch((e: unknown) => setProblem(e instanceof Error ? e.message : String(e)))
-      .finally(() => setBusy(false));
-  };
-
-  const save = () => {
-    const rates: Rates = {
-      currency: currency.trim(),
-      timberPerCft: Object.fromEntries(timber.filter(([k]) => k.trim() !== '').map(([k, v]) => [k.trim(), v])),
-      nailsPerThousand: Object.fromEntries(nails.filter(([k]) => k.trim() !== '').map(([k, v]) => [k.trim(), v])),
-      overhead: { perPallet, percentOfMaterial: percent },
-    };
-    run(() => calls.saveRates(rates), 'Saved. Every design is costed at these prices from now on.');
-  };
-
-  if (!held) return <Problem text={problem} />;
-
-  return (
-    <>
-      <Problem text={problem} />
-      <Notice text={notice} />
-      {held.problem && <Problem text={held.problem} />}
-
-      <Panel title="Currency">
-        <div className="w-40">
-          <TextInput value={currency} onChange={setCurrency} placeholder="INR" disabled={busy} />
-        </div>
-        <p className="mt-2 text-label text-ink-faint">Printed beside every cost in the editor. Never on the sheet.</p>
-      </Panel>
-
-      <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
-        <RateTable title="Timber, per cubic foot" rows={timber} onChange={setTimber} busy={busy} placeholder="pine" />
-        <RateTable title="Nails, per thousand" rows={nails} onChange={setNails} busy={busy} placeholder="wire nail" />
-      </div>
-
-      <div className="mt-6">
-        <Panel title="Overhead">
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Per pallet">
-              <NumberInput value={perPallet} min={0} onChange={setPerPallet} disabled={busy} />
-            </Field>
-            <Field label="Plus, of the material cost (%)">
-              <NumberInput value={percent} min={0} max={100} step={0.5} onChange={setPercent} disabled={busy} />
-            </Field>
-          </div>
-        </Panel>
-      </div>
-
-      <div className="mt-6 flex items-center gap-3">
-        <Button tone="primary" disabled={busy || currency.trim() === ''} onClick={save}>
-          Save
-        </Button>
-        {held.from === 'folder' ? (
-          <Button disabled={busy} onClick={() => run(() => calls.useShippedRates(), 'Back to the prices this version ships with.')}>
-            Use the shipped prices instead
-          </Button>
-        ) : (
-          <span className="text-label text-ink-faint">Using the prices this version ships with until saved.</span>
-        )}
-      </div>
-    </>
-  );
-}
-
-function RateTable({
-  title,
-  rows,
-  onChange,
-  busy,
-  placeholder,
-}: {
-  title: string;
-  rows: Array<[string, number]>;
-  onChange: (rows: Array<[string, number]>) => void;
-  busy: boolean;
-  placeholder: string;
-}) {
-  const set = (index: number, row: [string, number]) => onChange(rows.map((r, i) => (i === index ? row : r)));
-  return (
-    <Panel title={title}>
-      <table className="w-full text-ui">
-        <tbody>
-          {rows.map(([name, rate], index) => (
-            <tr key={index}>
-              <td className="py-1 pr-2">
-                <TextInput value={name} onChange={(next) => set(index, [next, rate])} placeholder={placeholder} disabled={busy || name === 'default'} />
-              </td>
-              <td className="w-32 py-1 pr-2">
-                <NumberInput value={rate} min={0} onChange={(next) => set(index, [name, next])} disabled={busy} />
-              </td>
-              <td className="w-8 py-1">
-                {name !== 'default' && (
-                  <Button size="sm" tone="subtle" disabled={busy} label={`Remove ${name}`} onClick={() => onChange(rows.filter((_, i) => i !== index))}>
-                    ×
-                  </Button>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <div className="mt-2">
-        <Button size="sm" disabled={busy} onClick={() => onChange([...rows, ['', 0]])}>
-          Add a material
-        </Button>
-      </div>
-      <p className="mt-2 text-label text-ink-faint">Anything not listed is charged at <code>default</code>.</p>
-    </Panel>
   );
 }
 

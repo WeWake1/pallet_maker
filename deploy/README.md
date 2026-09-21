@@ -204,13 +204,11 @@ and lasts a week.
 
 The short name is what the company's folder is called, so it is permanent —
 renaming one would leave its designs behind under the old name. The command
-makes the folder, so its branding and prices can be put in place before
-anybody signs in:
+makes the folder, so its branding can be put in place before anybody signs in:
 
 ```
 /var/lib/pallet-spec/tenants/ambica/brand.json     its name, logo and conventions
 /var/lib/pallet-spec/tenants/ambica/brand/         the logo and font those name
-/var/lib/pallet-spec/tenants/ambica/rates.json     its prices
 /var/lib/pallet-spec/tenants/ambica/designs/       one file per design
 ```
 
@@ -222,8 +220,9 @@ node dist/server/tenant.mjs vendor-admin --email you@example.com
 
 Follow the link it prints, choose a password, and everything after that is on
 screen: making companies, inviting their first administrator, setting up their
-branding and prices, suspending one. The other commands stay for a shell when
-that is more convenient:
+branding, suspending one. Branding is yours alone: a company's own
+administrator sees its people and nothing else. The other commands stay for a
+shell when that is more convenient:
 
 ```sh
 node dist/server/tenant.mjs list                                   # every company
@@ -236,6 +235,10 @@ node dist/server/tenant.mjs resume --company ambica
 
 ## 8. Ambica's designs onto the server
 
-Until the migration tool lands, the way in is the library file: in the desktop
-app, **Export library**, then on the server, signed in as somebody at Ambica,
-**Import library**. The nightly snapshot keeps copies of it from then on.
+The way in is the library file: **Export library** from wherever the designs
+are now, then on the server, signed in as somebody at Ambica, **Import
+library**. The nightly snapshot keeps copies of it from then on.
+
+Do this **before** anybody is told the desktop build is finished with: the
+desktop app has been removed from the tree, so the last installed copy is the
+only thing that can still export, and once it is gone so is that route.

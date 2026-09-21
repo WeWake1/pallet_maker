@@ -22,7 +22,7 @@ import {
  * Looking after a company, and looking after the service.
  *
  * Two doors past the first one: an administrator may change their own
- * company's people, brand and prices; the vendor may do that for any company,
+ * company's people and brand; the vendor may do that for any company,
  * and make companies. A member may do neither, and nobody may reach across.
  */
 
@@ -178,13 +178,14 @@ describe('an administrator and the people in their company', () => {
   });
 });
 
-describe('an administrator and their company\'s brand', () => {
+describe('the vendor and a company\'s brand', () => {
   it('starts with no brand file, and the sheet the program ships with', async () => {
     const registry = tempRegistry();
-    const { user, password } = await seedTenant(registry);
+    await seedTenant(registry);
+    const vendor = await seedVendor(registry);
     await serve(registry);
-    const cookie = await signIn(base, user.email, password);
-    const brand = await call('GET', '/api/admin/brand', cookie);
+    const cookie = await signIn(base, vendor.user.email, vendor.password);
+    const brand = await call('GET', '/api/vendor/companies/acme/admin/brand', cookie);
     expect(brand.status).toBe(200);
     expect(brand.body.file).toBeNull();
     expect(brand.body.from).toBe('built-in');
@@ -193,23 +194,23 @@ describe('an administrator and their company\'s brand', () => {
 
   it('writes the brand file, and the sheet changes without anything restarting', async () => {
     const registry = tempRegistry();
-    const { tenant, user, password } = await seedTenant(registry);
+    const { tenant } = await seedTenant(registry);
+    const vendor = await seedVendor(registry);
     await serve(registry);
-    const cookie = await signIn(base, user.email, password);
+    const cookie = await signIn(base, vendor.user.email, vendor.password);
 
-    const saved = await call('PUT', '/api/admin/brand', cookie, {
+    const saved = await call('PUT', '/api/vendor/companies/acme/admin/brand', cookie, {
       companyName: 'Acme Pallets Ltd',
       projectionNote: 'Third-angle projection, all dimensions in mm',
-      tolerances: { component: '± 1 mm', pallet: '± 3 mm' },
     });
     expect(saved.status).toBe(200);
     expect(saved.body.file.companyName).toBe('Acme Pallets Ltd');
 
     const onDisk = JSON.parse(readFileSync(join(dataRoot, 'tenants', tenant.slug, 'brand.json'), 'utf8'));
     expect(onDisk.companyName).toBe('Acme Pallets Ltd');
-    expect((await call('GET', '/api/brand', cookie)).body.companyName).toBe('Acme Pallets Ltd');
+    expect((await call('GET', '/api/vendor/companies/acme/admin/brand', cookie)).body.file.companyName).toBe('Acme Pallets Ltd');
 
-    const preview = await call('GET', '/api/admin/preview', cookie);
+    const preview = await call('GET', '/api/vendor/companies/acme/admin/preview', cookie);
     expect(preview.status).toBe(200);
     expect(preview.text).toContain('Acme Pallets Ltd');
     expect(preview.text).toContain('Third-angle projection');
@@ -217,98 +218,116 @@ describe('an administrator and their company\'s brand', () => {
 
   it('takes a vector logo, puts it in the corner, and takes it away again', async () => {
     const registry = tempRegistry();
-    const { tenant, user, password } = await seedTenant(registry);
+    const { tenant } = await seedTenant(registry);
+    const vendor = await seedVendor(registry);
     await serve(registry);
-    const cookie = await signIn(base, user.email, password);
+    const cookie = await signIn(base, vendor.user.email, vendor.password);
 
-    const put = await call('POST', '/api/admin/brand/logo', cookie, { name: 'mark.svg', data: b64(SVG) });
+    const put = await call('POST', '/api/vendor/companies/acme/admin/brand/logo', cookie, { name: 'mark.svg', data: b64(SVG) });
     expect(put.status).toBe(200);
     expect(put.body.logo).toBe('brand/logo.svg');
     expect(existsSync(join(dataRoot, 'tenants', tenant.slug, 'brand', 'logo.svg'))).toBe(true);
-    expect((await call('GET', '/api/admin/preview', cookie)).text).toContain('fill="#123456"');
+    expect((await call('GET', '/api/vendor/companies/acme/admin/preview', cookie)).text).toContain('fill="#123456"');
 
-    expect((await call('DELETE', '/api/admin/brand/logo', cookie)).status).toBe(204);
+    expect((await call('DELETE', '/api/vendor/companies/acme/admin/brand/logo', cookie)).status).toBe(204);
     expect(existsSync(join(dataRoot, 'tenants', tenant.slug, 'brand', 'logo.svg'))).toBe(false);
-    expect((await call('GET', '/api/admin/preview', cookie)).text).not.toContain('fill="#123456"');
+    expect((await call('GET', '/api/vendor/companies/acme/admin/preview', cookie)).text).not.toContain('fill="#123456"');
   });
 
   it('refuses a logo that a sheet cannot carry, and says what to do', async () => {
     const registry = tempRegistry();
-    const { user, password } = await seedTenant(registry);
+    await seedTenant(registry);
+    const vendor = await seedVendor(registry);
     await serve(registry);
-    const cookie = await signIn(base, user.email, password);
+    const cookie = await signIn(base, vendor.user.email, vendor.password);
 
     const bad = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><script>x()</script></svg>';
-    const refused = await call('POST', '/api/admin/brand/logo', cookie, { name: 'bad.svg', data: b64(bad) });
+    const refused = await call('POST', '/api/vendor/companies/acme/admin/brand/logo', cookie, { name: 'bad.svg', data: b64(bad) });
     expect(refused.status).toBe(400);
     expect(refused.body.error).toMatch(/cannot carry/);
-    expect((await call('GET', '/api/admin/brand', cookie)).body.logo).toBeNull();
+    expect((await call('GET', '/api/vendor/companies/acme/admin/brand', cookie)).body.logo).toBeNull();
 
-    const notAnImage = await call('POST', '/api/admin/brand/logo', cookie, { name: 'x.txt', data: b64('hello') });
+    const notAnImage = await call('POST', '/api/vendor/companies/acme/admin/brand/logo', cookie, { name: 'x.txt', data: b64('hello') });
     expect(notAnImage.status).toBe(400);
   });
 
   it('takes a face, names it, and keeps the name when the rest of the brand is saved', async () => {
     const registry = tempRegistry();
-    const { user, password } = await seedTenant(registry);
+    await seedTenant(registry);
+    const vendor = await seedVendor(registry);
     await serve(registry);
-    const cookie = await signIn(base, user.email, password);
+    const cookie = await signIn(base, vendor.user.email, vendor.password);
 
     const fontBytes = readFileSync(join(__dirname, '..', 'config', 'brand', 'font.otf'));
-    const put = await call('POST', '/api/admin/brand/font', cookie, {
+    const put = await call('POST', '/api/vendor/companies/acme/admin/brand/font', cookie, {
       name: 'Anything.otf', data: b64(fontBytes), family: 'Acme Face', advanceEm: 0.4,
     });
     expect(put.status).toBe(200);
     expect(put.body.font).toMatchObject({ family: 'Acme Face', file: 'brand/font.otf', advanceEm: 0.4 });
 
-    await call('PUT', '/api/admin/brand', cookie, { companyName: 'Acme' });
-    const brand = (await call('GET', '/api/admin/brand', cookie)).body;
+    await call('PUT', '/api/vendor/companies/acme/admin/brand', cookie, { companyName: 'Acme' });
+    const brand = (await call('GET', '/api/vendor/companies/acme/admin/brand', cookie)).body;
     expect(brand.file.font).toMatchObject({ family: 'Acme Face', file: 'brand/font.otf' });
-    expect((await call('GET', '/api/admin/preview', cookie)).text).toContain("font-family: 'Acme Face'");
+    expect((await call('GET', '/api/vendor/companies/acme/admin/preview', cookie)).text).toContain("font-family: 'Acme Face'");
 
-    expect((await call('DELETE', '/api/admin/brand/font', cookie)).status).toBe(204);
-    expect((await call('GET', '/api/admin/brand', cookie)).body.file.font).toBeNull();
+    expect((await call('DELETE', '/api/vendor/companies/acme/admin/brand/font', cookie)).status).toBe(204);
+    expect((await call('GET', '/api/vendor/companies/acme/admin/brand', cookie)).body.file.font).toBeNull();
   });
 
   it('refuses a file that is not a font', async () => {
     const registry = tempRegistry();
-    const { user, password } = await seedTenant(registry);
+    await seedTenant(registry);
+    const vendor = await seedVendor(registry);
     await serve(registry);
-    const cookie = await signIn(base, user.email, password);
-    const refused = await call('POST', '/api/admin/brand/font', cookie, { name: 'x.exe', data: b64('x'.repeat(2000)) });
+    const cookie = await signIn(base, vendor.user.email, vendor.password);
+    const refused = await call('POST', '/api/vendor/companies/acme/admin/brand/font', cookie, { name: 'x.exe', data: b64('x'.repeat(2000)) });
     expect(refused.status).toBe(400);
     expect(refused.body.error).toMatch(/\.otf, \.ttf/);
   });
 });
 
-describe('an administrator and their company\'s prices', () => {
-  it('sees the shipped prices until it writes its own', async () => {
-    const registry = tempRegistry();
-    const { tenant, user, password } = await seedTenant(registry);
-    await serve(registry);
-    const cookie = await signIn(base, user.email, password);
 
-    expect((await call('GET', '/api/admin/rates', cookie)).body.from).toBe('built-in');
-    const saved = await call('PUT', '/api/admin/rates', cookie, {
-      currency: 'GBP', timberPerCft: { default: 40, oak: 90 }, nailsPerThousand: { default: 12 },
-    });
-    expect(saved.status).toBe(200);
-    expect(saved.body.from).toBe('folder');
-    expect(existsSync(join(dataRoot, 'tenants', tenant.slug, 'rates.json'))).toBe(true);
-    expect((await call('GET', '/api/rates', cookie)).body.currency).toBe('GBP');
-
-    expect((await call('DELETE', '/api/admin/rates', cookie)).status).toBe(204);
-    expect((await call('GET', '/api/admin/rates', cookie)).body.from).toBe('built-in');
-  });
-
-  it('refuses prices that would be refused at costing time', async () => {
+describe('a company\'s own administrator and its brand', () => {
+  /**
+   * The screen does not offer branding, but a screen is not a lock: what
+   * stops a company renaming its own sheets is the mount not carrying those
+   * routes at all.
+   */
+  it('cannot read or write the branding from its own mount', async () => {
     const registry = tempRegistry();
     const { user, password } = await seedTenant(registry);
     await serve(registry);
     const cookie = await signIn(base, user.email, password);
-    const refused = await call('PUT', '/api/admin/rates', cookie, { timberPerCft: { default: 40 } });
-    expect(refused.status).toBe(400);
-    expect(refused.body.error).toMatch(/currency/);
+
+    for (const [method, path] of [
+      ['GET', '/api/admin/brand'],
+      ['PUT', '/api/admin/brand'],
+      ['POST', '/api/admin/brand/logo'],
+      ['DELETE', '/api/admin/brand/logo'],
+      ['POST', '/api/admin/brand/font'],
+      ['DELETE', '/api/admin/brand/font'],
+      ['GET', '/api/admin/preview'],
+    ] as Array<['GET' | 'PUT' | 'POST' | 'DELETE', string]>) {
+      const refused = await call(method, path, cookie, method === 'GET' ? undefined : { companyName: 'Not Theirs' });
+      expect(refused.status, `${method} ${path}`).toBe(404);
+    }
+
+    // Their people are still theirs to look after.
+    expect((await call('GET', '/api/admin/people', cookie)).status).toBe(200);
+  });
+
+  it('leaves the sheet printing under the name the vendor set', async () => {
+    const registry = tempRegistry();
+    const { user, password } = await seedTenant(registry);
+    const vendor = await seedVendor(registry);
+    await serve(registry);
+
+    const asVendor = await signIn(base, vendor.user.email, vendor.password);
+    await call('PUT', '/api/vendor/companies/acme/admin/brand', asVendor, { companyName: 'Acme Pallets Ltd' });
+
+    // The company reads what it prints with; it simply cannot change it.
+    const cookie = await signIn(base, user.email, password);
+    expect((await call('GET', '/api/brand', cookie)).body.companyName).toBe('Acme Pallets Ltd');
   });
 });
 

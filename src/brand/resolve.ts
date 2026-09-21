@@ -140,8 +140,6 @@ export function readBrand(path: string): { brand: Brand; marks: Mark[] } {
       },
       font,
       projectionNote: file.projectionNote,
-      tolerances: file.tolerances,
-      units: { length: 'mm', volume: file.units.volume },
       defaults: file.defaults,
     },
     marks,

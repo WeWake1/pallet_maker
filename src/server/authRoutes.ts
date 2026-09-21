@@ -32,9 +32,9 @@ export interface SessionView {
   /**
    * Whether this server asks who you are at all.
    *
-   * False in the desktop app and on the command line, where the machine has
-   * already decided. The editor asks this first: it is the difference between
-   * showing a library and showing a sign-in screen.
+   * False only when the tool is run locally against one folder, where the
+   * machine has already decided. The editor asks this first: it is the
+   * difference between showing a library and showing a sign-in screen.
    */
   signInRequired: boolean;
   user: { id: string; email: string; name: string; role: string } | null;

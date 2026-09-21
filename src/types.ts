@@ -91,6 +91,19 @@ export const HANDLING_METHODS: readonly HandlingMethod[] = [
  */
 export const DEFAULT_HANDLING: readonly HandlingMethod[] = ['pallet_truck', 'forklift'];
 
+/**
+ * What a shop works to unless a design says otherwise.
+ *
+ * These used to be house conventions, the same on every sheet a company
+ * produced. They are the design's own now, because the shop that cuts to ± 2
+ * on most work still takes an order that has to hold ± 1, and a sheet that
+ * quietly said otherwise was a sheet that had to be corrected by hand. The
+ * values are unchanged, so a design that says nothing prints what it always
+ * printed. See {@link NOT_APPLICABLE} for taking the row off entirely.
+ */
+export const DEFAULT_COMPONENT_TOLERANCE = '± 2 mm';
+export const DEFAULT_PALLET_TOLERANCE = '± 5 mm';
+
 export type LayerKind =
   | 'top_deck'
   | 'bearer'
@@ -107,17 +120,17 @@ export type LayerKind =
 /**
  * One line of the nail schedule, as typed.
  *
- * This is a written statement of what the pallet takes, printed on the sheet and
- * priced by costing. It is deliberately not derived from the drawing and does
- * not have to agree with it: the dots in the top and bottom views say where
- * nails go, this says how many are bought and what they cost. Working out the
- * quantity is the estimator's job, and an earlier attempt to infer it from the
- * geometry got it wrong more often than it got it right.
+ * This is a written statement of what the pallet takes, printed on the sheet.
+ * It is deliberately not derived from the drawing and does not have to agree
+ * with it: the dots in the top and bottom views say where nails go, this says
+ * how many are bought. Working out the quantity is the estimator's job, and an
+ * earlier attempt to infer it from the geometry got it wrong more often than
+ * it got it right.
  */
 export interface NailSpec {
   /** e.g. "top board to centre board". Free text; printed as written. */
   label: string;
-  /** e.g. "wire nail". Costing prices by this. */
+  /** e.g. "wire nail". */
   type: string;
   sizeMm?: number;
   count?: number;
@@ -337,6 +350,14 @@ export interface Pallet {
   planing: Planing;
   staticLoadKg?: LoadKg;
   dynamicLoadKg?: LoadKg;
+
+  /**
+   * What this design is cut and assembled to. Free text, because a tolerance
+   * is written a dozen ways and the sheet prints whichever the shop uses.
+   * Blank prints a dash; `na` takes the line off the sheet.
+   */
+  componentTolerance: string;
+  palletTolerance: string;
 
   /**
    * The handling methods this design is cleared for. Anything not in the list

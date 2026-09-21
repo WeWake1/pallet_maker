@@ -1,9 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { DEFAULT_BRAND } from '../brand/defaults.js';
 import type { Brand } from '../brand/types.js';
-import { computeCosting } from '../costing/costing.js';
-import type { Costing } from '../costing/costing.js';
-import type { Rates } from '../costing/rates.js';
 import { duplicatePallet } from '../duplicate.js';
 import { analysePallet } from '../geometry/layout.js';
 import { LAYER_STYLE } from '../render/theme.js';
@@ -11,7 +8,12 @@ import { PalletSchema, parsePallet } from '../schema.js';
 import { downloadName } from '../sheet/filename.js';
 import { handlingCatalogue, handlingIconSvg } from '../sheet/handling.js';
 import { renderSheet } from '../sheet/sheet.js';
-import { HANDLING_METHODS, NOT_APPLICABLE } from '../types.js';
+import {
+  DEFAULT_COMPONENT_TOLERANCE,
+  DEFAULT_PALLET_TOLERANCE,
+  HANDLING_METHODS,
+  NOT_APPLICABLE,
+} from '../types.js';
 import type { Client, HandlingMethod, LayerKind, Pallet, Unstated } from '../types.js';
 import { api, StaleEdit, StoreUnavailable, Unauthenticated } from './api.js';
 import type { ClientDesigns, Session, StoreStatus } from './api.js';
@@ -38,7 +40,7 @@ import { Preview } from './Preview.jsx';
 import { shortcutLabel, useShortcuts } from './shortcuts.js';
 import { fingerprint } from '../store/fingerprint.js';
 import { selectedSlot } from './state.js';
-import { StoreFolderBar, StoreSetup } from './StoreFolder.jsx';
+import { StoreUnreachable, TopBar } from './TopBar.jsx';
 import type { Action } from './state.js';
 import { emptyPallet, newPallet } from './templates.js';
 import {
@@ -140,7 +142,6 @@ function count(n: number, thing: string): string {
 export function App() {
   const [sections, setSections] = useState<ClientDesigns[]>([]);
   const [drafts, setDrafts] = useState<Draft[]>([]);
-  const [rates, setRates] = useState<Rates | null>(null);
   /**
    * Until the server answers, the sheet is drawn with no name on it. That is
    * the honest thing to show for the half-second it takes: a name that turns
@@ -186,8 +187,6 @@ export function App() {
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
-  /** Set from the library screen, to change folders while everything is fine. */
-  const [choosing, setChoosing] = useState(false);
   const libraryFile = useRef<HTMLInputElement>(null);
 
   const clients = useMemo(() => sections.map((section) => section.client), [sections]);
@@ -259,10 +258,7 @@ export function App() {
    */
   const load = useCallback(async () => {
     await refresh();
-    await Promise.all([
-      api.rates().then(setRates).catch(() => setRates(null)),
-      api.brand().then(setBrand).catch(() => setBrand(DEFAULT_BRAND)),
-    ]);
+    await api.brand().then(setBrand).catch(() => setBrand(DEFAULT_BRAND));
   }, [refresh]);
 
   const signedIn = useCallback(
@@ -442,26 +438,9 @@ export function App() {
     setOpen({ pallet: newPallet(client, brand.defaults), saved: null });
   };
 
-  /** Point the tool at a folder, and open what is in it. */
-  const useFolder = (root: string) => {
-    setChoosing(false);
-    void attempt(async () => {
-      setFolder(await api.useStoreFolder(root));
-    });
-  };
-
   const retryFolder = () => {
     void attempt(async () => {
       setFolder(await api.retryStore());
-    });
-  };
-
-  /** The native dialog, in the app. Cancelling changes nothing. */
-  const browseForFolder = () => {
-    void attempt(async () => {
-      const status = await api.browseForFolder();
-      setFolder(status);
-      if (status.ready) setChoosing(false);
     });
   };
 
@@ -508,6 +487,7 @@ export function App() {
         base="/api/admin"
         companyName={session.company.name}
         selfId={session.user?.id ?? null}
+        canBrand={false}
         backLabel="← Library"
         onBack={() => {
           setSettings(false);
@@ -526,7 +506,7 @@ export function App() {
    * way the library is not a thing that can be shown, and offering the folder
    * is the only useful screen there is.
    */
-  if (!folder.ready || choosing) {
+  if (!folder.ready) {
     return (
       <div className="h-full overflow-auto bg-slate-100 text-slate-900">
         {problem && (
@@ -534,18 +514,7 @@ export function App() {
             {problem}
           </div>
         )}
-        <StoreSetup
-          status={folder}
-          busy={busy}
-          onUse={useFolder}
-          onBrowse={folder.canBrowse ? browseForFolder : null}
-          onRetry={retryFolder}
-        />
-        {choosing && folder.ready && (
-          <div className="mx-auto max-w-2xl px-4 pb-10">
-            <Button onClick={() => setChoosing(false)}>Back to the library</Button>
-          </div>
-        )}
+        <StoreUnreachable status={folder} busy={busy} onRetry={retryFolder} />
       </div>
     );
   }
@@ -579,7 +548,6 @@ export function App() {
           saved={open.saved}
           recoveredAt={open.recoveredAt}
           clients={clients}
-          rates={rates}
           brand={brand}
           onBack={() => {
             setOpen(null);
@@ -592,11 +560,10 @@ export function App() {
         />
       ) : (
         <>
-          <StoreFolderBar
+          <TopBar
             status={folder}
             session={session}
             busy={busy}
-            onChange={() => setChoosing(true)}
             onSignOut={() => {
               void api
                 .signOut()
@@ -690,7 +657,6 @@ function Editor({
   saved,
   recoveredAt,
   clients,
-  rates,
   brand,
   onBack,
   onProblem,
@@ -701,7 +667,6 @@ function Editor({
   saved: Pallet | null;
   recoveredAt?: string;
   clients: Client[];
-  rates: Rates | null;
   brand: Brand;
   onBack: () => void;
   onProblem: (message: string | null) => void;
@@ -723,10 +688,6 @@ function Editor({
    * back; after that it is known even when the folder cannot be reached, which
    * is the state the setup screen exists for.
    */
-  const [folder, setFolder] = useState<StoreStatus | null>(null);
-  /** Set from the library screen, to change folders while everything is fine. */
-  const [choosing, setChoosing] = useState(false);
-
   // The drawing is always regenerated from the data, on every keystroke.
   const layout = useMemo(() => analysePallet(pallet), [pallet]);
   const errors = layout.issues.filter((issue) => issue.severity === 'error');
@@ -866,12 +827,6 @@ function Editor({
       }
     },
     [abandonDraft, onProblem, onRefresh],
-  );
-
-  // Costed as it is edited, not only once it has been saved.
-  const costing = useMemo(
-    () => (rates ? computeCosting(pallet, layout, rates) : null),
-    [pallet, layout, rates],
   );
 
   /**
@@ -1460,6 +1415,28 @@ function Editor({
                   onChange={(planing) => patch({ planing })}
                 />
               </Field>
+              <Field
+                label="Component tolerance"
+                id={fieldId('componentTolerance')}
+                hint={HINTS.componentTolerance}
+              >
+                <TextInput
+                  value={pallet.componentTolerance}
+                  placeholder={DEFAULT_COMPONENT_TOLERANCE}
+                  onChange={(componentTolerance) => patch({ componentTolerance })}
+                />
+              </Field>
+              <Field
+                label="Total pallet tolerance"
+                id={fieldId('palletTolerance')}
+                hint={HINTS.palletTolerance}
+              >
+                <TextInput
+                  value={pallet.palletTolerance}
+                  placeholder={DEFAULT_PALLET_TOLERANCE}
+                  onChange={(palletTolerance) => patch({ palletTolerance })}
+                />
+              </Field>
               </div>
             </div>
 
@@ -1553,7 +1530,6 @@ function Editor({
           </div>
 
           <Nails pallet={pallet} dispatch={dispatch} nailType={brand.defaults.nailType} />
-          <CostingPanel costing={costing} volume={brand.units.volume} />
         </div>
 
         <div className="flex w-[36%] min-w-0 shrink-0 flex-col border-l border-line bg-card">
@@ -1861,7 +1837,7 @@ function Nails({
         </table>
       )}
       <p className="mt-3 text-label leading-relaxed text-ink-faint">
-        The schedule printed on the sheet and priced by costing. Typed as you work it out; nothing
+        The schedule printed on the sheet. Typed as you work it out; nothing
         here is derived, and nothing here moves a dot on the drawing. With no rows added, the sheet
         carries no nail table at all.
       </p>
@@ -1874,75 +1850,3 @@ function Nails({
   );
 }
 
-/**
- * What the pallet costs at the rates in the config file. Not on the client
- * sheet, which is a specification and not a quotation.
- */
-/** 1 cubic foot in cubic metres, for a shop that buys timber by the cube. */
-const M3_PER_CFT = 0.028316846592;
-
-function CostingPanel({ costing, volume }: { costing: Costing | null; volume: 'cft' | 'm3' }) {
-  if (!costing) return null;
-  const money = (value: number): string => `${costing.currency} ${value.toFixed(2)}`;
-  /**
-   * Timber is priced per cubic foot, which is how the Indian trade quotes.
-   * A shop that thinks in cubic metres sees the volume converted; the rate
-   * stays as it is written in the rates file, so nothing here can disagree
-   * with what is charged.
-   */
-  const cube = (cft: number): string =>
-    volume === 'm3' ? `${(cft * M3_PER_CFT).toFixed(4)} m³` : `${cft.toFixed(3)} cft`;
-
-  return (
-    <Panel title="Timber and cost">
-      <table className="w-full text-ui">
-        <tbody>
-          {costing.materials.map((line) => (
-            <tr key={line.material}>
-              <td className="text-slate-600">
-                {line.material} <span className="text-slate-400">× {line.pieces}</span>
-              </td>
-              <td className="text-right tabular-nums text-slate-500">
-                {cube(line.cft)} @ {line.ratePerCft}/cft
-              </td>
-              <td className="w-24 text-right tabular-nums">{money(line.cost)}</td>
-            </tr>
-          ))}
-          {/* Only where a schedule has been typed. Nothing is counted off the
-              drawing, so with no rows there is no nail cost to state. */}
-          {costing.nails.length > 0 && (
-            <tr>
-              <td className="text-slate-600">nails</td>
-              <td className="text-right tabular-nums text-slate-500">{costing.nailCount}</td>
-              <td className="text-right tabular-nums">{money(costing.nailCost)}</td>
-            </tr>
-          )}
-          <tr>
-            <td className="text-slate-600">overhead</td>
-            <td className="text-right tabular-nums text-slate-500">
-              {costing.overhead.perPallet} + {costing.overhead.percentOfMaterial}%
-            </td>
-            <td className="text-right tabular-nums">{money(costing.overhead.amount)}</td>
-          </tr>
-          <tr className="border-t border-slate-300 font-medium">
-            <td>total</td>
-            <td className="text-right tabular-nums text-slate-500">
-              {cube(costing.cft)}
-            </td>
-            <td className="text-right tabular-nums">{money(costing.total)}</td>
-          </tr>
-        </tbody>
-      </table>
-      <p className="mt-3 flex items-start gap-1.5 text-label leading-relaxed text-ink-faint">
-        <span className="mt-0.5 shrink-0">
-          <Hint text={HINTS.cft} />
-        </span>
-        <span>
-          Rates come from <code className="rounded bg-ground px-1">rates.json</code> beside the
-          designs, or from the ones this version was built with. Nothing here is printed on the
-          sheet.
-        </span>
-      </p>
-    </Panel>
-  );
-}

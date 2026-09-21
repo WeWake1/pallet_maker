@@ -61,9 +61,9 @@ const PLANING: Partial<Record<Pallet['planing'], string>> = {
 export const DASH = '—';
 
 /**
- * Shop tolerances and the projection convention are the same on every drawing
- * a company produces, so they are settled once in its brand rather than being
- * two more things to fill in per design.
+ * The projection convention is the same on every drawing a company produces,
+ * so it is settled once in its brand. Tolerances are not: they are the
+ * design's own, and print blank as a dash or come off the sheet entirely.
  */
 
 /** A label and its value, as they print. */
@@ -152,7 +152,7 @@ export function sheetContent(
     overall: overallRows(pallet, layout, size),
     components: componentTable(pallet, layout).flatMap((group) => group.rows),
     nails: nailRows(pallet),
-    material: materialRows(pallet, brand),
+    material: materialRows(pallet),
     handling: handlingRows(pallet),
     notes: pallet.notes ?? '',
     title: documentName(pallet),
@@ -238,13 +238,13 @@ function handlingRows(pallet: Pallet): HandlingRow[] {
   }));
 }
 
-function materialRows(pallet: Pallet, brand: Brand): Pair[] {
+function materialRows(pallet: Pallet): Pair[] {
   return [
     ...loadRow('Static load', pallet.staticLoadKg),
     ...loadRow('Dynamic load', pallet.dynamicLoadKg),
     ...stated('Species', pallet.species),
     ...stated('Planing', named(pallet.planing, PLANING)),
-    ['Component tolerance', brand.tolerances.component],
-    ['Total pallet tolerance', brand.tolerances.pallet],
+    ...stated('Component tolerance', pallet.componentTolerance),
+    ...stated('Total pallet tolerance', pallet.palletTolerance),
   ];
 }

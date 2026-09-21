@@ -1,6 +1,12 @@
 import { z } from 'zod';
 import { today } from './ids.js';
-import { DEFAULT_HANDLING, MAX_NAILS_PER_CROSSING, NOT_APPLICABLE } from './types.js';
+import {
+  DEFAULT_COMPONENT_TOLERANCE,
+  DEFAULT_HANDLING,
+  DEFAULT_PALLET_TOLERANCE,
+  MAX_NAILS_PER_CROSSING,
+  NOT_APPLICABLE,
+} from './types.js';
 import type { Client, Pallet } from './types.js';
 
 /**
@@ -167,6 +173,12 @@ export const PalletSchema = z.object({
   planing: z.enum(['', 'na', 'none', '1_side', '2_side', '4_side']),
   staticLoadKg: loadKg.optional(),
   dynamicLoadKg: loadKg.optional(),
+
+  // Absent on every document written while these were house conventions rather
+  // than the design's own, so they default to the values those conventions
+  // carried — a design drawn before the change prints exactly as it did.
+  componentTolerance: z.string().default(DEFAULT_COMPONENT_TOLERANCE),
+  palletTolerance: z.string().default(DEFAULT_PALLET_TOLERANCE),
 
   // A yes or a no per method, not the three states above: see HandlingMethod.
   // Absent on every document written before the sheet said how a pallet may be

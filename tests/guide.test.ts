@@ -23,8 +23,8 @@ describe('the guide', () => {
   it('says the things a new user has to know', () => {
     const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
     expect(text).toContain('The drawing is always made from the data');
-    expect(text).toContain('npm start');
+    expect(text).toContain('Signing in');
     expect(text).toContain('You never type a gap');
-    expect(text).toContain('data/pallets.sqlite');
+    expect(text).toContain("your company's own library");
   });
 });

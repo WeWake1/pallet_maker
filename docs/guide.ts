@@ -35,7 +35,8 @@ ${page(`
   <p class="lead">
     A tool for turning a pallet's numbers into a printable specification sheet.
     You type the dimensions; it draws the pallet, works out the spacing, and
-    prints the sheet. It runs on this machine only — no accounts, no internet.
+    prints the sheet. It runs in a browser, and your designs are kept for your
+    company on the server rather than on any one machine.
   </p>
 
   <h2>The one rule worth knowing</h2>
@@ -50,14 +51,15 @@ ${page(`
     sheet can be printed again years later exactly as it was.
   </p>
 
-  <h2>Starting it</h2>
+  <h2>Signing in</h2>
   <ol>
-    <li>Open a terminal in the project folder.</li>
-    <li>Type <code>npm start</code> and press enter.</li>
-    <li>Open <code>http://localhost:5179</code> in the browser.</li>
+    <li>Open the address you were given in a browser.</li>
+    <li>Type the email address you were invited on, and your password.</li>
   </ol>
   <p class="note">
-    Leave the terminal window open while you work — closing it stops the tool.
+    Accounts are made by invitation: you are sent a link, you follow it once
+    and choose your own password. Nobody else ever knows it, so a password
+    that has been lost is replaced with a fresh link rather than read out.
   </p>
 
   <h2>The screen</h2>
@@ -213,13 +215,13 @@ ${page(`
 
   <h2>Where your designs live</h2>
   <p>
-    In one file: <code>data/pallets.sqlite</code>, inside the project folder.
-    Every time the tool starts it copies that file into
-    <code>data/backups/</code> and keeps the last twenty copies.
+    On the server, in your company's own library. Everyone at your company
+    sees the same designs; nobody at another company can see them at all.
   </p>
   <p class="note">
-    Copy the <code>data</code> folder onto a memory stick now and then. It is
-    small, and it is the whole record.
+    The server takes a copy of the whole library every night and keeps a month
+    of them, and a second copy is sent off the machine. Nothing on your own
+    computer has to be backed up.
   </p>
 
   <h2>If something looks wrong</h2>

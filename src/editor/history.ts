@@ -5,9 +5,9 @@ import type { Action, EditorState } from './state.js';
  * Undo and redo, wrapped around the editor's reducer.
  *
  * The document is the whole of the state, so a step backwards is just an older
- * document put back. Nothing is derived and kept in step by hand — the drawing,
- * the costing and the problem list all come from the document — so there is no
- * second thing to unwind.
+ * document put back. Nothing is derived and kept in step by hand — the drawing
+ * and the problem list both come from the document — so there is no second
+ * thing to unwind.
  */
 
 export type HistoryAction = Action | { type: 'undo' } | { type: 'redo' };

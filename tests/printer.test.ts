@@ -32,7 +32,7 @@ describe('the printer', () => {
   });
 
   /**
-   * Electron's printer hands back bytes and never touches the disk, so writing
+   * The pooled printer hands back bytes and never touches the disk, so writing
    * the file is this side's job. A printer that took the path and wrote it
    * itself must end up with the same file rather than two of them.
    */

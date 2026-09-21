@@ -46,12 +46,15 @@ export const HINTS = {
   dynamicLoad:
     'What the pallet will carry while it is being moved. Always the lower of the two figures.',
   species: 'The timber the pallet is made from — pine, hardwood, and so on.',
+  componentTolerance:
+    'How far a single board or block may be off its stated size. Written however the shop writes it. Leave it as it is unless this design is held to something tighter; type na to keep the line off the sheet.',
+  palletTolerance:
+    'How far the finished pallet may be off its overall size. Type na to keep the line off the sheet.',
   handling:
     'What the finished pallet may be moved with. Ticked prints as a tick on the sheet, unticked as a cross — the sheet says both, because what a pallet must not be lifted with is what gets it dropped.',
   palletCode: 'The shop’s own number for this design. A design can be drawn, saved and printed before it has one.',
   clientPartNo: 'The number the client knows this pallet by, which is rarely the same as the shop’s.',
   sheetNote: 'A line printed in the title block beside the date — a client drawing number, or “(old)”.',
-  cft: 'Cubic feet. Timber is bought and priced by volume, and this is the unit the yard quotes in.',
 } as const;
 
 export type HintKey = keyof typeof HINTS;
@@ -78,7 +81,6 @@ export const GLOSSARY: Array<{ term: string; hint: HintKey }> = [
   { term: 'Dynamic load', hint: 'dynamicLoad' },
   { term: 'Planing', hint: 'planing' },
   { term: 'Handling', hint: 'handling' },
-  { term: 'cft', hint: 'cft' },
 ];
 
 /** The id a field carries so the problem list can scroll to it. */

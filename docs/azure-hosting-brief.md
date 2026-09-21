@@ -13,7 +13,7 @@
 
 ## 2. What the software is
 
-**Pallet Spec** — a web application that lets a pallet manufacturer design a wooden pallet (dimensions, boards, blocks, nails, notched runners, etc.), keep a library of designs per client, cost it from a price list, and print a one-page **specification sheet as a PDF** (also SVG/DXF). Think "CAD-lite plus quotation sheet" for a pallet factory.
+**Pallet Spec** — a web application that lets a pallet manufacturer design a wooden pallet (dimensions, boards, blocks, nails, notched runners, etc.), keep a library of designs per client, and print a one-page **specification sheet as a PDF** (also SVG/DXF). Think "CAD-lite" for a pallet factory.
 
 **Technology, and what it means for hosting:**
 
@@ -25,7 +25,7 @@
 | PDF printing | The server launches a headless **Chromium** (via `puppeteer-core`) to render the sheet to PDF. It keeps **one long-lived Chromium** and prints N sheets at a time (N = `PALLET_PRINT_CONCURRENCY`, default 2). | **This is the only heavy thing.** ~120 MB idle Chromium + ~150–250 MB per sheet while it prints. Needs the Debian `chromium` package (not Ubuntu's snap). |
 | HTTPS | **Caddy** as reverse proxy; gets and renews a Let's Encrypt certificate by itself | Needs a public hostname and ports 80/443 open. |
 | Login | Built in: email + password, **invitation-only**. Admins never set passwords; they send a one-time link and the person chooses their own. | No external auth service. Cookies are `Secure`, so `PALLET_PUBLIC_URL` must be `https://…`. |
-| Multi-company | One process serves every company. Each company ("tenant") has its own folder `/var/lib/pallet-spec/tenants/<slug>/` with `designs/`, `brand.json` (name, logo, font), `rates.json` (prices). Who sees which folder is decided by who is logged in. | One VM, one process, for all customers. |
+| Multi-company | One process serves every company. Each company ("tenant") has its own folder `/var/lib/pallet-spec/tenants/<slug>/` with `designs/` and `brand.json` (name, logo, font). Who sees which folder is decided by who is logged in. | One VM, one process, for all customers. |
 | Backups | The server itself snapshots every company's library **nightly at 02:00** (server time, UTC) into its folder. A systemd timer at **03:00** copies the whole data folder off the machine with **restic** to an **Azure Storage blob container**, encrypted. | Needs one storage account + container + its access key. |
 | Deploy | `deploy/deploy.sh user@host` run **from the Mac**: builds, rsyncs into `/opt/pallet-spec/releases/<stamp-sha>/`, `npm ci --omit=dev` there, flips the `current` symlink, restarts the service, curls `/healthz`. Rollback = point the symlink back. | Needs SSH as the `pallet` user with a sudo rule for exactly one command. |
 | Health | `GET /healthz` → JSON, 503 if the data folder or printer is unwell. Includes `printer.launches` (how many times Chromium was started — more than 1 means one died). | Point an uptime monitor at it. |
@@ -237,7 +237,7 @@ cd /opt/pallet-spec/current
 sudo -u pallet env $(grep -v '^#' /etc/pallet-spec/env | xargs) node dist/server/tenant.mjs vendor-admin --email <your email>
 ```
 
-It prints a one-time link (valid a week). Open it, choose a password, and you are signed in as the vendor. **Everything after this is on screen**: create the company (slug `ambica`, name `Ambica Patterns India Pvt Ltd`, timezone `Asia/Kolkata`), invite its first admin (they get a link, choose their own password), upload its logo, set its prices. The slug is permanent (it is the folder name).
+It prints a one-time link (valid a week). Open it, choose a password, and you are signed in as the vendor. **Everything after this is on screen**: create the company (slug `ambica`, name `Ambica Patterns India Pvt Ltd`, timezone `Asia/Kolkata`), invite its first admin (they get a link, choose their own password), upload its logo. Branding is the vendor's alone — a company's own admin sees its people and nothing else. The slug is permanent (it is the folder name).
 
 Shell equivalents exist for a helper who prefers them: `tenant.mjs create --slug ambica --name "…" --timezone Asia/Kolkata --admin <email>`, `invite --company ambica --email <x> --role member|admin`, `reset --email <x>`, `list`, `users --company ambica`, `suspend|resume --company ambica` — all with the same `sudo -u pallet env $(…) node dist/server/tenant.mjs` prefix.
 
@@ -251,7 +251,7 @@ sudo -u pallet sh -c '. /etc/pallet-spec/restic.env; export RESTIC_REPOSITORY AZ
 
 Done: one snapshot listed. It now runs nightly at 03:00 UTC (08:30 IST); `systemctl list-timers` shows the next run.
 
-**E3. Ambica's existing designs.** In the old desktop app: **Export library** (one JSON file). On the server, signed in as an Ambica user: **Import library**.
+**E3. Ambica's existing designs.** **Export library** from wherever they are now (one JSON file). On the server, signed in as an Ambica user: **Import library**. Do this before the last desktop copy is retired — it is the only thing that can still export.
 
 **E4. The 1 GiB printer test.** Open four or five sheets as PDF one after another (two people at once if possible), then on the VM:
 
@@ -289,7 +289,7 @@ curl -s https://HOST/healthz                           # printer.launches should
   registry.sqlite                                   companies, users, sessions, invitations
   registry-backups/                                 the server's own nightly clean copies of the registry (restore from here, not registry.sqlite)
   tenants/<slug>/designs/*.json, clients.json       one company's designs and its client list
-  tenants/<slug>/brand.json, brand/, rates.json     its name/logo/font and prices
+  tenants/<slug>/brand.json, brand/                 its name, logo and font
   tenants/<slug>/backups/                           the server's own nightly snapshots
   home/                                             the pallet user's home (Chromium profile, ssh key)
 /etc/pallet-spec/env, restic.env                    configuration and secrets (640 root:pallet)

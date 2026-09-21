@@ -10,9 +10,9 @@ import type { Brand } from './types.js';
  * brand file says otherwise.
  *
  * What is left is the part every pallet shop needs anyway: a projection
- * convention, tolerances, millimetres, and a design to start from. Those are
- * stated rather than absent, because a sheet with no tolerance on it is a
- * sheet somebody has to ask about.
+ * convention and a design to start from. Those are stated rather than absent,
+ * because a sheet that says nothing about how it is drawn is a sheet somebody
+ * has to ask about.
  */
 export const DEFAULT_BRAND: Brand = {
   companyName: '',
@@ -22,8 +22,6 @@ export const DEFAULT_BRAND: Brand = {
   // First angle is the ISO convention, used across Europe and India. A shop
   // drawing to the American convention says third angle here.
   projectionNote: 'First-angle projection, all dimensions in mm',
-  tolerances: { component: '± 2 mm', pallet: '± 5 mm' },
-  units: { length: 'mm', volume: 'cft' },
   defaults: {
     palletCodePlaceholder: '',
     species: 'pine',

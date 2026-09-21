@@ -17,29 +17,21 @@ export interface StoreStatus {
   ready: boolean;
   /** Why it cannot be used, when it cannot. */
   problem: string | null;
-  /** Where the folder was decided, which says whether it can be changed here. */
-  source: 'environment' | 'settings' | 'default';
+  /** Where the folder was decided: an environment variable, or the default. */
+  source: 'environment' | 'default';
   designs: number | null;
   clients: number | null;
   /**
-   * Whether the server keeps the designs itself rather than in a folder the
-   * person at the keyboard chose.
+   * Whether the designs are the server's own rather than a folder on the
+   * reader's machine.
    *
    * True on a hosted server, where the folder was settled when it started, is
    * on somebody else's machine, and is nobody's to move from a browser. False
-   * in the desktop app — where the folder may still be fixed for this run, by
-   * `PALLET_STORE`, which is what `source` says and a different thing
-   * entirely.
+   * only when the tool is run locally against one folder.
    */
   managedStore?: boolean;
-  /** Whether a native folder dialog can be opened, which only the app can do. */
-  canBrowse?: boolean;
   /** Which build this is, when it is the app rather than a browser tab. */
   version?: string | null;
-  /** Whether the prices came from the designs folder or from this version. */
-  ratesFrom?: 'folder' | 'built-in';
-  /** Why the folder's prices were not used, when there are some and they failed. */
-  ratesProblem?: string | null;
   /** Whether the branding came from the designs folder or from this version. */
   brandFrom?: 'folder' | 'built-in';
   /** Why the folder's branding was not used, when there is some and it failed. */
@@ -73,21 +65,7 @@ export class StoreHandle {
     return this.store !== undefined;
   }
 
-  /**
-   * Use this folder from now on, making it if it is not there.
-   *
-   * Somebody saying which folder to use is the one moment it is right to create
-   * one: they have named it on purpose, and a first run has to be able to start
-   * a library somewhere.
-   */
-  use(root: string): StoreStatus {
-    this.origin = 'settings';
-    this.open(root, true);
-    if (this.failure) throw new StoreUnavailableError(this.root ?? root, this.failure);
-    return this.status();
-  }
-
-  /** Try the folder again, for one that was not there when the tool started. */
+  /** Try the folder again, for one that was not there when the server started. */
   retry(): StoreStatus {
     if (this.root !== undefined) this.open(this.root, false);
     return this.status();

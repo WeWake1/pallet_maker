@@ -25,8 +25,7 @@ import { loadFixture } from './helpers.js';
  * as a version of this program wrote it, frozen on the day it was written.
  * They are never edited. When the schema changes, these must still parse, still
  * lay out, and still print — and if they cannot, the change needs a migration
- * in `src/server/db.ts` before it can ship, the way the revisions change had
- * one.
+ * written for the stored documents before it can ship.
  *
  * The second is `absent` below: the fields a stored document is allowed not to
  * carry. Taking one away must not stop a document parsing.
@@ -96,6 +95,8 @@ const absent = {
     'notes',
     'note',
     'updatedAt',
+    'componentTolerance',
+    'palletTolerance',
   ],
   slot: ['joinedToPrev', 'nudgeMm', 'variant', 'notches'],
   layer: ['spanMm', 'offsetMm', 'runSpanMm', 'runOffsetMm'],

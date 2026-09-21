@@ -6,8 +6,8 @@ import type { HandlingMethod } from '../types.js';
  * A specification sheet goes out to a customer, so it says whose it is: the
  * name across the diagonal and the mark in the corner where a title block's
  * owner belongs. It also carries a handful of things that are settled once per
- * company rather than per design — the projection convention, the shop's
- * tolerances, the units it quotes in, and what a new design starts as.
+ * company rather than per design — the projection convention, and what a new
+ * design starts as.
  *
  * All of it is data. It used to be constants in this folder, which meant one
  * company's name, one company's logo and one company's font were compiled into
@@ -85,20 +85,6 @@ export interface BrandWatermark {
   sizePt: number | null;
 }
 
-/**
- * What the shop measures in.
- *
- * The currency is not here: it belongs to the rates, where the numbers it
- * counts are, and two places to write it down is one place for them to
- * disagree.
- */
-export interface BrandUnits {
-  /** Millimetres. Inches are not built; the sheet says `mm` in a dozen places. */
-  length: 'mm';
-  /** Cubic feet, as the Indian timber trade quotes, or cubic metres. */
-  volume: 'cft' | 'm3';
-}
-
 /** What a new design starts as, and what the fields suggest. */
 export interface BrandDefaults {
   /** Shown in the empty pallet-code field, e.g. `AP-001`. */
@@ -126,8 +112,5 @@ export interface Brand {
    * where it sits, which is the thing a projection convention settles.
    */
   projectionNote: string;
-  /** Printed on every sheet, whatever the design. */
-  tolerances: { component: string; pallet: string };
-  units: BrandUnits;
   defaults: BrandDefaults;
 }

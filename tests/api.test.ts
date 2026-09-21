@@ -173,25 +173,6 @@ describe('the API', () => {
     expect((await call('DELETE', `/api/pallets/${design.id}`)).status).toBe(404);
   });
 
-  it('serves the rates, so the editor costs at the same numbers the server does', async () => {
-    const response = await call('GET', '/api/rates');
-    expect(response.status).toBe(200);
-    const rates = response.body as { timberPerCft: Record<string, number>; currency: string };
-    expect(rates.timberPerCft['default']).toBeGreaterThan(0);
-    expect(rates.currency).toBeTruthy();
-  });
-
-  it('costs a stored design', async () => {
-    const pallet = fixture('AP-109');
-    await call('POST', '/api/pallets', pallet);
-    const response = await call('GET', `/api/pallets/${pallet.id}/costing`);
-    expect(response.status).toBe(200);
-    const costing = response.body as { cft: number; total: number; materials: unknown[] };
-    expect(costing.cft).toBeGreaterThan(0);
-    expect(costing.total).toBeGreaterThan(0);
-    expect(costing.materials).toHaveLength(1);
-  });
-
   // Named for the design, the client and the date, so that a file that has left
   // this program can be found again among other people's.
   it('serves the DXF as a download named for the design, its client and its date', async () => {

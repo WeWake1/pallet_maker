@@ -1,17 +1,11 @@
 import { Router } from 'express';
 import type { NextFunction, Request, Response } from 'express';
-import { rmSync } from 'node:fs';
-import { join } from 'node:path';
 import { readBrandFile, writeBrandFile, storeLogo, removeLogo, storeFont, removeFont, BrandWriteError, logoOnDisk, fontOnDisk } from '../brand/write.js';
 import { LogoError } from '../brand/logoFile.js';
 import type { BrandFile } from '../brand/schema.js';
-import { loadRates } from '../costing/load.js';
-import { RATES_FILE } from '../costing/resolve.js';
-import { parseRates } from '../costing/rates.js';
 import { analysePallet } from '../geometry/layout.js';
 import { parsePallet } from '../schema.js';
 import { renderSheet } from '../sheet/sheet.js';
-import { writeAtomic } from '../store/files.js';
 import { currentTenant } from '../tenancy/context.js';
 import { EmailTakenError, RegistryError } from '../tenancy/registry.js';
 import type { Registry, Role } from '../tenancy/registry.js';
@@ -29,8 +23,8 @@ import { createInvitation, invitationLink } from './invitations.js';
  * middleware in front of it has already settled whose folder this is.
  *
  * What it writes is the files an administrator with a shell could have written
- * by hand: `brand.json`, the artwork under `brand/`, `rates.json`. So there is
- * one way a company's brand is stored, whichever way it got there.
+ * by hand: `brand.json` and the artwork under `brand/`. So there is one way a
+ * company's brand is stored, whichever way it got there.
  */
 
 /** A file sent from the browser: its name, and its bytes as base64. */
@@ -56,7 +50,21 @@ const fresh = (res: Response): void => {
   res.setHeader('Cache-Control', 'no-store, must-revalidate');
 };
 
-export function adminRoutes(registry: Registry, auth: AuthConfig): Router {
+/**
+ * What this router is allowed to do, which depends on where it is mounted.
+ *
+ * A company's own administrator looks after its people. Its branding — the
+ * name across the sheet, the mark in the corner, the projection note — is the
+ * vendor's, because a sheet is what identifies whose pallet this is, and a
+ * company that can retype the name on it can put any name on it. So the brand
+ * routes exist only on the mount the vendor reaches.
+ */
+export interface AdminScope {
+  /** Whether this mount may read and write the company's branding. */
+  brand: boolean;
+}
+
+export function adminRoutes(registry: Registry, auth: AuthConfig, scope: AdminScope): Router {
   const router = Router();
 
   /* -------------------------------------------------------------- people */
@@ -169,6 +177,16 @@ export function adminRoutes(registry: Registry, auth: AuthConfig): Router {
   /* --------------------------------------------------------------- brand */
 
   /**
+   * Not this mount's to touch. A 404 rather than a 403, because on the
+   * company's own mount these routes are not a thing that exists.
+   */
+  if (!scope.brand) {
+    router.all(['/brand', '/brand/*splat', '/preview'], (_req, res) => {
+      res.status(404).json({ error: 'Branding is looked after by whoever runs the service.' });
+    });
+  }
+
+  /**
    * The brand as it is written, for the form — and where the sheet is
    * actually getting it from, which is not always the same thing.
    */
@@ -255,32 +273,6 @@ export function adminRoutes(registry: Registry, auth: AuthConfig): Router {
     const pallet = parsePallet(previewDesign);
     fresh(res);
     res.type('html').send(renderSheet(pallet, analysePallet(pallet), { brand }));
-  }));
-
-  /* --------------------------------------------------------------- rates */
-
-  router.get('/rates', wrap((_req, res) => {
-    const context = currentTenant();
-    const inUse = context.rates();
-    fresh(res);
-    res.json({ rates: inUse.rates, from: inUse.from, problem: inUse.problem });
-  }));
-
-  /**
-   * Write the prices. Checked the way the resolver checks them, so a file that
-   * would be refused at costing time is refused here instead.
-   */
-  router.put('/rates', wrap((req, res) => {
-    const root = currentTenant().handle.require().root;
-    const rates = parseRates(req.body);
-    writeAtomic(join(root, RATES_FILE), `${JSON.stringify(rates, null, 2)}\n`);
-    res.json({ rates: loadRates(join(root, RATES_FILE)), from: 'folder' });
-  }));
-
-  /** Back to the prices this build ships with. */
-  router.delete('/rates', wrap((_req, res) => {
-    rmSync(join(currentTenant().handle.require().root, RATES_FILE), { force: true });
-    res.status(204).end();
   }));
 
   /* ------------------------------------------------------------- failures */

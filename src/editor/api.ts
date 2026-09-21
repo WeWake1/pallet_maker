@@ -1,5 +1,4 @@
 import type { Brand } from '../brand/types.js';
-import type { Rates } from '../costing/rates.js';
 import type { ImportMode, ImportReport } from '../library.js';
 import type { ClientDesigns, PalletSummary } from '../server/repository.js';
 import type { StoreStatus } from '../store/handle.js';
@@ -120,8 +119,6 @@ export interface BrandFileInput {
   watermark?: { enabled?: boolean; text?: string | null; opacity?: number; sizePt?: number | null };
   font?: { family: string; file: string; advanceEm?: number } | null;
   projectionNote?: string;
-  tolerances?: { component?: string; pallet?: string };
-  units?: { volume?: 'cft' | 'm3' };
   defaults?: {
     palletCodePlaceholder?: string;
     species?: string;
@@ -137,12 +134,6 @@ export interface BrandSettings {
   problem: string | null;
   logo: string | null;
   font: string | null;
-}
-
-export interface RatesSettings {
-  rates: Rates;
-  from: 'folder' | 'built-in';
-  problem: string | null;
 }
 
 export interface CompanySummary {
@@ -197,7 +188,6 @@ export const api = {
     }),
   duplicate: (id: string) => call<Pallet>(`/api/pallets/${id}/duplicate`, { method: 'POST' }),
   remove: (id: string) => call<void>(`/api/pallets/${id}`, { method: 'DELETE' }),
-  rates: () => call<Rates>('/api/rates'),
   /**
    * Whose drawing this is. The editor renders the sheet itself, for the
    * preview and for opening one in a tab, so it needs the same brand the
@@ -235,13 +225,8 @@ export const api = {
 
   /** Which folder the designs are in. Answers even when it cannot be reached. */
   settings: () => call<StoreStatus>('/api/settings'),
-  /** Use this folder from now on, making it if it is not there. */
-  useStoreFolder: (root: string) =>
-    call<StoreStatus>('/api/settings', { method: 'PUT', body: JSON.stringify({ root }) }),
-  /** Look again, for a folder that was not there when the tool started. */
+  /** Look again, for a folder that was not there when the server started. */
   retryStore: () => call<StoreStatus>('/api/settings/retry', { method: 'POST' }),
-  /** Pick a folder in a native dialog. Only the app can do this. */
-  browseForFolder: () => call<StoreStatus>('/api/settings/browse', { method: 'POST' }),
 
   /**
    * Looking after a company. `base` is `/api/admin` for its own administrator
@@ -276,10 +261,6 @@ export const api = {
     removeFont: () => call<void>(`${base}/brand/font`, { method: 'DELETE' }),
     previewUrl: () => `${base}/preview`,
 
-    rates: () => call<RatesSettings>(`${base}/rates`),
-    saveRates: (rates: Rates) =>
-      call<RatesSettings>(`${base}/rates`, { method: 'PUT', body: JSON.stringify(rates) }),
-    useShippedRates: () => call<void>(`${base}/rates`, { method: 'DELETE' }),
   }),
 
   /** Looking after the service: every company, and who else looks after it. */
