@@ -99,6 +99,10 @@ sheet's Helvetica lands on Liberation Sans, which has the same widths.
 
 ## 3. The user and the folders
 
+Nothing of the repository is on the machine yet, so first, from your own
+machine, `scp -r deploy azureuser@pallets.example.com:~/` — the rest of this
+section and the next two read from that `~/deploy`.
+
 ```sh
 sudo useradd --system --create-home --home-dir /var/lib/pallet-spec/home --shell /bin/bash pallet
 sudo mkdir -p /opt/pallet-spec/releases /var/lib/pallet-spec /etc/pallet-spec
@@ -106,6 +110,14 @@ sudo chown -R pallet:pallet /opt/pallet-spec /var/lib/pallet-spec
 sudo cp deploy/env.example /etc/pallet-spec/env          # then edit it
 sudo cp deploy/restic.env.example /etc/pallet-spec/restic.env   # then edit it
 sudo chown root:pallet /etc/pallet-spec/*; sudo chmod 640 /etc/pallet-spec/*
+```
+
+The deploy script signs in as `pallet`, so give that user the same key you
+signed in with:
+
+```sh
+sudo install -d -m 700 -o pallet -g pallet /var/lib/pallet-spec/home/.ssh
+sudo install -m 600 -o pallet -g pallet ~/.ssh/authorized_keys /var/lib/pallet-spec/home/.ssh/authorized_keys
 ```
 
 The deploy script restarts the service, so give the pallet user that one
@@ -125,11 +137,14 @@ behind that.
 ## 5. The service and the timers
 
 ```sh
-sudo cp deploy/pallet-spec.service deploy/pallet-spec-backup.* deploy/pallet-spec-offsite.* /etc/systemd/system/
+sudo cp deploy/pallet-spec.service deploy/pallet-spec-offsite.* /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now pallet-spec-backup.timer pallet-spec-offsite.timer
+sudo systemctl enable --now pallet-spec-offsite.timer
 sudo systemctl enable pallet-spec      # started by the first deploy
 ```
+
+The server snapshots every company's library itself at two each night (and
+the registry beside them), so the only timer is the off-site copy at three.
 
 ## 6. The first deploy, from your own machine
 
@@ -158,14 +173,16 @@ sudo -u pallet sh -c '. /etc/pallet-spec/restic.env; export RESTIC_REPOSITORY AZ
 
 - `journalctl -u pallet-spec -f` shows one JSON line per request and the
   server's own messages; a 500 carries a request id that the person saw too.
-- `systemctl list-timers` shows when the snapshot and the off-site copy last
-  ran and next run. `restic snapshots` lists what is off the machine.
+- `systemctl list-timers` shows when the off-site copy last ran and next runs.
+  `restic snapshots` lists what is off the machine.
 - Point an uptime monitor at `/healthz`; it answers 503 when the designs cannot
   be reached or the printer is unwell.
 - **Do a restore once a quarter.** `restic restore latest --target /tmp/restore`,
-  then run the server against it: `PALLET_DATA_ROOT=/tmp/restore/var/lib/pallet-spec PORT=5999 node dist/server/main.mjs`
+  then — `registry.sqlite` was copied live and can be mid-write — drop in the
+  clean nightly snapshot first: `cp $(ls -t /tmp/restore/var/lib/pallet-spec/registry-backups/*.sqlite | head -1) /tmp/restore/var/lib/pallet-spec/registry.sqlite`.
+  Only then run the server against it: `PALLET_DATA_ROOT=/tmp/restore/var/lib/pallet-spec PORT=5999 node dist/server/main.mjs`
   and open `http://127.0.0.1:5999/healthz` and the dashboard. A backup nobody
-  has restored is a hope, not a backup.
+  has restored *this way* is a hope, not a backup.
 
 ## 7a. The first company, and the first people
 

@@ -1,8 +1,8 @@
-# /etc/systemd/system/pallet-spec-offsite.service — run nightly by the timer,
-# after the snapshot, so the copy off the machine holds tonight's snapshot too.
+# /etc/systemd/system/pallet-spec-offsite.service — run nightly by the timer.
+# The server takes each company's own snapshot at two; this runs at three, so
+# the copy off the machine holds tonight's snapshots too.
 [Unit]
 Description=Pallet Spec off-site backup
-After=pallet-spec-backup.service
 
 [Service]
 Type=oneshot
