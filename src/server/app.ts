@@ -14,7 +14,7 @@ import { enterCompany, vendorRoutes } from './vendorRoutes.js';
 import {
   checkSession,
   requireRequestedWith,
-  requireRole,
+  requireVendor,
   unauthenticated,
 } from './auth.js';
 import { palletToDxf } from '../dxf/drawing.js';
@@ -318,18 +318,19 @@ export function createApp(source: StoreHandle | Tenants, options: AppOptions = {
     // The vendor's routes come before the check below, because the vendor
     // belongs to no company and the check would turn them away. Working on a
     // company they name puts that company in context and then hands over to
-    // the very same routes an administrator of it uses.
+    // the routes that look after it.
+    //
+    // There is no way in to those from a company's own side. Who is in a
+    // company, like the name its sheets go out under, is the vendor's to
+    // decide, so nobody at a company has any settings at all.
     app.use(
       '/api/vendor/companies/:slug/admin',
-      requireRole('manageService'),
+      requireVendor(),
       enterCompany(auth.registry, tenants),
-      adminRoutes(auth.registry, auth, { brand: true }),
+      adminRoutes(auth.registry, auth),
     );
-    app.use('/api/vendor', requireRole('manageService'), vendorRoutes(auth.registry, tenants, auth));
+    app.use('/api/vendor', requireVendor(), vendorRoutes(auth.registry, tenants, auth));
     app.use('/api', needsCompany);
-    // A company's administrator looks after its people and nothing else: the
-    // same router, mounted without the branding.
-    app.use('/api/admin', requireRole('manageCompany'), adminRoutes(auth.registry, auth, { brand: false }));
   } else {
     app.use('/api', needsCompany);
   }

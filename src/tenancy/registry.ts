@@ -35,8 +35,12 @@ const { DatabaseSync } = load('node:sqlite') as {
  */
 
 export type TenantStatus = 'active' | 'suspended';
-/** What somebody may do. A vendor belongs to no company and may enter any. */
-export type Role = 'vendor' | 'admin' | 'member';
+/**
+ * What somebody may do. A vendor belongs to no company and may enter any; a
+ * member belongs to one and draws there. Nobody at a company looks after
+ * anything — its people and its brand are the vendor's to set.
+ */
+export type Role = 'vendor' | 'member';
 export type UserStatus = 'active' | 'disabled';
 /** An invitation to join, or a way back in for somebody who is already in. */
 export type InvitationKind = 'invite' | 'reset';
@@ -174,6 +178,12 @@ export class Registry {
     this.db.exec('PRAGMA foreign_keys = ON');
     this.db.exec('PRAGMA busy_timeout = 5000');
     this.db.exec(SCHEMA);
+    // A company once had administrators, who looked after its people. That
+    // is the vendor's alone now, so whoever was one is a member like everybody
+    // else. The tables still accept the old word, so a registry from before
+    // opens unchanged and is put right here.
+    this.db.exec("UPDATE users SET role = 'member' WHERE role = 'admin'");
+    this.db.exec("UPDATE invitations SET role = 'member' WHERE role = 'admin'");
   }
 
   close(): void {
@@ -347,14 +357,6 @@ export class Registry {
     this.db
       .prepare('UPDATE tenants SET name = ?, timezone = ? WHERE id = ?')
       .run(changes.name ?? held.name, changes.timezone ?? held.timezone, id);
-  }
-
-  /** Make somebody an administrator of their company, or no longer one. */
-  setUserRole(id: string, role: 'admin' | 'member'): void {
-    const changed = this.db
-      .prepare("UPDATE users SET role = ? WHERE id = ? AND role != 'vendor'")
-      .run(role, id);
-    if (changed.changes === 0) throw new RegistryError(`No user ${id} whose role can change`);
   }
 
   setUserStatus(id: string, status: UserStatus): void {

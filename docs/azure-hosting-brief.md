@@ -237,9 +237,9 @@ cd /opt/pallet-spec/current
 sudo -u pallet env $(grep -v '^#' /etc/pallet-spec/env | xargs) node dist/server/tenant.mjs vendor-admin --email <your email>
 ```
 
-It prints a one-time link (valid a week). Open it, choose a password, and you are signed in as the vendor. **Everything after this is on screen**: create the company (slug `ambica`, name `Ambica Patterns India Pvt Ltd`, timezone `Asia/Kolkata`), invite its first admin (they get a link, choose their own password), upload its logo. Branding is the vendor's alone — a company's own admin sees its people and nothing else. The slug is permanent (it is the folder name).
+It prints a one-time link (valid a week). Open it, choose a password, and you are signed in as the vendor. **Everything after this is on screen**: create the company (slug `ambica`, name `Ambica Patterns India Pvt Ltd`, timezone `Asia/Kolkata`), invite its people (they get a link, choose their own password), upload its logo. People and branding are the vendor's alone — nobody at a company has any settings. The slug is permanent (it is the folder name).
 
-Shell equivalents exist for a helper who prefers them: `tenant.mjs create --slug ambica --name "…" --timezone Asia/Kolkata --admin <email>`, `invite --company ambica --email <x> --role member|admin`, `reset --email <x>`, `list`, `users --company ambica`, `suspend|resume --company ambica` — all with the same `sudo -u pallet env $(…) node dist/server/tenant.mjs` prefix.
+Shell equivalents exist for a helper who prefers them: `tenant.mjs create --slug ambica --name "…" --timezone Asia/Kolkata --invite <email>`, `invite --company ambica --email <x>`, `reset --email <x>`, `list`, `users --company ambica`, `suspend|resume --company ambica` — all with the same `sudo -u pallet env $(…) node dist/server/tenant.mjs` prefix.
 
 **E2. Off-site backup — initialise once, then prove it:**
 

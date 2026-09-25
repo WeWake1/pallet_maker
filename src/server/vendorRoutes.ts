@@ -14,8 +14,9 @@ import { createInvitation, invitationLink } from './invitations.js';
  *
  * Only the vendor's own people reach any of this. They belong to no company,
  * so they have no designs of their own; what they have is every company's
- * settings, which is what onboarding one takes — a new company's logo and
- * prices are put in place before its first person ever signs in.
+ * settings, which is what onboarding one takes — a new company's logo is put
+ * in place before its first person ever signs in, and who else may sign in is
+ * decided here too.
  */
 
 const wrap =
@@ -61,12 +62,12 @@ export function vendorRoutes(registry: Registry, tenants: Tenants, auth: AuthCon
   }));
 
   /**
-   * A new company, and optionally the link that lets its first administrator
-   * in. Its folder is made now, so the vendor can put its branding and prices
-   * in place before that link is ever followed.
+   * A new company, and optionally the link that lets its first person in. Its
+   * folder is made now, so the vendor can put its branding in place before
+   * that link is ever followed.
    */
   router.post('/companies', wrap((req, res) => {
-    const body = req.body as { slug?: unknown; name?: unknown; timezone?: unknown; adminEmail?: unknown };
+    const body = req.body as { slug?: unknown; name?: unknown; timezone?: unknown; firstEmail?: unknown };
     const timezone = typeof body.timezone === 'string' && body.timezone !== '' ? body.timezone : 'UTC';
     if (!isTimeZone(timezone)) {
       res.status(400).json({ error: `"${timezone}" is not a time zone name. Use one like Asia/Kolkata.` });
@@ -80,12 +81,12 @@ export function vendorRoutes(registry: Registry, tenants: Tenants, auth: AuthCon
     tenants.context(tenant);
 
     let link: string | null = null;
-    if (typeof body.adminEmail === 'string' && body.adminEmail.trim() !== '') {
+    if (typeof body.firstEmail === 'string' && body.firstEmail.trim() !== '') {
       const { token } = createInvitation(registry, {
         kind: 'invite',
         tenantId: tenant.id,
-        email: body.adminEmail.trim(),
-        role: 'admin',
+        email: body.firstEmail.trim(),
+        role: 'member',
         invitedBy: req.principal?.user.id ?? null,
       });
       link = invitationLink(auth.publicUrl, token);
@@ -177,9 +178,9 @@ export function vendorRoutes(registry: Registry, tenants: Tenants, auth: AuthCon
 /**
  * Work on a company the vendor named, as though signed in to it.
  *
- * The company's own administrator reaches the same routes with the company
- * taken from their session; the vendor names it in the address. Either way,
- * what runs afterwards has the company in context and cannot tell which.
+ * The company is named in the address rather than taken from a session, since
+ * the vendor belongs to none. What runs afterwards has it in context, the
+ * same way a request from somebody at that company would.
  */
 export function enterCompany(registry: Registry, tenants: Tenants) {
   return (req: Request, res: Response, next: NextFunction): void => {

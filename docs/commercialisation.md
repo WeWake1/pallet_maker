@@ -10,7 +10,7 @@ The pallet specification-sheet generator was built for Ambica Patterns (India) P
 **Decisions taken on 10 September 2026:**
 
 - **Hosting: one shared server, many companies.** One Node process on the VPS, one store folder per company, chosen by who is logged in. Ambica is company #1.
-- **Login: email + password, invitation-only.** The vendor creates a company and its first admin; admins invite colleagues.
+- **Login: email + password, invitation-only.** The vendor creates a company and invites its people. (Planned as "its first admin; admins invite colleagues" — since 2026-09-25 only the vendor invites anybody, and a company has no admins.)
 - **Logos: SVG and PNG/JPG both accepted.** Raster logos are embedded as an image; the "nothing raster in the outputs" rule is relaxed only for those companies.
 
 This document has three parts: **(A)** the inventory of what is custom to Ambica, **(B)** what selling it takes beyond the code, and **(C)** the phased roadmap.
@@ -297,6 +297,7 @@ Done, with two changes of scope decided at the time:
 
 - **Pricing removed entirely**, rather than kept. `src/costing/`, `config/rates.json`, `rates.json` per tenant, the Prices tab, `/api/rates`, `/api/pallets/:id/costing` and the `costing` CLI are gone, and so is the CFT volume that was computed with them. Nothing printed on a sheet changes: costing never appeared on one.
 - **Branding is the vendor's alone.** `adminRoutes` takes a scope; under `/api/admin` the brand and preview routes answer 404 rather than being mounted, so a company cannot retype the name its sheets go out under. A company's own administrator sees People and nothing else.
+- **People are the vendor's alone too** (2026-09-25). `/api/admin` is gone: `adminRoutes` is mounted only under `/api/vendor/companies/:slug/admin`, and the company roles collapsed to one — everybody at a company is a `member` who draws and prints. The registry turns any old `admin` row into `member` when it opens. `pallet-tenant create` takes `--invite` (was `--admin`), and `invite` no longer takes `--role`.
 - **Tolerances moved onto the design**, out of the brand file. Free text, defaulting to the old house values (`± 2 mm` / `± 5 mm`), `na` to take a row off the sheet — the same three states species and the loads already had. Designs written before the change print exactly as they did.
 - Electron, `electron-builder.yml`, `StoreFolder.tsx`, `src/store/settings.ts`, `src/server/db.ts`, `src/cli/convert.ts`, `tests/migration.test.ts` and `better-sqlite3` are gone; `tsconfig.json` drops `electron`. `StoreHandle.use()` went with them, and `PUT /api/settings` now refuses for everyone. `--local` stays as the way to work on the tool: one folder from `PALLET_STORE` or `data/library`, no sign-in.
 - `docs/guide.ts` rewritten for the hosted product; README's costing, prices, desktop-app, installer and storage sections replaced.

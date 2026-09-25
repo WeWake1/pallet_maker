@@ -8,19 +8,22 @@ import { parsePallet } from '../schema.js';
 import { renderSheet } from '../sheet/sheet.js';
 import { currentTenant } from '../tenancy/context.js';
 import { EmailTakenError, RegistryError } from '../tenancy/registry.js';
-import type { Registry, Role } from '../tenancy/registry.js';
+import type { Registry } from '../tenancy/registry.js';
 import previewDesign from '../../fixtures/wing-both-decks.json' with { type: 'json' };
 import type { AuthConfig } from './app.js';
 import { createInvitation, invitationLink } from './invitations.js';
 
 /**
- * Looking after a company: who is in it, whose name is on its sheets, and what
- * it quotes at.
+ * Looking after a company: who is in it, and whose name is on its sheets.
+ *
+ * Only the vendor reaches any of this; nobody at a company has a way in. A
+ * sheet is what identifies whose pallet this is, and a company that could
+ * retype the name on it could put any name on it — and who may sign in to a
+ * company is the vendor's to decide just the same.
  *
  * Everything here reads and writes the company in context, and nothing here
- * decides which company that is — the same router answers an administrator
- * working on their own company and the vendor working on any, because the
- * middleware in front of it has already settled whose folder this is.
+ * decides which company that is: the middleware in front of it has already
+ * settled whose folder this is.
  *
  * What it writes is the files an administrator with a shell could have written
  * by hand: `brand.json` and the artwork under `brand/`. So there is one way a
@@ -50,21 +53,7 @@ const fresh = (res: Response): void => {
   res.setHeader('Cache-Control', 'no-store, must-revalidate');
 };
 
-/**
- * What this router is allowed to do, which depends on where it is mounted.
- *
- * A company's own administrator looks after its people. Its branding — the
- * name across the sheet, the mark in the corner, the projection note — is the
- * vendor's, because a sheet is what identifies whose pallet this is, and a
- * company that can retype the name on it can put any name on it. So the brand
- * routes exist only on the mount the vendor reaches.
- */
-export interface AdminScope {
-  /** Whether this mount may read and write the company's branding. */
-  brand: boolean;
-}
-
-export function adminRoutes(registry: Registry, auth: AuthConfig, scope: AdminScope): Router {
+export function adminRoutes(registry: Registry, auth: AuthConfig): Router {
   const router = Router();
 
   /* -------------------------------------------------------------- people */
@@ -81,11 +70,10 @@ export function adminRoutes(registry: Registry, auth: AuthConfig, scope: AdminSc
   /** Invite somebody. The link is shown once, to whoever is sending it. */
   router.post('/invitations', wrap((req, res) => {
     const { tenant } = currentTenant();
-    const body = req.body as { email?: unknown; role?: unknown };
+    const body = req.body as { email?: unknown };
     const email = typeof body.email === 'string' ? body.email.trim() : '';
-    const role = body.role === 'admin' ? 'admin' : body.role === 'member' ? 'member' : null;
-    if (email === '' || !role) {
-      res.status(400).json({ error: 'An email address and a role (admin or member) are needed' });
+    if (email === '') {
+      res.status(400).json({ error: 'An email address is needed' });
       return;
     }
     if (registry.userByEmail(email)) {
@@ -96,7 +84,7 @@ export function adminRoutes(registry: Registry, auth: AuthConfig, scope: AdminSc
       kind: 'invite',
       tenantId: tenant.id,
       email,
-      role: role as Role,
+      role: 'member',
       invitedBy: req.principal?.user.id ?? null,
     });
     res.status(201).json({ invitation, link: invitationLink(auth.publicUrl, token) });
@@ -141,12 +129,6 @@ export function adminRoutes(registry: Registry, auth: AuthConfig, scope: AdminSc
   router.post('/people/:id/disable', wrap((req, res) => {
     const user = personHere(req, res);
     if (!user) return;
-    // Nobody may turn themselves off: the company would be left with one
-    // fewer administrator and no one to notice.
-    if (user.id === req.principal?.user.id) {
-      res.status(400).json({ error: 'You cannot turn off your own account.' });
-      return;
-    }
     registry.setUserStatus(user.id, 'disabled');
     res.json(registry.user(user.id));
   }));
@@ -158,33 +140,7 @@ export function adminRoutes(registry: Registry, auth: AuthConfig, scope: AdminSc
     res.json(registry.user(user.id));
   }));
 
-  router.post('/people/:id/role', wrap((req, res) => {
-    const user = personHere(req, res);
-    if (!user) return;
-    const role = (req.body as { role?: unknown }).role;
-    if (role !== 'admin' && role !== 'member') {
-      res.status(400).json({ error: 'A role is either admin or member' });
-      return;
-    }
-    if (user.id === req.principal?.user.id && role === 'member') {
-      res.status(400).json({ error: 'You cannot take administration away from your own account.' });
-      return;
-    }
-    registry.setUserRole(user.id, role);
-    res.json(registry.user(user.id));
-  }));
-
   /* --------------------------------------------------------------- brand */
-
-  /**
-   * Not this mount's to touch. A 404 rather than a 403, because on the
-   * company's own mount these routes are not a thing that exists.
-   */
-  if (!scope.brand) {
-    router.all(['/brand', '/brand/*splat', '/preview'], (_req, res) => {
-      res.status(404).json({ error: 'Branding is looked after by whoever runs the service.' });
-    });
-  }
 
   /**
    * The brand as it is written, for the form — and where the sheet is

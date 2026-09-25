@@ -21,9 +21,9 @@ import {
 /**
  * Looking after a company, and looking after the service.
  *
- * Two doors past the first one: an administrator may change their own
- * company's people and brand; the vendor may do that for any company,
- * and make companies. A member may do neither, and nobody may reach across.
+ * One door past the first one, and only the vendor has the key: a company's
+ * people and its brand are the vendor's to set, for any company, and so is
+ * making companies. Nobody at a company may do any of it.
  */
 
 const SECRET = 'a-test-secret-of-at-least-thirty-two-characters';
@@ -79,102 +79,136 @@ afterEach(async () => {
 });
 
 describe('who may look after what', () => {
-  it('keeps a member out of the company settings', async () => {
+  /**
+   * There is no company-side way in to any of it: the routes are not there at
+   * all, whoever at the company is asking.
+   */
+  it('keeps everybody at a company out of its settings', async () => {
     const registry = tempRegistry();
-    const { user, password } = await seedTenant(registry, { role: 'member' });
+    const { user, password } = await seedTenant(registry);
     await serve(registry);
     const cookie = await signIn(base, user.email, password);
-    expect((await call('GET', '/api/admin/people', cookie)).status).toBe(403);
-    expect((await call('GET', '/api/admin/brand', cookie)).status).toBe(403);
+    for (const [method, path] of [
+      ['GET', '/api/admin/people'],
+      ['POST', '/api/admin/invitations'],
+      ['POST', `/api/admin/people/${user.id}/reset`],
+      ['POST', `/api/admin/people/${user.id}/disable`],
+      ['GET', '/api/admin/brand'],
+    ] as Array<['GET' | 'POST', string]>) {
+      const refused = await call(method, path, cookie, method === 'GET' ? undefined : { email: 'x@acme.test' });
+      expect(refused.status, `${method} ${path}`).toBe(404);
+    }
+    expect(registry.listInvitations(user.tenantId)).toEqual([]);
+    expect(registry.user(user.id)?.status).toBe('active');
     // But they can still draw.
     expect((await call('GET', '/api/dashboard', cookie)).status).toBe(200);
   });
 
-  it('keeps an administrator out of the service settings', async () => {
+  it('keeps everybody at a company out of the vendor\'s side, their own company included', async () => {
     const registry = tempRegistry();
-    const { user, password } = await seedTenant(registry, { role: 'admin' });
+    const { user, password } = await seedTenant(registry, { slug: 'acme' });
     await serve(registry);
     const cookie = await signIn(base, user.email, password);
     expect((await call('GET', '/api/vendor/companies', cookie)).status).toBe(403);
-    expect((await call('GET', '/api/admin/people', cookie)).status).toBe(200);
+    expect((await call('GET', '/api/vendor/companies/acme/admin/people', cookie)).status).toBe(403);
+    expect((await call('POST', '/api/vendor/companies/acme/admin/invitations', cookie, { email: 'x@acme.test' })).status).toBe(403);
   });
 
-  it('never lets one company reach into another', async () => {
+  it('never lets the vendor, working on one company, reach somebody in another', async () => {
     const registry = tempRegistry();
-    const a = await seedTenant(registry, { slug: 'aa', email: 'a@aa.test' });
+    await seedTenant(registry, { slug: 'aa', email: 'a@aa.test' });
     const b = await seedTenant(registry, { slug: 'bb', email: 'b@bb.test' });
+    const vendor = await seedVendor(registry);
     await serve(registry);
-    const cookie = await signIn(base, a.user.email, a.password);
+    const cookie = await signIn(base, vendor.user.email, vendor.password);
 
-    expect((await call('POST', `/api/admin/people/${b.user.id}/disable`, cookie)).status).toBe(404);
-    expect((await call('POST', `/api/admin/people/${b.user.id}/reset`, cookie)).status).toBe(404);
-    expect((await call('GET', '/api/admin/people', cookie)).body.users.map((u: any) => u.email)).toEqual(['a@aa.test']);
+    expect((await call('POST', `/api/vendor/companies/aa/admin/people/${b.user.id}/disable`, cookie)).status).toBe(404);
+    expect((await call('POST', `/api/vendor/companies/aa/admin/people/${b.user.id}/reset`, cookie)).status).toBe(404);
+    expect((await call('GET', '/api/vendor/companies/aa/admin/people', cookie)).body.users.map((u: any) => u.email)).toEqual(['a@aa.test']);
     expect(registry.user(b.user.id)?.status).toBe('active');
   });
 });
 
-describe('an administrator and the people in their company', () => {
+describe('the vendor and the people in a company', () => {
+  const PEOPLE = '/api/vendor/companies/acme/admin';
+
   it('invites somebody and is handed the link to send', async () => {
     const registry = tempRegistry();
-    const { user, password } = await seedTenant(registry);
+    await seedTenant(registry);
+    const vendor = await seedVendor(registry);
     await serve(registry);
-    const cookie = await signIn(base, user.email, password);
+    const cookie = await signIn(base, vendor.user.email, vendor.password);
 
-    const invited = await call('POST', '/api/admin/invitations', cookie, { email: 'new@acme.test', role: 'member' });
+    const invited = await call('POST', `${PEOPLE}/invitations`, cookie, { email: 'new@acme.test' });
     expect(invited.status).toBe(201);
     expect(invited.body.link).toMatch(/^https:\/\/pallets\.example\.test\/#\/invitation\/[A-Za-z0-9_-]{40,}$/);
 
-    const people = (await call('GET', '/api/admin/people', cookie)).body;
+    const people = (await call('GET', `${PEOPLE}/people`, cookie)).body;
     expect(people.invitations.map((i: any) => i.email)).toEqual(['new@acme.test']);
 
-    expect((await call('DELETE', `/api/admin/invitations/${invited.body.invitation.id}`, cookie)).status).toBe(204);
-    expect((await call('GET', '/api/admin/people', cookie)).body.invitations).toEqual([]);
+    expect((await call('DELETE', `${PEOPLE}/invitations/${invited.body.invitation.id}`, cookie)).status).toBe(204);
+    expect((await call('GET', `${PEOPLE}/people`, cookie)).body.invitations).toEqual([]);
+  });
+
+  /** There is one kind of account at a company, whatever the request asks for. */
+  it('invites everybody as a member', async () => {
+    const registry = tempRegistry();
+    await seedTenant(registry);
+    const vendor = await seedVendor(registry);
+    await serve(registry);
+    const cookie = await signIn(base, vendor.user.email, vendor.password);
+
+    const invited = await call('POST', `${PEOPLE}/invitations`, cookie, { email: 'boss@acme.test', role: 'admin' });
+    expect(invited.status).toBe(201);
+    expect(invited.body.invitation.role).toBe('member');
+    const vendorish = await call('POST', `${PEOPLE}/invitations`, cookie, { email: 'sly@acme.test', role: 'vendor' });
+    expect(vendorish.body.invitation.role).toBe('member');
   });
 
   it('will not invite an address that already has an account', async () => {
     const registry = tempRegistry();
-    const { user, password } = await seedTenant(registry);
+    const { user } = await seedTenant(registry);
+    const vendor = await seedVendor(registry);
     await serve(registry);
-    const cookie = await signIn(base, user.email, password);
-    const again = await call('POST', '/api/admin/invitations', cookie, { email: user.email, role: 'member' });
+    const cookie = await signIn(base, vendor.user.email, vendor.password);
+    const again = await call('POST', `${PEOPLE}/invitations`, cookie, { email: user.email });
     expect(again.status).toBe(409);
     expect(again.body.error).toMatch(/already has an account/);
   });
 
-  it('turns somebody off, and back on, but never themselves', async () => {
+  it('turns somebody off, and back on', async () => {
     const registry = tempRegistry();
-    const { tenant, user, password } = await seedTenant(registry);
-    const other = registry.createUser({ tenantId: tenant.id, email: 'other@acme.test', role: 'member' });
+    const { user, password } = await seedTenant(registry);
+    const vendor = await seedVendor(registry);
     await serve(registry);
-    const cookie = await signIn(base, user.email, password);
+    const cookie = await signIn(base, vendor.user.email, vendor.password);
+    const theirs = await signIn(base, user.email, password);
 
-    expect((await call('POST', `/api/admin/people/${other.id}/disable`, cookie)).body.status).toBe('disabled');
-    expect((await call('POST', `/api/admin/people/${other.id}/enable`, cookie)).body.status).toBe('active');
-    const self = await call('POST', `/api/admin/people/${user.id}/disable`, cookie);
-    expect(self.status).toBe(400);
-    expect(self.body.error).toMatch(/your own account/);
-  });
-
-  it('makes somebody an administrator, and never demotes themselves', async () => {
-    const registry = tempRegistry();
-    const { tenant, user, password } = await seedTenant(registry);
-    const other = registry.createUser({ tenantId: tenant.id, email: 'other@acme.test', role: 'member' });
-    await serve(registry);
-    const cookie = await signIn(base, user.email, password);
-
-    expect((await call('POST', `/api/admin/people/${other.id}/role`, cookie, { role: 'admin' })).body.role).toBe('admin');
-    expect((await call('POST', `/api/admin/people/${user.id}/role`, cookie, { role: 'member' })).status).toBe(400);
+    expect((await call('POST', `${PEOPLE}/people/${user.id}/disable`, cookie)).body.status).toBe('disabled');
+    // Turning somebody off reaches the browser they are already in.
+    expect((await call('GET', '/api/dashboard', theirs)).status).toBe(401);
+    expect((await call('POST', `${PEOPLE}/people/${user.id}/enable`, cookie)).body.status).toBe('active');
   });
 
   it('hands out a way back in for somebody who has lost their password', async () => {
     const registry = tempRegistry();
-    const { tenant, user, password } = await seedTenant(registry);
-    const other = registry.createUser({ tenantId: tenant.id, email: 'other@acme.test', role: 'member' });
+    const { user } = await seedTenant(registry);
+    const vendor = await seedVendor(registry);
     await serve(registry);
-    const cookie = await signIn(base, user.email, password);
-    const reset = await call('POST', `/api/admin/people/${other.id}/reset`, cookie);
+    const cookie = await signIn(base, vendor.user.email, vendor.password);
+    const reset = await call('POST', `${PEOPLE}/people/${user.id}/reset`, cookie);
     expect(reset.status).toBe(200);
     expect(reset.body.link).toContain('/#/invitation/');
+  });
+
+  it('has no roles to hand out', async () => {
+    const registry = tempRegistry();
+    const { user } = await seedTenant(registry);
+    const vendor = await seedVendor(registry);
+    await serve(registry);
+    const cookie = await signIn(base, vendor.user.email, vendor.password);
+    expect((await call('POST', `${PEOPLE}/people/${user.id}/role`, cookie, { role: 'admin' })).status).toBe(404);
+    expect(registry.user(user.id)?.role).toBe('member');
   });
 });
 
@@ -287,13 +321,13 @@ describe('the vendor and a company\'s brand', () => {
 });
 
 
-describe('a company\'s own administrator and its brand', () => {
+describe('a company\'s own people and its brand', () => {
   /**
-   * The screen does not offer branding, but a screen is not a lock: what
-   * stops a company renaming its own sheets is the mount not carrying those
-   * routes at all.
+   * No screen offers branding to a company, but a screen is not a lock: what
+   * stops a company renaming its own sheets is there being no route on its
+   * side at all.
    */
-  it('cannot read or write the branding from its own mount', async () => {
+  it('cannot read or write the branding from their side', async () => {
     const registry = tempRegistry();
     const { user, password } = await seedTenant(registry);
     await serve(registry);
@@ -311,9 +345,6 @@ describe('a company\'s own administrator and its brand', () => {
       const refused = await call(method, path, cookie, method === 'GET' ? undefined : { companyName: 'Not Theirs' });
       expect(refused.status, `${method} ${path}`).toBe(404);
     }
-
-    // Their people are still theirs to look after.
-    expect((await call('GET', '/api/admin/people', cookie)).status).toBe(200);
   });
 
   it('leaves the sheet printing under the name the vendor set', async () => {
@@ -344,20 +375,20 @@ describe('the vendor and the companies', () => {
     expect(companies[0]).toMatchObject({ slug: 'acme', people: 1, signedUp: 1, designs: 0 });
   });
 
-  it('makes a company, its folder, and the link for its first administrator', async () => {
+  it('makes a company, its folder, and the link for its first person', async () => {
     const registry = tempRegistry();
     const vendor = await seedVendor(registry);
     await serve(registry);
     const cookie = await signIn(base, vendor.user.email, vendor.password);
 
     const made = await call('POST', '/api/vendor/companies', cookie, {
-      slug: 'northgate', name: 'Northgate Pallets', timezone: 'Europe/London', adminEmail: 'boss@northgate.test',
+      slug: 'northgate', name: 'Northgate Pallets', timezone: 'Europe/London', firstEmail: 'boss@northgate.test',
     });
     expect(made.status).toBe(201);
     expect(made.body.company.slug).toBe('northgate');
     expect(made.body.link).toContain('/#/invitation/');
     expect(existsSync(join(dataRoot, 'tenants', 'northgate', 'designs'))).toBe(true);
-    expect(registry.listInvitations(made.body.company.id)).toHaveLength(1);
+    expect(registry.listInvitations(made.body.company.id).map((i) => i.role)).toEqual(['member']);
   });
 
   it('refuses a company that already exists, and a bad time zone', async () => {

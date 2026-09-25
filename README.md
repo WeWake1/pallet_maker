@@ -236,10 +236,10 @@ nobody has told prints no name and no mark at all, which is the honest thing —
 a sheet carrying whatever company the program was last built for would say
 something false about who drew it.
 
-**Only the vendor sets it.** A company's own administrator looks after its
-people and nothing else: the brand routes are not mounted under `/api/admin` at
-all, so a sheet's identity is not something the company on it can retype. See
-[Who may do what](#who-may-do-what).
+**Only the vendor sets it.** Nobody at a company has any settings: the brand
+routes exist only under the vendor's own address, so a sheet's identity is not
+something the company on it can retype. See
+[Looking after it, on screen](#looking-after-it-on-screen).
 
 `npm run brand` reads a brand file and says what it comes out as: the mark's
 kind and printed size, the face and how much it adds to every sheet, and the
@@ -586,7 +586,7 @@ line: knowing another company's design id is not enough to read it, copy it,
 print it or delete it.
 
 Accounts are **by invitation**. Somebody is invited, follows a link, and
-chooses a password; no administrator ever sets one, so there is never a
+chooses a password; nobody else ever sets one, so there is never a
 password for anyone else to know. The link works once and lasts a week, and
 only its hash is stored — a copy of the registry is not a drawer of working
 keys. Losing a password is answered with another link rather than with a
@@ -608,27 +608,25 @@ before anybody exists. After that everything is on screen. See
 
 Signing in as the vendor shows the companies rather than a library — the
 vendor belongs to no company and has no designs. From there: make a company
-(and be handed the link for its first administrator), suspend or resume one,
-back everything up, and **set one up**, which opens that company's own settings
-as though signed in to it. An administrator of a company reaches the same
-settings from **Company settings** on their library. They are one screen
-([src/editor/Admin.tsx](src/editor/Admin.tsx)) behind one set of routes
-([src/server/adminRoutes.ts](src/server/adminRoutes.ts)); only the address
-differs, and the middleware in front has already settled whose folder it is.
+(and be handed the link for its first person), suspend or resume one, back
+everything up, and **set one up**, which opens that company's settings as
+though signed in to it: one screen ([src/editor/Admin.tsx](src/editor/Admin.tsx))
+behind one set of routes ([src/server/adminRoutes.ts](src/server/adminRoutes.ts)),
+mounted only under `/api/vendor/companies/<short name>/admin`.
 
-Two tabs, and not everybody sees both. **People**: invite by email and role, be
-handed the link, withdraw an invitation, hand out a new-password link, turn
-somebody off, make somebody an administrator — never yourself, in either
-direction. **Branding**: every field of the brand file, the logo and the face as
-uploads, and the sheet as it will print beside them, drawn afresh after every
-save from a design that ships with the program so two companies' brands are
-comparable.
+Two tabs. **People**: invite by email, be handed the link, withdraw an
+invitation, hand out a new-password link, turn somebody off. **Branding**: every
+field of the brand file, the logo and the face as uploads, and the sheet as it
+will print beside them, drawn afresh after every save from a design that ships
+with the program so two companies' brands are comparable.
 
-A company's own administrator sees People only. Branding is the vendor's, and
-not merely hidden: `adminRoutes` takes a scope, and under `/api/admin` the
-brand routes answer 404 rather than being mounted. A screen is not a lock, and
-the thing worth preventing — a company retyping the name its sheets go out
-under — is prevented at the route.
+**Only the vendor sees either.** Everybody at a company is the same kind of
+account — they draw and print — and nobody there can change who is in it or
+the name its sheets go out under. That is not merely hidden: there is no
+company-side route to either, so `/api/admin` answers 404 whoever asks. A
+screen is not a lock, and what is worth preventing is prevented at the route.
+A registry from before this, when a company had administrators, opens with
+them as members.
 
 What these screens write is the files a person with a shell could have written
 — `brand.json` and `brand/` — so there is one way a company's settings are

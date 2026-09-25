@@ -1,3 +1,7 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   EmailTakenError,
@@ -59,7 +63,7 @@ describe('people', () => {
   it('are made without a password, which only they ever choose', () => {
     const db = registry();
     const tenant = db.createTenant({ slug: 'acme', name: 'Acme' });
-    const user = db.createUser({ tenantId: tenant.id, email: ' Ann@Acme.test ', name: 'Ann', role: 'admin' });
+    const user = db.createUser({ tenantId: tenant.id, email: ' Ann@Acme.test ', name: 'Ann', role: 'member' });
     expect(user.email).toBe('Ann@Acme.test');
     expect(user.hasPassword).toBe(false);
     expect(db.passwordHash(user.id)).toBeNull();
@@ -79,7 +83,7 @@ describe('people', () => {
     const db = registry();
     const one = db.createTenant({ slug: 'one', name: 'One' });
     const two = db.createTenant({ slug: 'two', name: 'Two' });
-    db.createUser({ tenantId: one.id, email: 'ann@example.test', role: 'admin' });
+    db.createUser({ tenantId: one.id, email: 'ann@example.test', role: 'member' });
     expect(() => db.createUser({ tenantId: two.id, email: 'ann@example.test', role: 'member' })).toThrow(
       EmailTakenError,
     );
@@ -100,7 +104,7 @@ describe('people', () => {
     expect(() => db.createUser({ tenantId: tenant.id, email: 'v@x.test', role: 'vendor' })).toThrow(
       /belongs to no one company/,
     );
-    expect(() => db.createUser({ tenantId: null, email: 'a@x.test', role: 'admin' })).toThrow(
+    expect(() => db.createUser({ tenantId: null, email: 'a@x.test', role: 'member' })).toThrow(
       /belongs to a company/,
     );
     expect(db.createUser({ tenantId: null, email: 'v@x.test', role: 'vendor' }).tenantId).toBeNull();
@@ -110,11 +114,57 @@ describe('people', () => {
     const db = registry();
     const tenant = db.createTenant({ slug: 'acme', name: 'Acme' });
     db.createUser({ tenantId: tenant.id, email: 'b@acme.test', role: 'member' });
-    db.createUser({ tenantId: tenant.id, email: 'a@acme.test', role: 'admin' });
+    db.createUser({ tenantId: tenant.id, email: 'a@acme.test', role: 'member' });
     db.createUser({ tenantId: null, email: 'owner@vendor.test', role: 'vendor' });
 
     expect(db.listUsers(tenant.id).map((u) => u.email)).toEqual(['a@acme.test', 'b@acme.test']);
     expect(db.listUsers(null).map((u) => u.email)).toEqual(['owner@vendor.test']);
+  });
+
+  /**
+   * A company once had administrators. Only the vendor looks after anybody
+   * now, so a registry written before that opens with them as members, and
+   * nothing else about them changed.
+   */
+  it('open as members where an older registry had them as administrators', () => {
+    const folder = mkdtempSync(join(tmpdir(), 'pallet-registry-'));
+    try {
+      const path = join(folder, 'registry.sqlite');
+      const before = new Registry(path);
+      const tenant = before.createTenant({ slug: 'acme', name: 'Acme' });
+      const boss = before.createUser({ tenantId: tenant.id, email: 'boss@acme.test', role: 'member' });
+      const vendor = before.createUser({ tenantId: null, email: 'owner@vendor.test', role: 'vendor' });
+      before.createInvitation({
+        kind: 'invite',
+        tenantId: tenant.id,
+        email: 'new@acme.test',
+        role: 'member',
+        tokenHash: 'h',
+        invitedBy: null,
+        expiresAt: soon(),
+      });
+      before.close();
+
+      // As the older program wrote them.
+      const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as {
+        DatabaseSync: new (path: string) => { exec(sql: string): void; close(): void };
+      };
+      const raw = new DatabaseSync(path);
+      raw.exec(`UPDATE users SET role = 'admin' WHERE id = '${boss.id}'`);
+      raw.exec("UPDATE invitations SET role = 'admin'");
+      raw.close();
+
+      const after = new Registry(path);
+      try {
+        expect(after.user(boss.id)).toMatchObject({ role: 'member', email: 'boss@acme.test', tenantId: tenant.id });
+        expect(after.user(vendor.id)?.role).toBe('vendor');
+        expect(after.listInvitations(tenant.id).map((i) => i.role)).toEqual(['member']);
+      } finally {
+        after.close();
+      }
+    } finally {
+      rmSync(folder, { recursive: true, force: true });
+    }
   });
 });
 
@@ -122,7 +172,7 @@ describe('sessions', () => {
   it('are kept by the hash of the cookie, never the cookie itself', () => {
     const db = registry();
     const tenant = db.createTenant({ slug: 'acme', name: 'Acme' });
-    const user = db.createUser({ tenantId: tenant.id, email: 'a@acme.test', role: 'admin' });
+    const user = db.createUser({ tenantId: tenant.id, email: 'a@acme.test', role: 'member' });
     db.createSession({ idHash: 'hash-1', userId: user.id, expiresAt: soon() });
 
     expect(db.session('hash-1')?.userId).toBe(user.id);
@@ -134,7 +184,7 @@ describe('sessions', () => {
   it('end the moment somebody is turned off', () => {
     const db = registry();
     const tenant = db.createTenant({ slug: 'acme', name: 'Acme' });
-    const user = db.createUser({ tenantId: tenant.id, email: 'a@acme.test', role: 'admin' });
+    const user = db.createUser({ tenantId: tenant.id, email: 'a@acme.test', role: 'member' });
     db.createSession({ idHash: 'hash-1', userId: user.id, expiresAt: soon() });
 
     db.setUserStatus(user.id, 'disabled');
@@ -145,7 +195,7 @@ describe('sessions', () => {
   it('end when the company is suspended', () => {
     const db = registry();
     const tenant = db.createTenant({ slug: 'acme', name: 'Acme' });
-    const user = db.createUser({ tenantId: tenant.id, email: 'a@acme.test', role: 'admin' });
+    const user = db.createUser({ tenantId: tenant.id, email: 'a@acme.test', role: 'member' });
     db.createSession({ idHash: 'hash-1', userId: user.id, expiresAt: soon() });
 
     db.setTenantStatus(tenant.id, 'suspended');
@@ -156,7 +206,7 @@ describe('sessions', () => {
   it('are swept once they have run out', () => {
     const db = registry();
     const tenant = db.createTenant({ slug: 'acme', name: 'Acme' });
-    const user = db.createUser({ tenantId: tenant.id, email: 'a@acme.test', role: 'admin' });
+    const user = db.createUser({ tenantId: tenant.id, email: 'a@acme.test', role: 'member' });
     db.createSession({ idHash: 'old', userId: user.id, expiresAt: past() });
     db.createSession({ idHash: 'new', userId: user.id, expiresAt: soon() });
 
@@ -168,7 +218,7 @@ describe('sessions', () => {
   it('go with the person, and the person with the company', () => {
     const db = registry();
     const tenant = db.createTenant({ slug: 'acme', name: 'Acme' });
-    const user = db.createUser({ tenantId: tenant.id, email: 'a@acme.test', role: 'admin' });
+    const user = db.createUser({ tenantId: tenant.id, email: 'a@acme.test', role: 'member' });
     db.createSession({ idHash: 'hash-1', userId: user.id, expiresAt: soon() });
 
     db.deleteTenant(tenant.id);

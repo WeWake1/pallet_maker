@@ -1,7 +1,7 @@
 import { createHmac, randomBytes, scrypt as scryptCallback, timingSafeEqual, createHash } from 'node:crypto';
 import { promisify } from 'node:util';
 import type { NextFunction, Request, Response } from 'express';
-import type { Registry, Role, Tenant, User } from '../tenancy/registry.js';
+import type { Registry, Tenant, User } from '../tenancy/registry.js';
 
 /**
  * Who is asking.
@@ -277,21 +277,18 @@ export function requireRequestedWith(req: Request, res: Response, next: NextFunc
   });
 }
 
-/** What each role may do, beyond reading and drawing. */
-export function may(role: Role, what: 'manageCompany' | 'manageService' | 'destroy'): boolean {
-  if (role === 'vendor') return true;
-  if (what === 'manageService') return false;
-  return role === 'admin';
-}
-
-export function requireRole(what: 'manageCompany' | 'manageService' | 'destroy') {
+/**
+ * Only the vendor looks after anything: the companies, their people and their
+ * brand. Everybody at a company reads and draws, and that is all.
+ */
+export function requireVendor() {
   return (req: Request, res: Response, next: NextFunction): void => {
     const principal = req.principal;
     if (!principal) {
       unauthenticated(res);
       return;
     }
-    if (!may(principal.user.role, what)) {
+    if (principal.user.role !== 'vendor') {
       res.status(403).json({ error: 'Your account does not have that.' });
       return;
     }

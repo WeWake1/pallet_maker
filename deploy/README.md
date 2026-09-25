@@ -194,11 +194,11 @@ user with the same environment the server has:
 cd /opt/pallet-spec/current
 sudo -u pallet env $(grep -v '^#' /etc/pallet-spec/env | xargs) node dist/server/tenant.mjs \
   create --slug ambica --name "Ambica Patterns India Pvt Ltd" \
-         --timezone Asia/Kolkata --admin office@ambica.example
+         --timezone Asia/Kolkata --invite office@ambica.example
 ```
 
 It prints a link. Send that to the person: they follow it, choose a password,
-and are signed in. **No password is ever set by an administrator**, so there is
+and are signed in. **No password is ever set by anybody else**, so there is
 never one to read out over the phone or leave in a chat. The link works once
 and lasts a week.
 
@@ -219,15 +219,15 @@ node dist/server/tenant.mjs vendor-admin --email you@example.com
 ```
 
 Follow the link it prints, choose a password, and everything after that is on
-screen: making companies, inviting their first administrator, setting up their
-branding, suspending one. Branding is yours alone: a company's own
-administrator sees its people and nothing else. The other commands stay for a
-shell when that is more convenient:
+screen: making companies, inviting their people, setting up their branding,
+suspending one. People and branding are yours alone: nobody at a company has
+any settings, they only draw and print. The other commands stay for a shell
+when that is more convenient:
 
 ```sh
 node dist/server/tenant.mjs list                                   # every company
 node dist/server/tenant.mjs users --company ambica                 # who is in one
-node dist/server/tenant.mjs invite --company ambica --email x@y --role member
+node dist/server/tenant.mjs invite --company ambica --email x@y
 node dist/server/tenant.mjs reset --email x@y                      # a way back in
 node dist/server/tenant.mjs suspend --company ambica               # signs them out too
 node dist/server/tenant.mjs resume --company ambica

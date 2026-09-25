@@ -50,7 +50,7 @@ export function VendorAdmin({ userName, onSignOut }: { userName: string; onSignO
   const [slug, setSlug] = useState('');
   const [name, setName] = useState('');
   const [timezone, setTimezone] = useState('Asia/Kolkata');
-  const [adminEmail, setAdminEmail] = useState('');
+  const [firstEmail, setFirstEmail] = useState('');
   const [vendorEmail, setVendorEmail] = useState('');
 
   const refresh = useCallback(
@@ -80,12 +80,12 @@ export function VendorAdmin({ userName, onSignOut }: { userName: string; onSignO
         slug: slug.trim(),
         name: name.trim(),
         timezone: timezone.trim(),
-        adminEmail: adminEmail.trim(),
+        firstEmail: firstEmail.trim(),
       });
-      if (made.link) setLink({ email: adminEmail.trim(), link: made.link });
+      if (made.link) setLink({ email: firstEmail.trim(), link: made.link });
       setSlug('');
       setName('');
-      setAdminEmail('');
+      setFirstEmail('');
     }, 'Made. Its folder is ready for its branding.');
 
   if (inside) {
@@ -93,8 +93,6 @@ export function VendorAdmin({ userName, onSignOut }: { userName: string; onSignO
       <Admin
         base={api.vendor.adminBase(inside.slug)}
         companyName={inside.name}
-        selfId={null}
-        canBrand
         backLabel="← All companies"
         onBack={() => {
           setInside(null);
@@ -162,8 +160,8 @@ export function VendorAdmin({ userName, onSignOut }: { userName: string; onSignO
                 <Field label="Time zone" hint="The date a design is stamped with when it is saved.">
                   <TextInput value={timezone} onChange={setTimezone} placeholder="Asia/Kolkata" disabled={busy} />
                 </Field>
-                <Field label="First administrator's email" hint="Optional now; can be invited later from inside the company.">
-                  <TextInput value={adminEmail} onChange={setAdminEmail} placeholder="boss@northgate.example" disabled={busy} />
+                <Field label="First person's email" hint="Optional now; more can be invited later from inside the company.">
+                  <TextInput value={firstEmail} onChange={setFirstEmail} placeholder="boss@northgate.example" disabled={busy} />
                 </Field>
               </div>
               <div className="mt-3">

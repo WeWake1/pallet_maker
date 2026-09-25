@@ -4,8 +4,8 @@
  *
  *   pallet-tenant vendor-admin --email you@example.com
  *   pallet-tenant create --slug ambica --name "Ambica Patterns India Pvt Ltd" \
- *                        --timezone Asia/Kolkata --admin office@ambica.example
- *   pallet-tenant invite --company ambica --email colleague@ambica.example --role member
+ *                        --timezone Asia/Kolkata --invite office@ambica.example
+ *   pallet-tenant invite --company ambica --email colleague@ambica.example
  *   pallet-tenant reset --email colleague@ambica.example
  *   pallet-tenant list
  *   pallet-tenant users --company ambica
@@ -14,7 +14,10 @@
  *
  * Run on the server, as the user the service runs as. Nobody's password is
  * ever set here: making an account produces a link, the person follows it and
- * chooses one, and so there is never a password an administrator knows.
+ * chooses one, and so there is never a password anybody else knows.
+ *
+ * Everybody at a company is the same kind of account: they draw and print.
+ * Who is in a company is looked after from here or from the vendor's screen.
  *
  *   PALLET_DATA_ROOT   where everything is kept
  *   PALLET_PUBLIC_URL  the address the links should point at
@@ -92,26 +95,24 @@ try {
 
       const tenant = registry.createTenant({ slug, name, timezone });
       // Made now rather than at the company's first save, so that whoever is
-      // setting them up has somewhere to put their logo and their prices
-      // before anybody signs in.
+      // setting them up has somewhere to put their logo before anybody signs
+      // in.
       const folder = new Tenants(dataRoot, registry).context(tenant).handle.require().root;
       console.log(`Made ${tenant.name} (${tenant.slug}), dates in ${tenant.timezone}.`);
       console.log(`Its designs are in ${folder}`);
       console.log(`Put its branding in ${join(folder, 'brand.json')}.`);
 
-      const admin = flag(argv, 'admin');
-      if (admin) offer('invite', tenant.id, admin, 'admin');
-      else console.log('Invite its first administrator with: pallet-tenant invite --company ' + tenant.slug + ' --email <address> --role admin');
+      const first = flag(argv, 'invite');
+      if (first) offer('invite', tenant.id, first, 'member');
+      else console.log('Invite its first person with: pallet-tenant invite --company ' + tenant.slug + ' --email <address>');
       break;
     }
 
     case 'invite': {
       const tenant = company(flag(argv, 'company'));
       const email = flag(argv, 'email') ?? fail('Which address? Pass --email.');
-      const role = (flag(argv, 'role') ?? 'member') as Role;
-      if (role !== 'admin' && role !== 'member') fail('A role is either admin or member.');
       if (registry.userByEmail(email)) fail(`${email} already has an account. Use "reset" to send a way back in.`);
-      offer('invite', tenant.id, email, role);
+      offer('invite', tenant.id, email, 'member');
       break;
     }
 

@@ -92,7 +92,7 @@ export interface Person {
   id: string;
   email: string;
   name: string;
-  role: 'vendor' | 'admin' | 'member';
+  role: 'vendor' | 'member';
   status: 'active' | 'disabled';
   hasPassword: boolean;
   createdAt: string;
@@ -103,7 +103,7 @@ export interface Invitation {
   id: string;
   kind: 'invite' | 'reset';
   email: string;
-  role: 'vendor' | 'admin' | 'member';
+  role: 'vendor' | 'member';
   expiresAt: string;
 }
 
@@ -229,23 +229,20 @@ export const api = {
   retryStore: () => call<StoreStatus>('/api/settings/retry', { method: 'POST' }),
 
   /**
-   * Looking after a company. `base` is `/api/admin` for its own administrator
-   * and `/api/vendor/companies/<slug>/admin` for the vendor working on it —
-   * the same routes either way, which is why this is a function of the base.
+   * Looking after a company, which only the vendor does. `base` is
+   * `/api/vendor/companies/<slug>/admin`, and names the company.
    */
   admin: (base: string) => ({
     people: () => call<People>(`${base}/people`),
-    invite: (email: string, role: 'admin' | 'member') =>
+    invite: (email: string) =>
       call<{ invitation: Invitation; link: string }>(`${base}/invitations`, {
         method: 'POST',
-        body: JSON.stringify({ email, role }),
+        body: JSON.stringify({ email }),
       }),
     withdraw: (id: string) => call<void>(`${base}/invitations/${id}`, { method: 'DELETE' }),
     resetLink: (userId: string) => call<{ link: string }>(`${base}/people/${userId}/reset`, { method: 'POST' }),
     disable: (userId: string) => call<Person>(`${base}/people/${userId}/disable`, { method: 'POST' }),
     enable: (userId: string) => call<Person>(`${base}/people/${userId}/enable`, { method: 'POST' }),
-    setRole: (userId: string, role: 'admin' | 'member') =>
-      call<Person>(`${base}/people/${userId}/role`, { method: 'POST', body: JSON.stringify({ role }) }),
 
     brand: () => call<BrandSettings>(`${base}/brand`),
     saveBrand: (file: BrandFileInput) =>
@@ -266,7 +263,7 @@ export const api = {
   /** Looking after the service: every company, and who else looks after it. */
   vendor: {
     companies: () => call<CompanySummary[]>('/api/vendor/companies'),
-    createCompany: (input: { slug: string; name: string; timezone: string; adminEmail: string }) =>
+    createCompany: (input: { slug: string; name: string; timezone: string; firstEmail: string }) =>
       call<{ company: CompanySummary; link: string | null }>('/api/vendor/companies', {
         method: 'POST',
         body: JSON.stringify(input),

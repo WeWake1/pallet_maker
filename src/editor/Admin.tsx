@@ -8,13 +8,12 @@ import { HANDLING_LABEL } from '../sheet/handling.js';
 import { Button, Check, Field, inputClass, NumberInput, Panel, Select, TextInput } from './ui.jsx';
 
 /**
- * Looking after a company: who is in it, whose name is on its sheets, and what
- * it quotes at.
+ * Looking after a company: who is in it, and whose name is on its sheets.
  *
- * Reached two ways and drawn once. A company's own administrator comes here
- * from the library; the vendor comes here from the list of companies, working
- * on one of them. `base` is the only difference, and it is the address the
- * requests go to.
+ * Only the vendor comes here, from the list of companies, working on one of
+ * them. Nobody at a company has a screen like this: who may sign in and what
+ * name the sheets go out under are both the vendor's to decide. `base` is the
+ * address the requests go to, which names the company.
  */
 
 type Tab = 'people' | 'brand';
@@ -22,21 +21,11 @@ type Tab = 'people' | 'brand';
 export function Admin({
   base,
   companyName,
-  selfId,
-  canBrand,
   onBack,
   backLabel,
 }: {
   base: string;
   companyName: string;
-  /** Whoever is at the keyboard, who is not offered the buttons that would act on themselves. */
-  selfId: string | null;
-  /**
-   * Whether branding is this screen's to change, which only the vendor's
-   * mount allows. The server refuses it either way; this is what keeps a tab
-   * off the screen that would only fail when used.
-   */
-  canBrand: boolean;
   onBack: () => void;
   backLabel: string;
 }) {
@@ -50,12 +39,10 @@ export function Admin({
         <h1 className="text-title font-semibold tracking-tight text-ink">{companyName}</h1>
         <nav className="ml-6 flex gap-1">
           {(
-            canBrand
-              ? ([
-                  ['people', 'People'],
-                  ['brand', 'Branding'],
-                ] as Array<[Tab, string]>)
-              : ([['people', 'People']] as Array<[Tab, string]>)
+            [
+              ['people', 'People'],
+              ['brand', 'Branding'],
+            ] as Array<[Tab, string]>
           ).map(([key, label]) => (
             <button
               key={key}
@@ -72,8 +59,8 @@ export function Admin({
       </header>
       <div className="flex-1 overflow-auto">
         <div className="mx-auto max-w-4xl px-4 py-6">
-          {tab === 'people' && <PeopleTab calls={calls} selfId={selfId} />}
-          {tab === 'brand' && canBrand && <BrandTab calls={calls} />}
+          {tab === 'people' && <PeopleTab calls={calls} />}
+          {tab === 'brand' && <BrandTab calls={calls} />}
         </div>
       </div>
     </div>
@@ -146,12 +133,11 @@ const when = (iso: string | null): string => (iso ? iso.slice(0, 10) : 'never');
 
 /* ------------------------------------------------------------------ people */
 
-function PeopleTab({ calls, selfId }: { calls: Calls; selfId: string | null }) {
+function PeopleTab({ calls }: { calls: Calls }) {
   const [people, setPeople] = useState<People | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [link, setLink] = useState<{ email: string; link: string } | null>(null);
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState<'admin' | 'member'>('member');
   const [busy, setBusy] = useState(false);
 
   const refresh = useCallback(() => calls.people().then(setPeople), [calls]);
@@ -170,7 +156,7 @@ function PeopleTab({ calls, selfId }: { calls: Calls; selfId: string | null }) {
 
   const invite = () =>
     run(async () => {
-      const made = await calls.invite(email.trim(), role);
+      const made = await calls.invite(email.trim());
       setLink({ email: email.trim(), link: made.link });
       setEmail('');
     });
@@ -189,26 +175,13 @@ function PeopleTab({ calls, selfId }: { calls: Calls; selfId: string | null }) {
               <TextInput value={email} onChange={setEmail} placeholder="colleague@example.com" disabled={busy} />
             </Field>
           </div>
-          <div className="w-40">
-            <Field label="Role">
-              <Select<'admin' | 'member'>
-                value={role}
-                onChange={setRole}
-                options={[
-                  ['member', 'Member'],
-                  ['admin', 'Administrator'],
-                ]}
-                disabled={busy}
-              />
-            </Field>
-          </div>
           <Button tone="primary" disabled={busy || email.trim() === ''} onClick={invite}>
             Invite
           </Button>
         </div>
         <p className="mt-2 text-label leading-relaxed text-ink-faint">
-          You will be given a link to send them. They follow it, choose a password, and are in. A
-          member draws and prints; an administrator can also do everything on this screen.
+          You will be given a link to send them. They follow it, choose a password, and are in. They
+          can draw and print; nobody at the company can change who is in it or its branding.
         </p>
       </Panel>
 
@@ -218,14 +191,13 @@ function PeopleTab({ calls, selfId }: { calls: Calls; selfId: string | null }) {
             <thead>
               <tr className="text-left text-label text-ink-soft">
                 <th className="py-1 pr-2 font-medium">Who</th>
-                <th className="py-1 pr-2 font-medium">Role</th>
                 <th className="py-1 pr-2 font-medium">Last signed in</th>
                 <th className="py-1 font-medium"></th>
               </tr>
             </thead>
             <tbody>
               {people.users.map((person) => (
-                <PersonRow key={person.id} person={person} self={person.id === selfId} busy={busy} calls={calls} run={run} onLink={setLink} />
+                <PersonRow key={person.id} person={person} busy={busy} calls={calls} run={run} onLink={setLink} />
               ))}
               {people.invitations.map((invitation) => (
                 <InvitationRow key={invitation.id} invitation={invitation} busy={busy} calls={calls} run={run} />
@@ -243,15 +215,12 @@ function PeopleTab({ calls, selfId }: { calls: Calls; selfId: string | null }) {
 
 function PersonRow({
   person,
-  self,
   busy,
   calls,
   run,
   onLink,
 }: {
   person: Person;
-  /** This row is whoever is looking at it. */
-  self: boolean;
   busy: boolean;
   calls: Calls;
   run: (work: () => Promise<unknown>) => void;
@@ -266,17 +235,6 @@ function PersonRow({
         {!person.hasPassword && <div className="text-label text-amber-700">has not set a password yet</div>}
         {off && <div className="text-label">turned off</div>}
       </td>
-      <td className="py-1.5 pr-2">
-        <Select<'admin' | 'member'>
-          value={person.role === 'admin' ? 'admin' : 'member'}
-          onChange={(role) => run(() => calls.setRole(person.id, role))}
-          options={[
-            ['member', 'Member'],
-            ['admin', 'Administrator'],
-          ]}
-          disabled={busy || off || self}
-        />
-      </td>
       <td className="py-1.5 pr-2 tabular-nums">{when(person.lastLoginAt)}</td>
       <td className="py-1.5">
         <div className="flex justify-end gap-1">
@@ -288,9 +246,7 @@ function PersonRow({
           >
             New password link
           </Button>
-          {self ? (
-            <span className="self-center px-1 text-label text-ink-faint">you</span>
-          ) : off ? (
+          {off ? (
             <Button size="sm" disabled={busy} onClick={() => run(() => calls.enable(person.id))}>
               Turn on
             </Button>
@@ -322,7 +278,6 @@ function InvitationRow({
         <div>{invitation.email}</div>
         <div className="text-label">invited, link not yet used · runs out {when(invitation.expiresAt)}</div>
       </td>
-      <td className="py-1.5 pr-2 capitalize">{invitation.role === 'admin' ? 'Administrator' : 'Member'}</td>
       <td className="py-1.5 pr-2">—</td>
       <td className="py-1.5">
         <div className="flex justify-end">

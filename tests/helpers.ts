@@ -119,7 +119,7 @@ export async function seedTenant(
     tenantId: tenant.id,
     email: options.email ?? `${slug}@example.test`,
     name: 'Someone',
-    role: options.role ?? 'admin',
+    role: options.role ?? 'member',
   });
   registry.setPassword(user.id, await hashPassword(password));
   return { tenant, user, password };

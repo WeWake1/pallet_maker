@@ -18,7 +18,6 @@ import type { Client, HandlingMethod, LayerKind, Pallet, Unstated } from '../typ
 import { api, StaleEdit, StoreUnavailable, Unauthenticated } from './api.js';
 import type { ClientDesigns, Session, StoreStatus } from './api.js';
 import { AcceptInvitation, invitationTokenInHash, SignIn } from './SignIn.jsx';
-import { Admin } from './Admin.jsx';
 import { VendorAdmin } from './VendorAdmin.jsx';
 import { Dashboard } from './Dashboard.jsx';
 import type { DesignActions } from './Dashboard.jsx';
@@ -173,8 +172,6 @@ export function App() {
   const [invitation, setInvitation] = useState<string | null>(() =>
     typeof window === 'undefined' ? null : invitationTokenInHash(window.location.hash),
   );
-  /** An administrator looking after the company rather than drawing for it. */
-  const [settings, setSettings] = useState(false);
 
   // A link pasted into a tab that is already open changes only the part of
   // the address after the hash, which is not a page load. Watch for it, or
@@ -481,22 +478,6 @@ export function App() {
     );
   }
 
-  if (settings && session.company) {
-    return (
-      <Admin
-        base="/api/admin"
-        companyName={session.company.name}
-        selfId={session.user?.id ?? null}
-        canBrand={false}
-        backLabel="← Library"
-        onBack={() => {
-          setSettings(false);
-          void load().catch(() => undefined);
-        }}
-      />
-    );
-  }
-
   if (folder === null) {
     return <div className="flex h-full flex-col bg-slate-100 text-slate-900" />;
   }
@@ -570,7 +551,6 @@ export function App() {
                 .catch(() => undefined)
                 .finally(signedOut);
             }}
-            onSettings={session.user?.role === 'admin' ? () => setSettings(true) : null}
           />
           <header className="flex items-center gap-2 border-b border-line bg-card px-4 py-2.5">
             <h1 className="text-title font-semibold tracking-tight text-ink">Pallet spec</h1>
