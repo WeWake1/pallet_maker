@@ -26,7 +26,7 @@ export const inputClass =
  * itself counts as a click somewhere else: the mousedown closes it, and the
  * button the click was aimed at is gone before the click lands on it.
  */
-function useDismiss(
+export function useDismiss(
   open: boolean,
   close: () => void,
   ...also: Array<RefObject<HTMLElement | null>>

@@ -71,6 +71,29 @@ function componentSummary(what: string, sizes: string[]): string {
     : `${each} in ${distinct} sizes — open to see them`;
 }
 
+/** Whether any of the four placing numbers is off its default. */
+function insetSet(span: number | null, offset: number, runSpan: number | null, runOffset: number): boolean {
+  return span !== null || offset !== 0 || runSpan !== null || runOffset !== 0;
+}
+
+/**
+ * The folded-away placing numbers, said in a line, so what they hold is read
+ * without opening them.
+ */
+function insetSummary(
+  span: number | null,
+  offset: number,
+  runSpan: number | null,
+  runOffset: number,
+  across: string,
+  along: string,
+): string {
+  if (!insetSet(span, offset, runSpan, runOffset)) return 'Inset & offset — none, the full pallet flush to the edges';
+  const part = (extent: number | null, from: number, which: string): string | null =>
+    extent === null && from === 0 ? null : `${which} ${extent === null ? 'full' : extent} from ${from}`;
+  return `Inset & offset — ${[part(span, offset, across), part(runSpan, runOffset, along)].filter(Boolean).join(' · ')}`;
+}
+
 const KIND_LABEL: Array<[Layer['kind'], string]> = [
   ['panel', 'Plywood sheet over the deck'],
   ['top_deck', 'Top boards'],
@@ -148,14 +171,9 @@ export function LayerEditor({
         </div>
       }
     >
+      {/* No field for what kind of layer this is: the card's title says so,
+          and a layer added as the wrong kind is removed and added again. */}
       <div className="grid grid-cols-4 gap-2">
-        <Field label="Kind">
-          <Select
-            value={layer.kind}
-            options={KIND_LABEL}
-            onChange={(kind) => dispatch({ type: 'patchLayer', layerId: layer.id, patch: { kind } })}
-          />
-        </Field>
         <Field label="Content">
           <Select
             value={layer.content.type}
@@ -173,22 +191,22 @@ export function LayerEditor({
         </Field>
         {/* Worked out, not typed. Slack going negative is the layer being
             over-full, which is the one number here that stops a sheet. */}
-        {spread ? (
-          <Readout
-            label="Spacing"
-            hint={spread.slack < 0 ? HINTS.slack : HINTS.gap}
-            tone={spread.slack < 0 ? 'warn' : 'plain'}
-            value={`gap ${mmLabel(spread.gap)} · slack ${mmLabel(spread.slack)}`}
-          />
-        ) : computed?.rows ? (
-          <Readout
-            label="Spacing"
-            hint={HINTS.gap}
-            value={`rows ${mmLabel(computed.rows.gap)} · cols ${mmLabel(computed.cols?.gap ?? 0)}`}
-          />
-        ) : (
-          <div />
-        )}
+        <div className="col-span-2">
+          {spread ? (
+            <Readout
+              label="Spacing"
+              hint={spread.slack < 0 ? HINTS.slack : HINTS.gap}
+              tone={spread.slack < 0 ? 'warn' : 'plain'}
+              value={`gap ${mmLabel(spread.gap)} · slack ${mmLabel(spread.slack)}`}
+            />
+          ) : computed?.rows ? (
+            <Readout
+              label="Spacing"
+              hint={HINTS.gap}
+              value={`rows ${mmLabel(computed.rows.gap)} · cols ${mmLabel(computed.cols?.gap ?? 0)}`}
+            />
+          ) : null}
+        </div>
       </div>
 
       {/* A deck whose boards do not all run the same way is built as one layer
@@ -207,45 +225,57 @@ export function LayerEditor({
         </div>
       )}
 
+      {/* Where the layer sits, when it is not the whole pallet flush to the
+          edges. Almost never: across the designs in use, span and offset had
+          never been set, and run span and offset only by the Fit button below.
+          So it is folded away, saying what it holds, and opens on its own
+          wherever something in it is not the default. */}
       {layer.content.type !== 'grid' && (
-        <div className="mt-2 grid grid-cols-4 gap-2">
-          <Field label="Span (mm)" hint={HINTS.span}>
-            <NumberInput
-              value={layer.spanMm ?? 0}
-              min={0}
-              placeholder="0 — full width"
-              onChange={(value) =>
-                dispatch({ type: 'patchLayer', layerId: layer.id, patch: { spanMm: value > 0 ? value : null } })
-              }
-            />
-          </Field>
-          <Field label="Offset (mm)" hint={HINTS.offset}>
-            <NumberInput
-              value={layer.offsetMm}
-              onChange={(offsetMm) => dispatch({ type: 'patchLayer', layerId: layer.id, patch: { offsetMm } })}
-            />
-          </Field>
-          <Field label="Run span (mm)" hint={HINTS.runSpan}>
-            <NumberInput
-              value={layer.runSpanMm ?? 0}
-              min={0}
-              placeholder="0 — full length"
-              onChange={(value) =>
-                dispatch({ type: 'patchLayer', layerId: layer.id, patch: { runSpanMm: value > 0 ? value : null } })
-              }
-            />
-          </Field>
-          <Field label="Run offset (mm)" hint={HINTS.runOffset}>
-            <NumberInput
-              value={layer.runOffsetMm}
-              onChange={(runOffsetMm) => dispatch({ type: 'patchLayer', layerId: layer.id, patch: { runOffsetMm } })}
-            />
-          </Field>
+        <div className="mt-2">
+          <Disclosure
+            summary={insetSummary(layer.spanMm, layer.offsetMm, layer.runSpanMm, layer.runOffsetMm, 'across', 'along')}
+            openWhen={insetSet(layer.spanMm, layer.offsetMm, layer.runSpanMm, layer.runOffsetMm)}
+          >
+            <div className="grid grid-cols-4 gap-2">
+              <Field label="Span (mm)" hint={HINTS.span}>
+                <NumberInput
+                  value={layer.spanMm ?? 0}
+                  min={0}
+                  placeholder="0 — full width"
+                  onChange={(value) =>
+                    dispatch({ type: 'patchLayer', layerId: layer.id, patch: { spanMm: value > 0 ? value : null } })
+                  }
+                />
+              </Field>
+              <Field label="Offset (mm)" hint={HINTS.offset}>
+                <NumberInput
+                  value={layer.offsetMm}
+                  onChange={(offsetMm) => dispatch({ type: 'patchLayer', layerId: layer.id, patch: { offsetMm } })}
+                />
+              </Field>
+              <Field label="Run span (mm)" hint={HINTS.runSpan}>
+                <NumberInput
+                  value={layer.runSpanMm ?? 0}
+                  min={0}
+                  placeholder="0 — full length"
+                  onChange={(value) =>
+                    dispatch({ type: 'patchLayer', layerId: layer.id, patch: { runSpanMm: value > 0 ? value : null } })
+                  }
+                />
+              </Field>
+              <Field label="Run offset (mm)" hint={HINTS.runOffset}>
+                <NumberInput
+                  value={layer.runOffsetMm}
+                  onChange={(runOffsetMm) => dispatch({ type: 'patchLayer', layerId: layer.id, patch: { runOffsetMm } })}
+                />
+              </Field>
+            </div>
+          </Disclosure>
         </div>
       )}
 
-      {/* The numbers above, worked out from the boards this layer has to stop
-          short of. It fills the fields in and leaves them yours to change:
+      {/* The run span and offset, worked out from the boards this layer has to
+          stop short of. It fills the fields in and leaves them yours to change:
           nothing here is applied behind the form. */}
       {fit && (
         <div className="mt-2 flex items-center gap-2">
@@ -270,8 +300,12 @@ export function LayerEditor({
           accent={accent}
         />
       )}
-      {layer.content.type === 'grid' && <Grid layer={layer} dispatch={dispatch} accent={accent} />}
-      {layer.content.type === 'sheet' && <Sheet layer={layer} dispatch={dispatch} accent={accent} />}
+      {layer.content.type === 'grid' && (
+        <Grid layer={layer} selection={selection} dispatch={dispatch} accent={accent} />
+      )}
+      {layer.content.type === 'sheet' && (
+        <Sheet layer={layer} selection={selection} dispatch={dispatch} accent={accent} />
+      )}
     </Panel>
   );
 }
@@ -551,6 +585,9 @@ function SlotRow({
 }) {
   const row = useRef<HTMLTableRowElement>(null);
   const patch = (patch: Partial<Slot>) => dispatch({ type: 'patchSlot', layerId, index, patch });
+  const select = () => {
+    if (!selected) dispatch({ type: 'select', selection: { layerId, source: { kind: 'slot', index } } });
+  };
 
   // Clicking a board in the preview selects it and focuses its row here.
   useEffect(() => {
@@ -560,7 +597,8 @@ function SlotRow({
   return (
     <tr
       ref={row}
-      onClick={() => dispatch({ type: 'select', selection: { layerId, source: { kind: 'slot', index } } })}
+      onClick={select}
+      onFocus={select}
       className={selected ? 'bg-blue-50 outline-1 outline-blue-400' : 'hover:bg-ground-soft'}
     >
       <td className="text-label text-slate-400">{index + 1}</td>
@@ -610,15 +648,20 @@ function SlotRow({
 
 function Grid({
   layer,
+  selection,
   dispatch,
   accent,
 }: {
   layer: Layer;
+  selection: Selection | null;
   dispatch: (action: Action) => void;
   accent?: LayerStyle;
 }) {
   if (layer.content.type !== 'grid') return null;
   const grid = layer.content.grid;
+  // A block picked on the drawing opens the table and lights its row, the
+  // same as a board does; see Slots.
+  const selectedHere = selection?.layerId === layer.id && selection.source.kind === 'cell';
   const cells = grid.cells.flat();
   const cellSizes = cells.map((cell) => `${cell.lengthMm}x${cell.widthMm}x${cell.heightMm}`);
   const all = (patch: Partial<BlockCell>) =>
@@ -668,7 +711,7 @@ function Grid({
         </div>
       </KeyFields>
 
-      <div className="mt-3 grid grid-cols-6 gap-2">
+      <div className="mt-3 grid grid-cols-4 gap-2">
         <Field label="Rows">
           <NumberInput
             value={grid.rows}
@@ -685,42 +728,53 @@ function Grid({
             onChange={(cols) => dispatch({ type: 'patchGrid', layerId: layer.id, patch: { cols } })}
           />
         </Field>
-        <Field label="Row span">
-          <NumberInput
-            value={grid.rowSpanMm ?? 0}
-            min={0}
-            onChange={(value) =>
-              dispatch({ type: 'patchGrid', layerId: layer.id, patch: { rowSpanMm: value > 0 ? value : null } })
-            }
-          />
-        </Field>
-        <Field label="Row offset">
-          <NumberInput
-            value={grid.rowOffsetMm}
-            onChange={(rowOffsetMm) => dispatch({ type: 'patchGrid', layerId: layer.id, patch: { rowOffsetMm } })}
-          />
-        </Field>
-        <Field label="Col span">
-          <NumberInput
-            value={grid.colSpanMm ?? 0}
-            min={0}
-            onChange={(value) =>
-              dispatch({ type: 'patchGrid', layerId: layer.id, patch: { colSpanMm: value > 0 ? value : null } })
-            }
-          />
-        </Field>
-        <Field label="Col offset">
-          <NumberInput
-            value={grid.colOffsetMm}
-            onChange={(colOffsetMm) => dispatch({ type: 'patchGrid', layerId: layer.id, patch: { colOffsetMm } })}
-          />
-        </Field>
+      </div>
+
+      <div className="mt-2">
+        <Disclosure
+          summary={insetSummary(grid.rowSpanMm, grid.rowOffsetMm, grid.colSpanMm, grid.colOffsetMm, 'rows', 'cols')}
+          openWhen={insetSet(grid.rowSpanMm, grid.rowOffsetMm, grid.colSpanMm, grid.colOffsetMm)}
+        >
+          <div className="grid grid-cols-4 gap-2">
+            <Field label="Row span">
+              <NumberInput
+                value={grid.rowSpanMm ?? 0}
+                min={0}
+                onChange={(value) =>
+                  dispatch({ type: 'patchGrid', layerId: layer.id, patch: { rowSpanMm: value > 0 ? value : null } })
+                }
+              />
+            </Field>
+            <Field label="Row offset">
+              <NumberInput
+                value={grid.rowOffsetMm}
+                onChange={(rowOffsetMm) => dispatch({ type: 'patchGrid', layerId: layer.id, patch: { rowOffsetMm } })}
+              />
+            </Field>
+            <Field label="Col span">
+              <NumberInput
+                value={grid.colSpanMm ?? 0}
+                min={0}
+                onChange={(value) =>
+                  dispatch({ type: 'patchGrid', layerId: layer.id, patch: { colSpanMm: value > 0 ? value : null } })
+                }
+              />
+            </Field>
+            <Field label="Col offset">
+              <NumberInput
+                value={grid.colOffsetMm}
+                onChange={(colOffsetMm) => dispatch({ type: 'patchGrid', layerId: layer.id, patch: { colOffsetMm } })}
+              />
+            </Field>
+          </div>
+        </Disclosure>
       </div>
 
       <div className="mt-3">
         <Disclosure
           summary={componentSummary('block', cellSizes)}
           defaultOpen={sizeCount(cellSizes) > 1}
+          openWhen={selectedHere}
         >
           <table className="w-full text-ui">
             <thead>
@@ -735,37 +789,20 @@ function Grid({
             </thead>
             <tbody>
               {grid.cells.map((row, r) =>
-                row.map((cell, c) => {
-                  const patch = (patch: Partial<BlockCell>) =>
-                    dispatch({ type: 'patchCell', layerId: layer.id, row: r, col: c, patch });
-                  return (
-                    <tr key={`${r}-${c}`} className="hover:bg-slate-50">
-                      <td className="text-label text-slate-400">
-                        r{r + 1} c{c + 1}
-                      </td>
-                      <td className="pr-1">
-                        <NumberInput value={cell.lengthMm} min={1} onChange={(lengthMm) => patch({ lengthMm })} />
-                      </td>
-                      <td className="pr-1">
-                        <NumberInput value={cell.widthMm} min={1} onChange={(widthMm) => patch({ widthMm })} />
-                      </td>
-                      <td className="pr-1">
-                        <NumberInput value={cell.heightMm} min={1} onChange={(heightMm) => patch({ heightMm })} />
-                      </td>
-                      <td className="pr-1">
-                        <TextInput value={cell.material} onChange={(material) => patch({ material })} />
-                      </td>
-                      <td>
-                        <Button
-                          title="Copy this cell to every cell in the grid"
-                          onClick={() => dispatch({ type: 'fillGrid', layerId: layer.id, row: r, col: c })}
-                        >
-                          Fill all
-                        </Button>
-                      </td>
-                    </tr>
-                  );
-                }),
+                row.map((cell, c) => (
+                  <CellRow
+                    key={`${r}-${c}`}
+                    layerId={layer.id}
+                    cell={cell}
+                    row={r}
+                    col={c}
+                    selected={
+                      selection?.layerId === layer.id &&
+                      sameSource(selection.source, { kind: 'cell', row: r, col: c })
+                    }
+                    dispatch={dispatch}
+                  />
+                )),
               )}
             </tbody>
           </table>
@@ -775,22 +812,102 @@ function Grid({
   );
 }
 
+/**
+ * One block in the grid. Picked on the drawing, it is lit and scrolled to;
+ * clicked or tabbed into here, it is picked on the drawing — the same both
+ * ways as a board's row.
+ */
+function CellRow({
+  layerId,
+  cell,
+  row,
+  col,
+  selected,
+  dispatch,
+}: {
+  layerId: string;
+  cell: BlockCell;
+  row: number;
+  col: number;
+  selected: boolean;
+  dispatch: (action: Action) => void;
+}) {
+  const line = useRef<HTMLTableRowElement>(null);
+  const patch = (patch: Partial<BlockCell>) => dispatch({ type: 'patchCell', layerId, row, col, patch });
+  const select = () => {
+    if (!selected) dispatch({ type: 'select', selection: { layerId, source: { kind: 'cell', row, col } } });
+  };
+
+  useEffect(() => {
+    if (selected) line.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [selected]);
+
+  return (
+    <tr
+      ref={line}
+      onClick={select}
+      onFocus={select}
+      className={selected ? 'bg-blue-50 outline-1 outline-blue-400' : 'hover:bg-ground-soft'}
+    >
+      <td className="text-label text-slate-400">
+        r{row + 1} c{col + 1}
+      </td>
+      <td className="pr-1">
+        <NumberInput value={cell.lengthMm} min={1} onChange={(lengthMm) => patch({ lengthMm })} />
+      </td>
+      <td className="pr-1">
+        <NumberInput value={cell.widthMm} min={1} onChange={(widthMm) => patch({ widthMm })} />
+      </td>
+      <td className="pr-1">
+        <NumberInput value={cell.heightMm} min={1} onChange={(heightMm) => patch({ heightMm })} />
+      </td>
+      <td className="pr-1">
+        <TextInput value={cell.material} onChange={(material) => patch({ material })} />
+      </td>
+      <td>
+        <Button
+          title="Copy this cell to every cell in the grid"
+          onClick={() => dispatch({ type: 'fillGrid', layerId, row, col })}
+        >
+          Fill all
+        </Button>
+      </td>
+    </tr>
+  );
+}
+
 function Sheet({
   layer,
+  selection,
   dispatch,
   accent,
 }: {
   layer: Layer;
+  selection: Selection | null;
   dispatch: (action: Action) => void;
   accent?: LayerStyle;
 }) {
+  const box = useRef<HTMLDivElement>(null);
+  const selected = selection?.layerId === layer.id && selection.source.kind === 'sheet';
+  useEffect(() => {
+    if (selected) box.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [selected]);
+
   if (layer.content.type !== 'sheet') return null;
   const sheet = layer.content.sheet;
   const patch = (patch: Partial<SheetSpec>) =>
     dispatch({ type: 'patchSheet', layerId: layer.id, patch });
+  const select = () => {
+    if (!selected) dispatch({ type: 'select', selection: { layerId: layer.id, source: { kind: 'sheet' } } });
+  };
 
   return (
-    <div className="mt-3">
+    <div
+      ref={box}
+      className={`mt-3 rounded-card ${selected ? 'outline-2 outline-offset-2 outline-blue-400' : ''}`}
+      onClick={select}
+      onFocus={select}
+    >
       <KeyFields caption="The sheet" accent={accent}>
         <div className="grid grid-cols-4 gap-2">
           <Field label="Length">

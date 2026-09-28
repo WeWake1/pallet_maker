@@ -302,7 +302,12 @@ Done, with two changes of scope decided at the time:
 - Electron, `electron-builder.yml`, `StoreFolder.tsx`, `src/store/settings.ts`, `src/server/db.ts`, `src/cli/convert.ts`, `tests/migration.test.ts` and `better-sqlite3` are gone; `tsconfig.json` drops `electron`. `StoreHandle.use()` went with them, and `PUT /api/settings` now refuses for everyone. `--local` stays as the way to work on the tool: one folder from `PALLET_STORE` or `data/library`, no sign-in.
 - `docs/guide.ts` rewritten for the hosted product; README's costing, prices, desktop-app, installer and storage sections replaced.
 
-Still open: the Ambica assets in the tree, the `AP-` codes in fixtures, SMTP for invitations and self-service reset.
+After phase 5 (2026-09-27), from the first round of feedback:
+
+- **Trials.** A company can carry an end date (`tenants.access_until`, added to an existing registry when it opens). Past it the company is shut exactly as a suspended one is — sign-in, open sessions, invitations — with nothing deleted. New companies default to a 7-day trial on the vendor screen; each row has *Access ▾* (7 more days, counted from today once lapsed; or full access, no end date) beside Suspend. Somebody with the right password at a shut company is told why rather than "wrong password". CLI: `create --trial 7`, `trial --company x --days 7 | --end`.
+- **Invitations by email.** `PALLET_SMTP_HOST` / `_PORT` / `_USER` / `_PASS` and `PALLET_MAIL_FROM` (see `deploy/env.example`, `src/server/mail.ts`, nodemailer). Invitations, new-password links, *Send again* and the first person of a new company are emailed; the link is still shown to the vendor in case it goes astray, and a failed send leaves the invitation standing and says why. Unset, it behaves as before. The vendor screen shows which address mail goes from and can send a test.
+
+Still open: the Ambica assets in the tree, the `AP-` codes in fixtures, self-service password reset (a person asking for their own link from the sign-in screen), and SPF/DKIM for whatever domain the mail is sent from.
 
 ### Risks and how each is held
 

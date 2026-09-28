@@ -7,7 +7,21 @@ import { RegistryError, SlugTakenError } from '../tenancy/registry.js';
 import type { Registry } from '../tenancy/registry.js';
 import type { Tenants } from '../tenancy/tenants.js';
 import type { AuthConfig } from './app.js';
-import { createInvitation, invitationLink } from './invitations.js';
+import { invitationMessage, sendInvitation } from './invitations.js';
+import { mailFailure } from './mail.js';
+
+/** A trial, unless the vendor says otherwise when making a company. */
+export const TRIAL_DAYS = 7;
+/** Longer than any trial anybody means; past this it is a typing slip. */
+const MAX_TRIAL_DAYS = 366;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** A whole number of days from 1 to a year, or null for anything else. */
+function daysFrom(value: unknown): number | null {
+  const days = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN;
+  return Number.isInteger(days) && days >= 1 && days <= MAX_TRIAL_DAYS ? days : null;
+}
 
 /**
  * Looking after the service: the companies on it, and who looks after it.
@@ -66,32 +80,54 @@ export function vendorRoutes(registry: Registry, tenants: Tenants, auth: AuthCon
    * folder is made now, so the vendor can put its branding in place before
    * that link is ever followed.
    */
-  router.post('/companies', wrap((req, res) => {
-    const body = req.body as { slug?: unknown; name?: unknown; timezone?: unknown; firstEmail?: unknown };
+  router.post('/companies', wrap(async (req, res) => {
+    const body = req.body as {
+      slug?: unknown;
+      name?: unknown;
+      timezone?: unknown;
+      firstEmail?: unknown;
+      trialDays?: unknown;
+    };
     const timezone = typeof body.timezone === 'string' && body.timezone !== '' ? body.timezone : 'UTC';
     if (!isTimeZone(timezone)) {
       res.status(400).json({ error: `"${timezone}" is not a time zone name. Use one like Asia/Kolkata.` });
       return;
     }
+    // Absent or null is a company with no end date; anything else has to be
+    // a sensible number of days, so a slip does not make a trial of a decade.
+    let accessUntil: string | null = null;
+    if (body.trialDays !== undefined && body.trialDays !== null) {
+      const days = daysFrom(body.trialDays);
+      if (days === null) {
+        res.status(400).json({ error: `A trial is a whole number of days, from 1 to ${MAX_TRIAL_DAYS}.` });
+        return;
+      }
+      accessUntil = new Date(Date.now() + days * DAY_MS).toISOString();
+    }
     const tenant = registry.createTenant({
       slug: typeof body.slug === 'string' ? body.slug : '',
       name: typeof body.name === 'string' ? body.name : '',
       timezone,
+      accessUntil,
     });
     tenants.context(tenant);
 
-    let link: string | null = null;
+    let sent = null;
     if (typeof body.firstEmail === 'string' && body.firstEmail.trim() !== '') {
-      const { token } = createInvitation(registry, {
+      sent = await sendInvitation(registry, auth, {
         kind: 'invite',
         tenantId: tenant.id,
         email: body.firstEmail.trim(),
         role: 'member',
         invitedBy: req.principal?.user.id ?? null,
       });
-      link = invitationLink(auth.publicUrl, token);
     }
-    res.status(201).json({ company: summary(registry, tenants, tenant.id), link });
+    res.status(201).json({
+      company: summary(registry, tenants, tenant.id),
+      link: sent?.link ?? null,
+      emailed: sent?.emailed ?? false,
+      mailProblem: sent?.mailProblem ?? null,
+    });
   }));
 
   const companyOf = (req: Request, res: Response) => {
@@ -111,6 +147,33 @@ export function vendorRoutes(registry: Registry, tenants: Tenants, auth: AuthCon
     const tenant = companyOf(req, res);
     if (!tenant) return;
     registry.setTenantStatus(tenant.id, 'active');
+    res.json(summary(registry, tenants, tenant.id));
+  }));
+
+  /**
+   * How long a company may go on signing in.
+   *
+   * `{ addDays: 7 }` gives it seven more days — counted from today where its
+   * trial has already run out, or has never had an end, so extending a lapsed
+   * trial always leaves a week to use rather than a week that is half gone.
+   * `{ unlimited: true }` takes the end date away: a customer, rather than
+   * somebody trying it. Shutting a company at once is Suspend, above.
+   */
+  router.post('/companies/:slug/access', wrap((req, res) => {
+    const tenant = companyOf(req, res);
+    if (!tenant) return;
+    const body = req.body as { addDays?: unknown; unlimited?: unknown };
+    if (body.unlimited === true) {
+      registry.setTenantAccessUntil(tenant.id, null);
+    } else {
+      const days = daysFrom(body.addDays);
+      if (days === null) {
+        res.status(400).json({ error: `Say how many days to add, from 1 to ${MAX_TRIAL_DAYS}.` });
+        return;
+      }
+      const held = tenant.accessUntil === null ? Date.now() : Math.max(Date.now(), Date.parse(tenant.accessUntil));
+      registry.setTenantAccessUntil(tenant.id, new Date(held + days * DAY_MS).toISOString());
+    }
     res.json(summary(registry, tenants, tenant.id));
   }));
 
@@ -140,7 +203,7 @@ export function vendorRoutes(registry: Registry, tenants: Tenants, auth: AuthCon
     res.json({ users: registry.listUsers(null), invitations: registry.listInvitations(null) });
   }));
 
-  router.post('/invitations', wrap((req, res) => {
+  router.post('/invitations', wrap(async (req, res) => {
     const email = (req.body as { email?: unknown }).email;
     if (typeof email !== 'string' || email.trim() === '') {
       res.status(400).json({ error: 'An email address is needed' });
@@ -150,14 +213,49 @@ export function vendorRoutes(registry: Registry, tenants: Tenants, auth: AuthCon
       res.status(409).json({ error: `${email.trim()} already has an account.` });
       return;
     }
-    const { invitation, token } = createInvitation(registry, {
+    const sent = await sendInvitation(registry, auth, {
       kind: 'invite',
       tenantId: null,
       email: email.trim(),
       role: 'vendor',
       invitedBy: req.principal?.user.id ?? null,
     });
-    res.status(201).json({ invitation, link: invitationLink(auth.publicUrl, token) });
+    res.status(201).json(sent);
+  }));
+
+  /* ------------------------------------------------------------- email */
+
+  /** Whether this server sends mail, and as whom, for the vendor's screen. */
+  router.get('/mail', wrap((_req, res) => {
+    res.setHeader('Cache-Control', 'no-store, must-revalidate');
+    res.json({ configured: Boolean(auth.mailer), from: auth.mailer?.from ?? null });
+  }));
+
+  /**
+   * A test email to whoever pressed the button, so the settings can be
+   * checked without inviting anybody. It is an invitation in form, with a
+   * link that goes nowhere, so what arrives is what a customer would see.
+   */
+  router.post('/mail/test', wrap(async (req, res) => {
+    const to = req.principal?.user.email;
+    if (!auth.mailer || !to) {
+      res.status(409).json({ error: 'This server is not set up to send email. See PALLET_SMTP_HOST in deploy/env.example.' });
+      return;
+    }
+    try {
+      await auth.mailer.send(
+        invitationMessage({
+          kind: 'invite',
+          email: to,
+          companyName: 'Test Company (a test email — this link does nothing)',
+          link: `${auth.publicUrl.replace(/\/+$/, '')}/#/`,
+          expiresAt: new Date(Date.now() + 7 * DAY_MS).toISOString(),
+        }),
+      );
+      res.json({ to });
+    } catch (error) {
+      res.status(502).json({ error: `The mail server would not take it: ${mailFailure(error)}` });
+    }
   }));
 
   router.use((error: unknown, _req: Request, res: Response, next: NextFunction) => {

@@ -10,6 +10,7 @@ import { Mutex } from '../store/mutex.js';
 import type { Registry } from '../tenancy/registry.js';
 import { adminRoutes } from './adminRoutes.js';
 import { authRoutes, NO_SIGN_IN } from './authRoutes.js';
+import type { Mailer } from './mail.js';
 import { enterCompany, vendorRoutes } from './vendorRoutes.js';
 import {
   checkSession,
@@ -108,6 +109,8 @@ export interface AuthConfig {
   secure: boolean;
   /** Where this server answers, for the links in invitations. */
   publicUrl: string;
+  /** How invitations are emailed. Absent, the link is only shown, to be sent by hand. */
+  mailer?: Mailer | null;
 }
 
 /** The two routes that take a whole library in one body. */
@@ -155,6 +158,7 @@ export function createApp(source: StoreHandle | Tenants, options: AppOptions = {
           name: '',
           timezone: options.timezone ?? 'UTC',
           status: 'active',
+          accessUntil: null,
           createdAt: '',
         },
         handle: source as StoreHandle,

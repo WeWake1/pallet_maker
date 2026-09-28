@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from './api.js';
-import type { CompanySummary, People } from './api.js';
-import { Admin } from './Admin.jsx';
-import { Button, Field, inputClass, Panel, TextInput } from './ui.jsx';
+import type { CompanySummary, MailStatus, People, SentLink } from './api.js';
+import { Admin, LinkToSend } from './Admin.jsx';
+import { Button, Check, Field, Menu, MenuItem, NumberInput, Panel, TextInput } from './ui.jsx';
 
 /**
  * Looking after the service.
@@ -17,25 +17,26 @@ function Problem({ text }: { text: string | null }) {
   return <div className="mb-4 rounded-card border border-red-200 bg-red-50 px-3 py-2 text-ui text-red-700">{text}</div>;
 }
 
-function LinkToSend({ email, link, onDone }: { email: string; link: string; onDone: () => void }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <div className="mb-4 rounded-card border border-accent/40 bg-blue-50 px-3 py-3">
-      <p className="text-ui text-ink">
-        Send this to <strong>{email}</strong>. It works once, and for seven days. It will not be shown again.
-      </p>
-      <div className="mt-2 flex gap-2">
-        <input className={`${inputClass} font-mono text-label`} readOnly value={link} onFocus={(e) => e.target.select()} />
-        <Button tone="primary" onClick={() => void navigator.clipboard?.writeText(link).then(() => setCopied(true))}>
-          {copied ? 'Copied' : 'Copy'}
-        </Button>
-        <Button onClick={onDone}>Done</Button>
-      </div>
-    </div>
-  );
-}
-
 const when = (iso: string | null): string => (iso ? iso.slice(0, 10) : '—');
+
+/** What a trial is, unless the vendor says otherwise. */
+const TRIAL_DAYS = 7;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** "4 Oct", in whatever way this browser writes a date. */
+const shortDate = (at: number): string => new Date(at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+
+/**
+ * Where a company's trial stands, in a few words, and whether it is still let
+ * in. A company with no end date says nothing: that is a customer.
+ */
+function trialState(company: CompanySummary, now = Date.now()): { text: string; ended: boolean } | null {
+  if (company.accessUntil === null) return null;
+  const end = Date.parse(company.accessUntil);
+  if (end <= now) return { text: `trial ended ${shortDate(end)}`, ended: true };
+  const left = Math.ceil((end - now) / DAY_MS);
+  return { text: `trial · ends ${shortDate(end)}, ${left} day${left === 1 ? '' : 's'} left`, ended: false };
+}
 
 export function VendorAdmin({ userName, onSignOut }: { userName: string; onSignOut: () => void }) {
   const [companies, setCompanies] = useState<CompanySummary[] | null>(null);
@@ -43,7 +44,8 @@ export function VendorAdmin({ userName, onSignOut }: { userName: string; onSignO
   const [problem, setProblem] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [link, setLink] = useState<{ email: string; link: string } | null>(null);
+  const [link, setLink] = useState<{ email: string; sent: SentLink } | null>(null);
+  const [mail, setMail] = useState<MailStatus | null>(null);
   /** A company being set up: its settings take the window. */
   const [inside, setInside] = useState<CompanySummary | null>(null);
 
@@ -51,10 +53,19 @@ export function VendorAdmin({ userName, onSignOut }: { userName: string; onSignO
   const [name, setName] = useState('');
   const [timezone, setTimezone] = useState('Asia/Kolkata');
   const [firstEmail, setFirstEmail] = useState('');
+  // A new company is somebody trying it more often than not, so it starts as
+  // a trial; unticking makes a customer with no end date.
+  const [trial, setTrial] = useState(true);
+  const [trialDays, setTrialDays] = useState(TRIAL_DAYS);
   const [vendorEmail, setVendorEmail] = useState('');
 
   const refresh = useCallback(
-    () => Promise.all([api.vendor.companies().then(setCompanies), api.vendor.people().then(setPeople)]),
+    () =>
+      Promise.all([
+        api.vendor.companies().then(setCompanies),
+        api.vendor.people().then(setPeople),
+        api.vendor.mail().then(setMail),
+      ]),
     [],
   );
   useEffect(() => {
@@ -81,8 +92,9 @@ export function VendorAdmin({ userName, onSignOut }: { userName: string; onSignO
         name: name.trim(),
         timezone: timezone.trim(),
         firstEmail: firstEmail.trim(),
+        trialDays: trial ? trialDays : null,
       });
-      if (made.link) setLink({ email: firstEmail.trim(), link: made.link });
+      if (made.link) setLink({ email: firstEmail.trim(), sent: { link: made.link, emailed: made.emailed, mailProblem: made.mailProblem } });
       setSlug('');
       setName('');
       setFirstEmail('');
@@ -115,7 +127,7 @@ export function VendorAdmin({ userName, onSignOut }: { userName: string; onSignO
         <div className="mx-auto max-w-5xl px-4 py-6">
           <Problem text={problem} />
           {notice && <div className="mb-4 rounded-card border border-emerald-200 bg-emerald-50 px-3 py-2 text-ui text-emerald-800">{notice}</div>}
-          {link && <LinkToSend email={link.email} link={link.link} onDone={() => setLink(null)} />}
+          {link && <LinkToSend email={link.email} sent={link.sent} onDone={() => setLink(null)} />}
 
           <Panel
             title="Every company"
@@ -164,8 +176,29 @@ export function VendorAdmin({ userName, onSignOut }: { userName: string; onSignO
                   <TextInput value={firstEmail} onChange={setFirstEmail} placeholder="boss@northgate.example" disabled={busy} />
                 </Field>
               </div>
+              <div className="mt-3 flex items-center gap-2">
+                <Check
+                  checked={trial}
+                  disabled={busy}
+                  label="A trial — nobody in it can sign in after"
+                  onChange={setTrial}
+                />
+                <div className="w-16">
+                  <NumberInput value={trialDays} min={1} max={366} disabled={busy || !trial} onChange={setTrialDays} />
+                </div>
+                <span className="text-ui text-ink-soft">days</span>
+                <span className="text-label text-ink-faint">
+                  {trial
+                    ? `(until ${shortDate(Date.now() + trialDays * DAY_MS)}; extend it or give full access from the list above)`
+                    : '(no end date: a customer)'}
+                </span>
+              </div>
               <div className="mt-3">
-                <Button tone="primary" disabled={busy || slug.trim() === '' || name.trim() === ''} onClick={create}>
+                <Button
+                  tone="primary"
+                  disabled={busy || slug.trim() === '' || name.trim() === '' || (trial && !(trialDays >= 1))}
+                  onClick={create}
+                >
                   Make it
                 </Button>
               </div>
@@ -202,7 +235,7 @@ export function VendorAdmin({ userName, onSignOut }: { userName: string; onSignO
                   onClick={() =>
                     run(async () => {
                       const made = await api.vendor.invite(vendorEmail.trim());
-                      setLink({ email: vendorEmail.trim(), link: made.link });
+                      setLink({ email: vendorEmail.trim(), sent: made });
                       setVendorEmail('');
                     })
                   }
@@ -210,6 +243,40 @@ export function VendorAdmin({ userName, onSignOut }: { userName: string; onSignO
                   Invite
                 </Button>
               </div>
+            </Panel>
+          </div>
+
+          <div className="mt-6">
+            <Panel
+              title="Email"
+              actions={
+                mail?.configured ? (
+                  <Button
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => run(async () => {
+                      const sent = await api.vendor.testMail();
+                      setNotice(`A test email is on its way to ${sent.to}.`);
+                    })}
+                  >
+                    Send me a test email
+                  </Button>
+                ) : undefined
+              }
+            >
+              {mail === null ? null : mail.configured ? (
+                <p className="text-ui text-ink-soft">
+                  Invitations and new-password links are emailed from <strong className="text-ink">{mail.from}</strong>.
+                  The link is shown to you as well, in case one goes astray.
+                </p>
+              ) : (
+                <p className="text-ui text-ink-soft">
+                  This server is not set up to send email, so each invitation gives you a link to send yourself. To
+                  have them emailed, set <code className="rounded bg-slate-200 px-1">PALLET_SMTP_HOST</code> and the
+                  settings beside it in <code className="rounded bg-slate-200 px-1">/etc/pallet-spec/env</code> (see
+                  deploy/env.example) and restart the service.
+                </p>
+              )}
             </Panel>
           </div>
         </div>
@@ -230,14 +297,25 @@ function CompanyRow({
   onEnter: () => void;
 }) {
   const suspended = company.status === 'suspended';
+  const trial = trialState(company);
+  const shut = suspended || trial?.ended === true;
+  // Seven more days from the end of the trial, or from today where it has run
+  // out or there is none — which is what the server does with them too.
+  const from = company.accessUntil === null ? Date.now() : Math.max(Date.now(), Date.parse(company.accessUntil));
   return (
-    <tr className={`border-t border-line-soft ${suspended ? 'text-ink-faint' : ''}`}>
+    <tr className={`border-t border-line-soft ${shut ? 'text-ink-faint' : ''}`}>
       <td className="py-1.5 pr-2">
         <div className="font-medium">{company.name}</div>
         <div className="text-label text-ink-soft">
           {company.slug} · {company.timezone}
           {suspended && ' · suspended'}
         </div>
+        {trial && (
+          <div className={`text-label ${trial.ended ? 'text-red-700' : 'text-amber-700'}`}>
+            {trial.text}
+            {trial.ended && !suspended && ' — nobody in it can sign in'}
+          </div>
+        )}
       </td>
       <td className="py-1.5 pr-2 tabular-nums">
         {company.signedUp} of {company.people}
@@ -250,6 +328,42 @@ function CompanyRow({
           <Button size="sm" tone="primary" disabled={busy} onClick={onEnter}>
             Set up
           </Button>
+          <Menu label="Access ▾" title="How long this company may go on signing in" disabled={busy}>
+            {(close) => (
+              <>
+                <MenuItem
+                  onClick={() => {
+                    close();
+                    run(
+                      () => api.vendor.access(company.slug, { addDays: TRIAL_DAYS }),
+                      `${company.name} can sign in until ${shortDate(from + TRIAL_DAYS * DAY_MS)}.`,
+                    );
+                  }}
+                  note={`Access until ${shortDate(from + TRIAL_DAYS * DAY_MS)}`}
+                >
+                  {company.accessUntil === null
+                    ? `Make it a ${TRIAL_DAYS}-day trial`
+                    : trial?.ended
+                      ? `Reopen for ${TRIAL_DAYS} days`
+                      : `${TRIAL_DAYS} more days`}
+                </MenuItem>
+                {company.accessUntil !== null && (
+                  <MenuItem
+                    onClick={() => {
+                      close();
+                      run(
+                        () => api.vendor.access(company.slug, { unlimited: true }),
+                        `${company.name} has full access, with no end date.`,
+                      );
+                    }}
+                    note="No end date — a customer now"
+                  >
+                    Full access
+                  </MenuItem>
+                )}
+              </>
+            )}
+          </Menu>
           {suspended ? (
             <Button size="sm" disabled={busy} onClick={() => run(() => api.vendor.resume(company.slug), `${company.name} is active again.`)}>
               Resume
@@ -259,8 +373,9 @@ function CompanyRow({
               size="sm"
               tone="danger"
               disabled={busy}
+              title="Revoke access now: everyone in it is signed out"
               onClick={() => {
-                if (window.confirm(`Suspend ${company.name}? Everyone in it is signed out and cannot sign in until it is resumed.`)) {
+                if (window.confirm(`Suspend ${company.name}? Everyone in it is signed out and cannot sign in until it is resumed. Nothing is deleted.`)) {
                   run(() => api.vendor.suspend(company.slug), `${company.name} is suspended.`);
                 }
               }}

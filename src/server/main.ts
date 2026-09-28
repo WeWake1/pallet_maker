@@ -25,6 +25,8 @@
  *   PALLET_PRINT_CONCURRENCY  sheets printing at once, default 2; 1 on a 1 GB machine
  *   PALLET_BACKUPS       snapshots to keep per company, default 30
  *   PALLET_STORE         --local only: the folder the designs are in
+ *   PALLET_SMTP_HOST     hosted only, optional; with PALLET_SMTP_PORT, _USER, _PASS
+ *   PALLET_MAIL_FROM       and the sender, invitations are emailed (see ./mail.ts)
  */
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -41,6 +43,8 @@ import { createApp } from './app.js';
 import type { AuthConfig } from './app.js';
 import { backupDirectoryFor, backupLibrary } from './backup.js';
 import { jsonLogger } from './log.js';
+import { MailConfigError, smtpConfigFromEnv, smtpMailer } from './mail.js';
+import type { SmtpConfig } from './mail.js';
 import { reconcileClients } from './repository.js';
 
 /**
@@ -164,6 +168,14 @@ function hostedApp() {
   }
   const publicUrl = process.env.PALLET_PUBLIC_URL ?? `http://${host}:${port}`;
 
+  let mail: SmtpConfig | null = null;
+  try {
+    mail = smtpConfigFromEnv();
+  } catch (error) {
+    if (error instanceof MailConfigError) fail(error.message);
+    throw error;
+  }
+
   registry = new Registry(resolve(dataRoot, 'registry.sqlite'));
   const tenants = new Tenants(dataRoot, registry, { brandPath });
   const auth: AuthConfig = {
@@ -173,6 +185,7 @@ function hostedApp() {
     // a browser on plain http would throw them away and nobody could sign in.
     secure: publicUrl.startsWith('https://'),
     publicUrl,
+    mailer: mail ? smtpMailer(mail) : null,
   };
 
   const app = createApp(tenants, {
@@ -200,6 +213,11 @@ function hostedApp() {
           : `${companies.length} compan(ies): ${companies.map((t) => t.slug).join(', ')}`,
       );
       console.log(`Links in invitations point at ${publicUrl}`);
+      console.log(
+        mail
+          ? `Invitations are emailed from ${mail.from} through ${mail.host}:${mail.port}`
+          : 'Email is not set up (PALLET_SMTP_HOST), so invitation links are shown to be sent by hand.',
+      );
       if (!auth.secure) {
         console.log('Cookies are not marked Secure, because that address is not https.');
       }

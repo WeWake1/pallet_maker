@@ -1,6 +1,7 @@
 import { createHmac, randomBytes, scrypt as scryptCallback, timingSafeEqual, createHash } from 'node:crypto';
 import { promisify } from 'node:util';
 import type { NextFunction, Request, Response } from 'express';
+import { accessEnded, tenantOpen } from '../tenancy/registry.js';
 import type { Registry, Tenant, User } from '../tenancy/registry.js';
 
 /**
@@ -239,7 +240,9 @@ export function checkSession(registry: Registry, req: Request, secret: string): 
   if (user.tenantId !== null) {
     tenant = registry.tenant(user.tenantId) ?? null;
     if (!tenant) return { principal: null, reason: 'the company is gone' };
-    if (tenant.status !== 'active') return { principal: null, reason: 'the company is suspended' };
+    if (!tenantOpen(tenant)) {
+      return { principal: null, reason: accessEnded(tenant) ? "the company's trial has ended" : 'the company is suspended' };
+    }
   }
 
   // Pushed forward at most once every few minutes, so reading a page is not a

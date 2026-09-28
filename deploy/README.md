@@ -197,8 +197,9 @@ sudo -u pallet env $(grep -v '^#' /etc/pallet-spec/env | xargs) node dist/server
          --timezone Asia/Kolkata --invite office@ambica.example
 ```
 
-It prints a link. Send that to the person: they follow it, choose a password,
-and are signed in. **No password is ever set by anybody else**, so there is
+It prints a link, and emails it too where mail is set up (the `PALLET_SMTP_*`
+settings in `/etc/pallet-spec/env`, see `env.example`). The person follows it,
+chooses a password, and is signed in. **No password is ever set by anybody else**, so there is
 never one to read out over the phone or leave in a chat. The link works once
 and lasts a week.
 
@@ -231,7 +232,14 @@ node dist/server/tenant.mjs invite --company ambica --email x@y
 node dist/server/tenant.mjs reset --email x@y                      # a way back in
 node dist/server/tenant.mjs suspend --company ambica               # signs them out too
 node dist/server/tenant.mjs resume --company ambica
+node dist/server/tenant.mjs trial --company ambica --days 7        # start a trial, or add 7 days
+node dist/server/tenant.mjs trial --company ambica --end           # no end date: a customer
 ```
+
+A company made with `--trial 7` (or with the box ticked on the Companies
+screen) can sign in for seven days and then cannot, exactly as if it had been
+suspended; nothing is deleted, and adding days or giving full access lets
+everybody straight back in.
 
 ## 8. Ambica's designs onto the server
 

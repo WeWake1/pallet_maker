@@ -85,7 +85,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 export interface Session {
   signInRequired: boolean;
   user: { id: string; email: string; name: string; role: string } | null;
-  company: { slug: string; name: string; timezone: string } | null;
+  company: { slug: string; name: string; timezone: string; accessUntil: string | null } | null;
 }
 
 export interface Person {
@@ -110,6 +110,20 @@ export interface Invitation {
 export interface People {
   users: Person[];
   invitations: Invitation[];
+}
+
+/** A link that has just been made, and whether it went out by email. */
+export interface SentLink {
+  link: string;
+  emailed: boolean;
+  /** Why the email did not go, where it was tried. */
+  mailProblem: string | null;
+}
+
+/** Whether this server sends email, and as whom. */
+export interface MailStatus {
+  configured: boolean;
+  from: string | null;
 }
 
 /** The brand file as it is written on disk, for the form. Paths, not artwork. */
@@ -142,6 +156,8 @@ export interface CompanySummary {
   name: string;
   timezone: string;
   status: 'active' | 'suspended';
+  /** When a trial runs out; null for a company with no end date. */
+  accessUntil: string | null;
   createdAt: string;
   people: number;
   signedUp: number;
@@ -235,12 +251,14 @@ export const api = {
   admin: (base: string) => ({
     people: () => call<People>(`${base}/people`),
     invite: (email: string) =>
-      call<{ invitation: Invitation; link: string }>(`${base}/invitations`, {
+      call<SentLink & { invitation: Invitation }>(`${base}/invitations`, {
         method: 'POST',
         body: JSON.stringify({ email }),
       }),
+    resend: (id: string) =>
+      call<SentLink & { invitation: Invitation }>(`${base}/invitations/${id}/resend`, { method: 'POST' }),
     withdraw: (id: string) => call<void>(`${base}/invitations/${id}`, { method: 'DELETE' }),
-    resetLink: (userId: string) => call<{ link: string }>(`${base}/people/${userId}/reset`, { method: 'POST' }),
+    resetLink: (userId: string) => call<SentLink>(`${base}/people/${userId}/reset`, { method: 'POST' }),
     disable: (userId: string) => call<Person>(`${base}/people/${userId}/disable`, { method: 'POST' }),
     enable: (userId: string) => call<Person>(`${base}/people/${userId}/enable`, { method: 'POST' }),
 
@@ -263,11 +281,21 @@ export const api = {
   /** Looking after the service: every company, and who else looks after it. */
   vendor: {
     companies: () => call<CompanySummary[]>('/api/vendor/companies'),
-    createCompany: (input: { slug: string; name: string; timezone: string; firstEmail: string }) =>
-      call<{ company: CompanySummary; link: string | null }>('/api/vendor/companies', {
-        method: 'POST',
-        body: JSON.stringify(input),
-      }),
+    createCompany: (input: {
+      slug: string;
+      name: string;
+      timezone: string;
+      firstEmail: string;
+      /** Days until access ends; null for no end. */
+      trialDays: number | null;
+    }) =>
+      call<{ company: CompanySummary; link: string | null; emailed: boolean; mailProblem: string | null }>(
+        '/api/vendor/companies',
+        { method: 'POST', body: JSON.stringify(input) },
+      ),
+    /** More days on a trial (or the start of one), or no end at all. */
+    access: (slug: string, change: { addDays: number } | { unlimited: true }) =>
+      call<CompanySummary>(`/api/vendor/companies/${slug}/access`, { method: 'POST', body: JSON.stringify(change) }),
     suspend: (slug: string) => call<CompanySummary>(`/api/vendor/companies/${slug}/suspend`, { method: 'POST' }),
     resume: (slug: string) => call<CompanySummary>(`/api/vendor/companies/${slug}/resume`, { method: 'POST' }),
     rename: (slug: string, changes: { name?: string; timezone?: string }) =>
@@ -275,10 +303,12 @@ export const api = {
     backup: () => call<{ companies: number; failures: number }>('/api/vendor/backup', { method: 'POST' }),
     people: () => call<People>('/api/vendor/people'),
     invite: (email: string) =>
-      call<{ invitation: Invitation; link: string }>('/api/vendor/invitations', {
+      call<SentLink & { invitation: Invitation }>('/api/vendor/invitations', {
         method: 'POST',
         body: JSON.stringify({ email }),
       }),
+    mail: () => call<MailStatus>('/api/vendor/mail'),
+    testMail: () => call<{ to: string }>('/api/vendor/mail/test', { method: 'POST' }),
     /** Where a company's settings are reached from the vendor's side. */
     adminBase: (slug: string) => `/api/vendor/companies/${slug}/admin`,
   },

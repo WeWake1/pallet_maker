@@ -121,7 +121,7 @@ describe('signing in', () => {
     const response = await call('POST', '/api/auth/login', { body: { email: user.email, password } });
     expect(response.status).toBe(200);
     expect(response.body.user.email).toBe(user.email);
-    expect(response.body.company).toEqual({ slug: 'acme', name: 'Acme Pallets', timezone: tenant.timezone });
+    expect(response.body.company).toEqual({ slug: 'acme', name: 'Acme Pallets', timezone: tenant.timezone, accessUntil: null });
 
     const cookie = response.headers.get('set-cookie') ?? '';
     expect(cookie).toContain('HttpOnly');

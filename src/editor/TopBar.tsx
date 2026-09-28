@@ -58,6 +58,25 @@ export function StoreUnreachable({
 }
 
 /**
+ * How long a trial has left, beside the company's name, so the end of it is
+ * never a surprise at the sign-in screen. A company with no end date shows
+ * nothing.
+ */
+function TrialNote({ accessUntil }: { accessUntil: string | null }) {
+  if (accessUntil === null) return null;
+  const left = Math.ceil((Date.parse(accessUntil) - Date.now()) / (24 * 60 * 60 * 1000));
+  if (left < 1) return null;
+  return (
+    <span
+      className={`rounded-full px-2 py-px text-micro font-medium ${left <= 2 ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-800'}`}
+      title={`Trial access ends ${new Date(accessUntil).toLocaleString()}`}
+    >
+      Trial · {left} day{left === 1 ? '' : 's'} left
+    </span>
+  );
+}
+
+/**
  * Whose designs these are, and the way out.
  *
  * The company is named on every screen rather than only at sign-in: somebody
@@ -87,7 +106,10 @@ export function TopBar({
       )}
       <div className="flex items-center gap-2 border-b border-line bg-ground-soft px-4 py-1.5">
         {session?.company ? (
-          <span className="font-medium text-label text-ink">{session.company.name}</span>
+          <>
+            <span className="font-medium text-label text-ink">{session.company.name}</span>
+            <TrialNote accessUntil={session.company.accessUntil} />
+          </>
         ) : (
           // Run locally there is no company and no door; the folder in use is
           // what there is to say.

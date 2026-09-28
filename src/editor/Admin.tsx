@@ -3,7 +3,7 @@ import type { ChangeEvent, ReactNode } from 'react';
 import { HANDLING_METHODS } from '../types.js';
 import type { HandlingMethod } from '../types.js';
 import { api } from './api.js';
-import type { BrandFileInput, BrandSettings, Invitation, People, Person } from './api.js';
+import type { BrandFileInput, BrandSettings, Invitation, People, Person, SentLink } from './api.js';
 import { HANDLING_LABEL } from '../sheet/handling.js';
 import { Button, Check, Field, inputClass, NumberInput, Panel, Select, TextInput } from './ui.jsx';
 
@@ -88,26 +88,45 @@ function Notice({ text }: { text: string | null }) {
 }
 
 /**
- * A link to send to somebody.
+ * What became of a link that has just been made.
  *
- * Shown once, with a button to copy it, and a plain reminder that this is the
- * only time it will be shown: the server keeps a hash of it and cannot say it
- * again. There is no email sent from here, so this is how the link travels —
- * pasted into whatever the company already uses to talk to each other.
+ * Emailed, where the server can send mail — and the link is still shown, once,
+ * because an email can land in spam or be mistyped, and the server keeps only
+ * a hash of it and cannot say it again. Where there is no mail, or it failed,
+ * this is how the link travels: pasted into whatever the company already uses
+ * to talk to each other.
  */
-function LinkToSend({ email, link, onDone }: { email: string; link: string; onDone: () => void }) {
+export function LinkToSend({ email, sent, onDone }: { email: string; sent: SentLink; onDone: () => void }) {
   const [copied, setCopied] = useState(false);
   const copy = () => {
-    void navigator.clipboard?.writeText(link).then(() => setCopied(true));
+    void navigator.clipboard?.writeText(sent.link).then(() => setCopied(true));
   };
+  const tone = sent.emailed
+    ? 'border-emerald-200 bg-emerald-50'
+    : sent.mailProblem
+      ? 'border-amber-300 bg-amber-50'
+      : 'border-accent/40 bg-blue-50';
   return (
-    <div className="mb-4 rounded-card border border-accent/40 bg-blue-50 px-3 py-3">
-      <p className="text-ui text-ink">
-        Send this to <strong>{email}</strong>. It works once, and for seven days. It will not be shown again.
-      </p>
+    <div className={`mb-4 rounded-card border px-3 py-3 ${tone}`}>
+      {sent.emailed ? (
+        <p className="text-ui text-ink">
+          Emailed to <strong>{email}</strong>. If it does not arrive — have them check their spam folder — send them
+          this link yourself. It works once, for seven days, and will not be shown again.
+        </p>
+      ) : sent.mailProblem ? (
+        <p className="text-ui text-ink">
+          Could not email <strong>{email}</strong>: {sent.mailProblem}. Send them this link yourself. It works once,
+          for seven days, and will not be shown again.
+        </p>
+      ) : (
+        <p className="text-ui text-ink">
+          Send this to <strong>{email}</strong>. It works once, and for seven days. It will not be shown again.
+          <span className="text-ink-soft"> (This server is not set up to send email.)</span>
+        </p>
+      )}
       <div className="mt-2 flex gap-2">
-        <input className={`${inputClass} font-mono text-label`} readOnly value={link} onFocus={(e) => e.target.select()} />
-        <Button tone="primary" onClick={copy}>
+        <input className={`${inputClass} font-mono text-label`} readOnly value={sent.link} onFocus={(e) => e.target.select()} />
+        <Button tone={sent.emailed ? 'plain' : 'primary'} onClick={copy}>
           {copied ? 'Copied' : 'Copy'}
         </Button>
         <Button onClick={onDone}>Done</Button>
@@ -136,7 +155,7 @@ const when = (iso: string | null): string => (iso ? iso.slice(0, 10) : 'never');
 function PeopleTab({ calls }: { calls: Calls }) {
   const [people, setPeople] = useState<People | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
-  const [link, setLink] = useState<{ email: string; link: string } | null>(null);
+  const [link, setLink] = useState<{ email: string; sent: SentLink } | null>(null);
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -157,7 +176,7 @@ function PeopleTab({ calls }: { calls: Calls }) {
   const invite = () =>
     run(async () => {
       const made = await calls.invite(email.trim());
-      setLink({ email: email.trim(), link: made.link });
+      setLink({ email: email.trim(), sent: made });
       setEmail('');
     });
 
@@ -166,7 +185,7 @@ function PeopleTab({ calls }: { calls: Calls }) {
   return (
     <>
       <Problem text={problem} />
-      {link && <LinkToSend email={link.email} link={link.link} onDone={() => setLink(null)} />}
+      {link && <LinkToSend email={link.email} sent={link.sent} onDone={() => setLink(null)} />}
 
       <Panel title="Invite somebody">
         <div className="flex items-end gap-2">
@@ -180,8 +199,9 @@ function PeopleTab({ calls }: { calls: Calls }) {
           </Button>
         </div>
         <p className="mt-2 text-label leading-relaxed text-ink-faint">
-          You will be given a link to send them. They follow it, choose a password, and are in. They
-          can draw and print; nobody at the company can change who is in it or its branding.
+          They are emailed a link, and you are shown it too in case it goes astray. They follow it,
+          choose a password, and are in. They can draw and print; nobody at the company can change who
+          is in it or its branding.
         </p>
       </Panel>
 
@@ -200,7 +220,14 @@ function PeopleTab({ calls }: { calls: Calls }) {
                 <PersonRow key={person.id} person={person} busy={busy} calls={calls} run={run} onLink={setLink} />
               ))}
               {people.invitations.map((invitation) => (
-                <InvitationRow key={invitation.id} invitation={invitation} busy={busy} calls={calls} run={run} />
+                <InvitationRow
+                  key={invitation.id}
+                  invitation={invitation}
+                  busy={busy}
+                  calls={calls}
+                  run={run}
+                  onLink={setLink}
+                />
               ))}
             </tbody>
           </table>
@@ -224,7 +251,7 @@ function PersonRow({
   busy: boolean;
   calls: Calls;
   run: (work: () => Promise<unknown>) => void;
-  onLink: (link: { email: string; link: string }) => void;
+  onLink: (link: { email: string; sent: SentLink }) => void;
 }) {
   const off = person.status === 'disabled';
   return (
@@ -242,7 +269,7 @@ function PersonRow({
             size="sm"
             disabled={busy}
             title="A link for them to choose a new password"
-            onClick={() => run(async () => onLink({ email: person.email, link: (await calls.resetLink(person.id)).link }))}
+            onClick={() => run(async () => onLink({ email: person.email, sent: await calls.resetLink(person.id) }))}
           >
             New password link
           </Button>
@@ -266,21 +293,33 @@ function InvitationRow({
   busy,
   calls,
   run,
+  onLink,
 }: {
   invitation: Invitation;
   busy: boolean;
   calls: Calls;
   run: (work: () => Promise<unknown>) => void;
+  onLink: (link: { email: string; sent: SentLink }) => void;
 }) {
   return (
     <tr className="border-t border-line-soft text-ink-soft">
       <td className="py-1.5 pr-2">
         <div>{invitation.email}</div>
-        <div className="text-label">invited, link not yet used · runs out {when(invitation.expiresAt)}</div>
+        <div className="text-label">
+          {invitation.kind === 'reset' ? 'new password link' : 'invited'}, not yet used · runs out {when(invitation.expiresAt)}
+        </div>
       </td>
       <td className="py-1.5 pr-2">—</td>
       <td className="py-1.5">
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-1">
+          <Button
+            size="sm"
+            disabled={busy}
+            title="Make a fresh link and send it again. The old one stops working."
+            onClick={() => run(async () => onLink({ email: invitation.email, sent: await calls.resend(invitation.id) }))}
+          >
+            Send again
+          </Button>
           <Button size="sm" disabled={busy} onClick={() => run(() => calls.withdraw(invitation.id))}>
             Withdraw
           </Button>

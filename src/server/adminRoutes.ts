@@ -11,7 +11,7 @@ import { EmailTakenError, RegistryError } from '../tenancy/registry.js';
 import type { Registry } from '../tenancy/registry.js';
 import previewDesign from '../../fixtures/wing-both-decks.json' with { type: 'json' };
 import type { AuthConfig } from './app.js';
-import { createInvitation, invitationLink } from './invitations.js';
+import { sendInvitation } from './invitations.js';
 
 /**
  * Looking after a company: who is in it, and whose name is on its sheets.
@@ -67,8 +67,11 @@ export function adminRoutes(registry: Registry, auth: AuthConfig): Router {
     });
   }));
 
-  /** Invite somebody. The link is shown once, to whoever is sending it. */
-  router.post('/invitations', wrap((req, res) => {
+  /**
+   * Invite somebody. It is emailed where the server can send mail, and the
+   * link is shown once to whoever asked either way, in case it goes astray.
+   */
+  router.post('/invitations', wrap(async (req, res) => {
     const { tenant } = currentTenant();
     const body = req.body as { email?: unknown };
     const email = typeof body.email === 'string' ? body.email.trim() : '';
@@ -80,14 +83,39 @@ export function adminRoutes(registry: Registry, auth: AuthConfig): Router {
       res.status(409).json({ error: `${email} already has an account. Send them a new-password link instead.` });
       return;
     }
-    const { invitation, token } = createInvitation(registry, {
+    const sent = await sendInvitation(registry, auth, {
       kind: 'invite',
       tenantId: tenant.id,
       email,
       role: 'member',
       invitedBy: req.principal?.user.id ?? null,
     });
-    res.status(201).json({ invitation, link: invitationLink(auth.publicUrl, token) });
+    res.status(201).json(sent);
+  }));
+
+  /**
+   * Send an invitation again, for one that never arrived or was lost.
+   *
+   * Only a hash of the old link is kept, so it cannot be sent again as it
+   * was: a new one is made and the old one stops working, which also means a
+   * copy of the first email found later is no way in.
+   */
+  router.post('/invitations/:id/resend', wrap(async (req, res) => {
+    const { tenant } = currentTenant();
+    const held = registry.listInvitations(tenant.id).find((i) => i.id === String(req.params.id));
+    if (!held) {
+      res.status(404).json({ error: 'No such invitation' });
+      return;
+    }
+    registry.deleteInvitation(held.id);
+    const sent = await sendInvitation(registry, auth, {
+      kind: held.kind,
+      tenantId: tenant.id,
+      email: held.email,
+      role: held.role,
+      invitedBy: req.principal?.user.id ?? null,
+    });
+    res.status(201).json(sent);
   }));
 
   router.delete('/invitations/:id', wrap((req, res) => {
@@ -113,17 +141,17 @@ export function adminRoutes(registry: Registry, auth: AuthConfig): Router {
   };
 
   /** A way back in for somebody who has lost their password. */
-  router.post('/people/:id/reset', wrap((req, res) => {
+  router.post('/people/:id/reset', wrap(async (req, res) => {
     const user = personHere(req, res);
     if (!user) return;
-    const { token } = createInvitation(registry, {
+    const sent = await sendInvitation(registry, auth, {
       kind: 'reset',
       tenantId: user.tenantId,
       email: user.email,
       role: user.role,
       invitedBy: req.principal?.user.id ?? null,
     });
-    res.json({ link: invitationLink(auth.publicUrl, token) });
+    res.json(sent);
   }));
 
   router.post('/people/:id/disable', wrap((req, res) => {

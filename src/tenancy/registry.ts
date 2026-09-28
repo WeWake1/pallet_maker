@@ -53,7 +53,32 @@ export interface Tenant {
   /** Where the company is, which is the date a design is saved under. */
   timezone: string;
   status: TenantStatus;
+  /**
+   * When the company's access runs out, or null for no end.
+   *
+   * A trial is a company with a date here. Past it, the company is treated as
+   * suspended — nobody in it can sign in, and sessions already open stop
+   * working — without anybody having to remember to suspend it. Nothing is
+   * deleted: moving the date, or clearing it, lets them straight back in.
+   */
+  accessUntil: string | null;
   createdAt: string;
+}
+
+/**
+ * Whether people at this company may be let in now.
+ *
+ * Suspended, or past the end of its trial, and the answer is no; every door —
+ * signing in, a session already open, following an invitation — asks this
+ * rather than reading the status on its own.
+ */
+export function tenantOpen(tenant: Tenant, at: number = Date.now()): boolean {
+  return tenant.status === 'active' && !accessEnded(tenant, at);
+}
+
+/** Whether the company had an end date and it has gone by. */
+export function accessEnded(tenant: Tenant, at: number = Date.now()): boolean {
+  return tenant.accessUntil !== null && Date.parse(tenant.accessUntil) <= at;
 }
 
 export interface User {
@@ -116,6 +141,7 @@ CREATE TABLE IF NOT EXISTS tenants (
   name        TEXT NOT NULL,
   timezone    TEXT NOT NULL DEFAULT 'UTC',
   status      TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','suspended')),
+  access_until TEXT,
   created_at  TEXT NOT NULL
 );
 
@@ -184,6 +210,13 @@ export class Registry {
     // opens unchanged and is put right here.
     this.db.exec("UPDATE users SET role = 'member' WHERE role = 'admin'");
     this.db.exec("UPDATE invitations SET role = 'member' WHERE role = 'admin'");
+    // Companies have had an end date since trials. A registry from before has
+    // the table without the column, which CREATE TABLE IF NOT EXISTS leaves
+    // alone, so it is added here — empty, which is every company as it was.
+    const columns = this.db.prepare('PRAGMA table_info(tenants)').all() as Array<{ name: string }>;
+    if (!columns.some((column) => column.name === 'access_until')) {
+      this.db.exec('ALTER TABLE tenants ADD COLUMN access_until TEXT');
+    }
   }
 
   close(): void {
@@ -211,7 +244,7 @@ export class Registry {
 
   // -- companies ----------------------------------------------------------
 
-  createTenant(input: { slug: string; name: string; timezone?: string }): Tenant {
+  createTenant(input: { slug: string; name: string; timezone?: string; accessUntil?: string | null }): Tenant {
     const slug = input.slug.trim().toLowerCase();
     if (!/^[a-z0-9][a-z0-9-]{1,38}$/.test(slug)) {
       throw new RegistryError(
@@ -227,11 +260,12 @@ export class Registry {
       name: input.name.trim(),
       timezone: input.timezone ?? 'UTC',
       status: 'active',
+      accessUntil: input.accessUntil ?? null,
       createdAt: now(),
     };
     this.db
-      .prepare('INSERT INTO tenants (id, slug, name, timezone, status, created_at) VALUES (?,?,?,?,?,?)')
-      .run(tenant.id, tenant.slug, tenant.name, tenant.timezone, tenant.status, tenant.createdAt);
+      .prepare('INSERT INTO tenants (id, slug, name, timezone, status, access_until, created_at) VALUES (?,?,?,?,?,?,?)')
+      .run(tenant.id, tenant.slug, tenant.name, tenant.timezone, tenant.status, tenant.accessUntil, tenant.createdAt);
     return tenant;
   }
 
@@ -262,19 +296,40 @@ export class Registry {
     }
   }
 
+  /**
+   * Move the end of a company's access, or take it away with null.
+   *
+   * A date already gone by signs everybody in it out at once, the same as
+   * suspending it would, rather than leaving open sessions to find out at
+   * their next request.
+   */
+  setTenantAccessUntil(id: string, accessUntil: string | null): void {
+    if (accessUntil !== null && Number.isNaN(Date.parse(accessUntil))) {
+      throw new RegistryError(`"${accessUntil}" is not a date`);
+    }
+    const changed = this.db.prepare('UPDATE tenants SET access_until = ? WHERE id = ?').run(accessUntil, id);
+    if (changed.changes === 0) throw new RegistryError(`No company ${id}`);
+    if (accessUntil !== null && Date.parse(accessUntil) <= Date.now()) {
+      this.db
+        .prepare('DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE tenant_id = ?)')
+        .run(id);
+    }
+  }
+
   deleteTenant(id: string): void {
     this.db.prepare('DELETE FROM tenants WHERE id = ?').run(id);
   }
 
   private mapTenant(held: unknown): Tenant | undefined {
     if (!held) return undefined;
-    const r = held as Record<string, string>;
+    const r = held as Record<string, string | null>;
     return {
       id: r.id!,
       slug: r.slug!,
       name: r.name!,
       timezone: r.timezone!,
       status: r.status as TenantStatus,
+      accessUntil: r.access_until ?? null,
       createdAt: r.created_at!,
     };
   }
@@ -539,7 +594,7 @@ export class Registry {
   }
 }
 
-const TENANT_SELECT = 'SELECT id, slug, name, timezone, status, created_at FROM tenants';
+const TENANT_SELECT = 'SELECT id, slug, name, timezone, status, access_until, created_at FROM tenants';
 const USER_SELECT =
   'SELECT id, tenant_id, email, name, role, password_hash, status, created_at, last_login_at FROM users';
 const INVITATION_SELECT =

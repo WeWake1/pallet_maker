@@ -58,6 +58,7 @@ import {
   SectionHeading,
   Select,
   TextInput,
+  useDismiss,
 } from './ui.jsx';
 
 const fixtureModules = import.meta.glob('../../fixtures/*.json', { eager: true }) as Record<
@@ -697,6 +698,16 @@ function Editor({
     }));
   }, [pallet]);
   const chosen = selectedSlot(pallet, selection);
+  /** A block or a sheet that is selected, said the way the form says it. */
+  const picked = useMemo(() => {
+    if (!selection || selection.source.kind === 'slot') return null;
+    const layer = pallet.layers.find((each) => each.id === selection.layerId);
+    if (!layer) return null;
+    const name = LAYER_KINDS.find(([kind]) => kind === layer.kind)?.[1] ?? layer.kind;
+    return selection.source.kind === 'cell'
+      ? `${name}, block r${selection.source.row + 1} c${selection.source.col + 1}`
+      : name;
+  }, [pallet, selection]);
 
   const dirty = savedDoc !== JSON.stringify(pallet);
   const canStore = missing.length === 0 && errors.length === 0;
@@ -1522,6 +1533,13 @@ function Editor({
                 value={chosen.slot.nudgeMm}
                 dispatch={dispatch}
               />
+            ) : picked ? (
+              // A block or a sheet: nothing to nudge, but the click should
+              // still be seen to have landed somewhere.
+              <p className="text-label leading-relaxed text-ink-soft">
+                <span className="font-medium text-ink">{picked}</span> selected — its sizes are
+                lit in the form. Esc lets it go.
+              </p>
             ) : (
               <p className="text-label leading-relaxed text-ink-faint">
                 Click a board to select it. Selection only — boards are never dragged; the arrow
@@ -1607,6 +1625,13 @@ interface Missing {
  * that does not fit in the space it has been given, and stops the sheet. A
  * warning is worth reading and stops nothing. Saying which is which, and how
  * many, is most of the work; the rest is being able to get to the box.
+ *
+ * It is one line under the drawing, and the list itself opens over the
+ * drawing when that line is clicked. It used to sit open below it, and every
+ * problem that turned up took its height out of the drawing — the one thing
+ * on this side that is looked at all the time — for a list that is read now
+ * and then. The line keeps the counts in view, in their colours, so an error
+ * stopping the sheet is still never out of sight.
  */
 function Problems({
   missing,
@@ -1618,41 +1643,32 @@ function Problems({
   warnings: Array<{ message: string }>;
 }) {
   const total = missing.length + errors.length + warnings.length;
+  const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
+  const box = useDismiss(open, close);
+
+  // Everything fixed: fold it away, so it does not come back open onto an
+  // empty list the next time something turns up.
+  useEffect(() => {
+    if (total === 0) setOpen(false);
+  }, [total]);
 
   /** Put the field on screen and in the cursor, from a click on its name. */
   const goTo = (anchor: string) => {
     const field = document.getElementById(anchor);
     if (!field) return;
+    setOpen(false);
     field.scrollIntoView({ behavior: 'smooth', block: 'center' });
     field.querySelector<HTMLElement>('input, select, textarea')?.focus();
   };
 
   return (
-    <div className="flex min-h-0 flex-col border-t border-line-soft">
-      <div className="flex shrink-0 items-baseline gap-2 px-3 pt-3">
-        <h3 className="text-micro font-semibold uppercase tracking-wider text-ink-faint">
-          {total === 0 ? 'Ready' : 'Needs attention'}
-        </h3>
-        {total > 0 && (
-          <span className="text-micro text-ink-faint">
-            {[
-              errors.length > 0 && `${errors.length} stopping the sheet`,
-              missing.length > 0 && `${missing.length} not filled in`,
-              warnings.length > 0 && `${warnings.length} to look at`,
-            ]
-              .filter(Boolean)
-              .join(' · ')}
-          </span>
-        )}
-      </div>
-
-      <div className="max-h-56 min-h-0 overflow-y-auto p-3 pt-2">
-        {total === 0 ? (
-          <p className="flex items-center gap-2 text-label text-emerald-700">
-            <span aria-hidden="true">✓</span>
-            Nothing to fix. This design is ready to save and print.
-          </p>
-        ) : (
+    <div ref={box} className="relative shrink-0 border-t border-line-soft">
+      {open && total > 0 && (
+        <div
+          className="absolute inset-x-2 bottom-full z-20 mb-1 max-h-[min(24rem,60vh)] overflow-y-auto
+                     rounded-card border border-line bg-card p-3 shadow-raised"
+        >
           <ul className="space-y-1.5 text-label">
             {errors.map((issue, index) => (
               <li
@@ -1693,8 +1709,35 @@ function Problems({
               </li>
             ))}
           </ul>
-        )}
-      </div>
+        </div>
+      )}
+
+      {total === 0 ? (
+        <p className="flex items-center gap-2 px-3 py-2 text-label text-emerald-700">
+          <span aria-hidden="true">✓</span>
+          Ready to save and print.
+        </p>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          aria-expanded={open}
+          title={open ? 'Hide the list' : 'Show what needs attention'}
+          className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-ground-soft"
+        >
+          <span className="shrink-0 text-micro font-semibold uppercase tracking-wider text-ink-faint">
+            Needs attention
+          </span>
+          <span className="flex min-w-0 flex-wrap gap-x-2 text-micro">
+            {errors.length > 0 && (
+              <span className="font-medium text-red-700">{errors.length} stopping the sheet</span>
+            )}
+            {missing.length > 0 && <span className="text-ink-soft">{missing.length} not filled in</span>}
+            {warnings.length > 0 && <span className="text-amber-800">{warnings.length} to look at</span>}
+          </span>
+          <span className="ml-auto shrink-0 text-micro text-ink-faint">{open ? 'Hide ▾' : 'Show ▴'}</span>
+        </button>
+      )}
     </div>
   );
 }

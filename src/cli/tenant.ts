@@ -4,13 +4,15 @@
  *
  *   pallet-tenant vendor-admin --email you@example.com
  *   pallet-tenant create --slug ambica --name "Ambica Patterns India Pvt Ltd" \
- *                        --timezone Asia/Kolkata --invite office@ambica.example
+ *                        --timezone Asia/Kolkata --invite office@ambica.example [--trial 7]
  *   pallet-tenant invite --company ambica --email colleague@ambica.example
  *   pallet-tenant reset --email colleague@ambica.example
  *   pallet-tenant list
  *   pallet-tenant users --company ambica
  *   pallet-tenant suspend --company ambica
  *   pallet-tenant resume --company ambica
+ *   pallet-tenant trial --company ambica --days 7     # start a trial, or add days to one
+ *   pallet-tenant trial --company ambica --end        # take the end date away: a customer now
  *
  * Run on the server, as the user the service runs as. Nobody's password is
  * ever set here: making an account produces a link, the person follows it and
@@ -21,11 +23,14 @@
  *
  *   PALLET_DATA_ROOT   where everything is kept
  *   PALLET_PUBLIC_URL  the address the links should point at
+ *   PALLET_SMTP_*      where set, as for the server, the links are emailed too
  */
 import { existsSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { isTimeZone } from '../ids.js';
-import { createInvitation, invitationLink } from '../server/invitations.js';
+import { sendInvitation } from '../server/invitations.js';
+import { smtpConfigFromEnv, smtpMailer } from '../server/mail.js';
+import type { Mailer } from '../server/mail.js';
 import { Registry } from '../tenancy/registry.js';
 import { Tenants } from '../tenancy/tenants.js';
 import type { Role } from '../tenancy/registry.js';
@@ -49,6 +54,24 @@ if (!existsSync(dataRoot) || !statSync(dataRoot).isDirectory()) {
   fail(`PALLET_DATA_ROOT is ${dataRoot}, and there is no such folder. Make it first.`);
 }
 const publicUrl = process.env.PALLET_PUBLIC_URL ?? 'http://localhost:5179';
+let mailer: Mailer | null = null;
+try {
+  const mail = smtpConfigFromEnv();
+  mailer = mail ? smtpMailer(mail) : null;
+} catch (error) {
+  fail(error instanceof Error ? error.message : String(error));
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** A whole number of days from 1 to a year, or a message saying so. */
+function days(value: string | undefined): number {
+  const count = Number(value);
+  if (!Number.isInteger(count) || count < 1 || count > 366) fail('Days are a whole number from 1 to 366, e.g. --days 7.');
+  return count;
+}
+
+const day = (iso: string): string => iso.slice(0, 10);
 
 const registry = new Registry(resolve(dataRoot, 'registry.sqlite'));
 
@@ -63,12 +86,14 @@ function company(slug: string | undefined) {
   return held;
 }
 
-function offer(kind: 'invite' | 'reset', tenantId: string | null, email: string, role: Role): void {
-  const { token } = createInvitation(registry, { kind, tenantId, email, role, invitedBy: null });
+async function offer(kind: 'invite' | 'reset', tenantId: string | null, email: string, role: Role): Promise<void> {
+  const sent = await sendInvitation(registry, { publicUrl, mailer }, { kind, tenantId, email, role, invitedBy: null });
   console.log('');
-  console.log(`Send ${email} this link. It works once, and for seven days:`);
+  if (sent.emailed) console.log(`Emailed ${email}. In case it does not arrive, the link is below; it works once, and for seven days:`);
+  else if (sent.mailProblem) console.log(`Could not email ${email} (${sent.mailProblem}). Send them this link; it works once, and for seven days:`);
+  else console.log(`Send ${email} this link. It works once, and for seven days:`);
   console.log('');
-  console.log(`  ${invitationLink(publicUrl, token)}`);
+  console.log(`  ${sent.link}`);
   console.log('');
 }
 
@@ -80,9 +105,9 @@ try {
       if (held) {
         if (held.role !== 'vendor') fail(`${email} already has an account with a company.`);
         console.log(`${email} already looks after the service. Sending a way back in.`);
-        offer('reset', null, held.email, 'vendor');
+        await offer('reset', null, held.email, 'vendor');
       } else {
-        offer('invite', null, email, 'vendor');
+        await offer('invite', null, email, 'vendor');
       }
       break;
     }
@@ -93,17 +118,20 @@ try {
       const timezone = flag(argv, 'timezone') ?? 'UTC';
       if (!isTimeZone(timezone)) fail(`"${timezone}" is not a time zone name. Use one like Asia/Kolkata.`);
 
-      const tenant = registry.createTenant({ slug, name, timezone });
+      const trial = flag(argv, 'trial');
+      const accessUntil = trial === undefined ? null : new Date(Date.now() + days(trial) * DAY_MS).toISOString();
+      const tenant = registry.createTenant({ slug, name, timezone, accessUntil });
       // Made now rather than at the company's first save, so that whoever is
       // setting them up has somewhere to put their logo before anybody signs
       // in.
       const folder = new Tenants(dataRoot, registry).context(tenant).handle.require().root;
       console.log(`Made ${tenant.name} (${tenant.slug}), dates in ${tenant.timezone}.`);
+      if (tenant.accessUntil) console.log(`It is a trial: nobody in it can sign in after ${day(tenant.accessUntil)}.`);
       console.log(`Its designs are in ${folder}`);
       console.log(`Put its branding in ${join(folder, 'brand.json')}.`);
 
       const first = flag(argv, 'invite');
-      if (first) offer('invite', tenant.id, first, 'member');
+      if (first) await offer('invite', tenant.id, first, 'member');
       else console.log('Invite its first person with: pallet-tenant invite --company ' + tenant.slug + ' --email <address>');
       break;
     }
@@ -112,14 +140,14 @@ try {
       const tenant = company(flag(argv, 'company'));
       const email = flag(argv, 'email') ?? fail('Which address? Pass --email.');
       if (registry.userByEmail(email)) fail(`${email} already has an account. Use "reset" to send a way back in.`);
-      offer('invite', tenant.id, email, 'member');
+      await offer('invite', tenant.id, email, 'member');
       break;
     }
 
     case 'reset': {
       const email = flag(argv, 'email') ?? fail('Which address? Pass --email.');
       const user = registry.userByEmail(email) ?? fail(`No account for ${email}.`);
-      offer('reset', user.tenantId, user.email, user.role);
+      await offer('reset', user.tenantId, user.email, user.role);
       break;
     }
 
@@ -131,8 +159,11 @@ try {
       }
       for (const tenant of tenants) {
         const people = registry.listUsers(tenant.id);
+        const access = tenant.accessUntil
+          ? `${Date.parse(tenant.accessUntil) <= Date.now() ? 'trial ended' : 'trial to'} ${day(tenant.accessUntil)}`
+          : '';
         console.log(
-          `${tenant.slug.padEnd(18)} ${tenant.status.padEnd(10)} ${String(people.length).padStart(3)} people  ${tenant.timezone.padEnd(18)} ${tenant.name}`,
+          `${tenant.slug.padEnd(18)} ${tenant.status.padEnd(10)} ${String(people.length).padStart(3)} people  ${tenant.timezone.padEnd(18)} ${tenant.name}${access ? `  (${access})` : ''}`,
         );
       }
       break;
@@ -164,8 +195,24 @@ try {
       break;
     }
 
+    case 'trial': {
+      const tenant = company(flag(argv, 'company'));
+      if (argv.includes('--end')) {
+        registry.setTenantAccessUntil(tenant.id, null);
+        console.log(`${tenant.name} has no end date now.`);
+        break;
+      }
+      // Counted from today where the trial has run out or never began, so
+      // adding seven days always leaves seven to use.
+      const from = tenant.accessUntil === null ? Date.now() : Math.max(Date.now(), Date.parse(tenant.accessUntil));
+      const until = new Date(from + days(flag(argv, 'days')) * DAY_MS).toISOString();
+      registry.setTenantAccessUntil(tenant.id, until);
+      console.log(`${tenant.name} can sign in until ${day(until)}.`);
+      break;
+    }
+
     default:
-      console.error('Usage: pallet-tenant <vendor-admin|create|invite|reset|list|users|suspend|resume> [options]');
+      console.error('Usage: pallet-tenant <vendor-admin|create|invite|reset|list|users|suspend|resume|trial> [options]');
       console.error('See the comment at the top of src/cli/tenant.ts for each.');
       process.exitCode = 2;
   }

@@ -12,6 +12,7 @@ import {
 } from './auth.js';
 import { acceptInvitation, InvitationError, offerFor } from './invitations.js';
 import { RateLimiter } from './ratelimit.js';
+import { accessEnded, tenantOpen } from '../tenancy/registry.js';
 import type { Principal } from './auth.js';
 
 /**
@@ -38,7 +39,13 @@ export interface SessionView {
    */
   signInRequired: boolean;
   user: { id: string; email: string; name: string; role: string } | null;
-  company: { slug: string; name: string; timezone: string } | null;
+  company: {
+    slug: string;
+    name: string;
+    timezone: string;
+    /** When a trial runs out, so the editor can say how long is left. */
+    accessUntil: string | null;
+  } | null;
 }
 
 /** Nobody is asked here, so there is nobody to name. */
@@ -58,6 +65,7 @@ export function sessionView(principal: Principal): SessionView {
           slug: principal.tenant.slug,
           name: principal.tenant.name,
           timezone: principal.tenant.timezone,
+          accessUntil: principal.tenant.accessUntil,
         }
       : null,
   };
@@ -123,8 +131,21 @@ export function authRoutes(auth: AuthConfig, logging: boolean): Router {
       }
       if (user.tenantId !== null) {
         const tenant = auth.registry.tenant(user.tenantId);
-        if (!tenant || tenant.status !== 'active') {
-          refuse('the company is not active');
+        if (!tenant) {
+          refuse('the company is gone');
+          return;
+        }
+        if (!tenantOpen(tenant)) {
+          // The password was right, so this is the person themselves and not
+          // a stranger fishing: telling them the company is shut tells them
+          // nothing about anybody else, and saying "wrong password" would only
+          // send them off to reset one that is fine.
+          note(`login refused for ${account}: ${accessEnded(tenant) ? 'trial ended' : 'company suspended'}`);
+          res.status(403).json({
+            error: accessEnded(tenant)
+              ? `${tenant.name}'s trial of Pallet Spec has ended. Get in touch with us to carry on using it — your designs are all still here.`
+              : `${tenant.name}'s access to Pallet Spec is paused. Get in touch with us to have it turned back on — your designs are all still here.`,
+          });
           return;
         }
       }

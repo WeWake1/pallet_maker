@@ -64,10 +64,6 @@ export type HintKey = keyof typeof HINTS;
  * Terms someone meets in the first ten minutes come first.
  */
 export const GLOSSARY: Array<{ term: string; hint: HintKey }> = [
-  { term: 'Span', hint: 'span' },
-  { term: 'Offset', hint: 'offset' },
-  { term: 'Run span', hint: 'runSpan' },
-  { term: 'Run offset', hint: 'runOffset' },
   { term: 'Gap', hint: 'gap' },
   { term: 'Slack', hint: 'slack' },
   { term: 'Nudge', hint: 'nudge' },
@@ -75,6 +71,12 @@ export const GLOSSARY: Array<{ term: string; hint: HintKey }> = [
   { term: 'Variant', hint: 'variant' },
   { term: 'Notches', hint: 'notches' },
   { term: 'Same level', hint: 'sameLevel' },
+  // Folded away under "Inset & offset" on each layer: a wing pallet, or a
+  // deck cut to fit between boards, and little else.
+  { term: 'Span', hint: 'span' },
+  { term: 'Offset', hint: 'offset' },
+  { term: 'Run span', hint: 'runSpan' },
+  { term: 'Run offset', hint: 'runOffset' },
   { term: 'Entry', hint: 'entry' },
   { term: 'Deck', hint: 'deckType' },
   { term: 'Static load', hint: 'staticLoad' },
