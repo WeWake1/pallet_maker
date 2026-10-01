@@ -1,6 +1,7 @@
 import { DEFAULT_BRAND } from '../brand/defaults.js';
 import type { Brand } from '../brand/types.js';
 import type { Layout } from '../geometry/types.js';
+import { dayMonthYear } from '../ids.js';
 import { mmLabel } from '../render/scene.js';
 import { HANDLING_METHODS, notApplicable } from '../types.js';
 import type { HandlingMethod, LoadKg, Pallet } from '../types.js';
@@ -78,6 +79,7 @@ export interface SheetHeading {
   palletName: string;
   /** The code and the overall size, or whichever of the two is left over. */
   subtitle: string;
+  /** When it was last saved, day first: 06-08-2026. */
   date: string;
   note: string;
 }
@@ -145,7 +147,7 @@ export function sheetContent(
       clientPartNo: pallet.clientPartNo ?? '',
       palletName: heading,
       subtitle,
-      date: pallet.updatedAt,
+      date: dayMonthYear(pallet.updatedAt),
       note: pallet.note ?? '',
     },
     size,

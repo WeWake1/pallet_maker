@@ -261,6 +261,8 @@ export const api = {
     resetLink: (userId: string) => call<SentLink>(`${base}/people/${userId}/reset`, { method: 'POST' }),
     disable: (userId: string) => call<Person>(`${base}/people/${userId}/disable`, { method: 'POST' }),
     enable: (userId: string) => call<Person>(`${base}/people/${userId}/enable`, { method: 'POST' }),
+    /** For good: the account goes, and the address can be invited again. */
+    remove: (userId: string) => call<void>(`${base}/people/${userId}`, { method: 'DELETE' }),
 
     brand: () => call<BrandSettings>(`${base}/brand`),
     saveBrand: (file: BrandFileInput) =>
@@ -293,8 +295,11 @@ export const api = {
         '/api/vendor/companies',
         { method: 'POST', body: JSON.stringify(input) },
       ),
-    /** More days on a trial (or the start of one), or no end at all. */
-    access: (slug: string, change: { addDays: number } | { unlimited: true }) =>
+    /**
+     * More days on a trial (or the start of one), access to the end of a
+     * given day (YYYY-MM-DD, in the company's zone), or no end at all.
+     */
+    access: (slug: string, change: { addDays: number } | { until: string } | { unlimited: true }) =>
       call<CompanySummary>(`/api/vendor/companies/${slug}/access`, { method: 'POST', body: JSON.stringify(change) }),
     suspend: (slug: string) => call<CompanySummary>(`/api/vendor/companies/${slug}/suspend`, { method: 'POST' }),
     resume: (slug: string) => call<CompanySummary>(`/api/vendor/companies/${slug}/resume`, { method: 'POST' }),

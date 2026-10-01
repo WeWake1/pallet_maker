@@ -3,6 +3,7 @@ import { DEFAULT_BRAND } from '../brand/defaults.js';
 import type { Brand } from '../brand/types.js';
 import { duplicatePallet } from '../duplicate.js';
 import { analysePallet } from '../geometry/layout.js';
+import { dayMonthYear } from '../ids.js';
 import { LAYER_STYLE } from '../render/theme.js';
 import { PalletSchema, parsePallet } from '../schema.js';
 import { downloadName } from '../sheet/filename.js';
@@ -36,6 +37,7 @@ import { describePath, fieldId, HINTS, pathAnchor, sayIssue } from './hints.js';
 import { canRedo, canUndo, historyReducer, initialHistory } from './history.js';
 import { LayerEditor } from './LayerEditor.jsx';
 import { Preview } from './Preview.jsx';
+import { Wordmark } from './Wordmark.jsx';
 import { shortcutLabel, useShortcuts } from './shortcuts.js';
 import { fingerprint } from '../store/fingerprint.js';
 import { selectedSlot } from './state.js';
@@ -554,7 +556,9 @@ export function App() {
             }}
           />
           <header className="flex items-center gap-2 border-b border-line bg-card px-4 py-2.5">
-            <h1 className="text-title font-semibold tracking-tight text-ink">Pallet spec</h1>
+            <h1>
+              <Wordmark />
+            </h1>
 
             {/* The library in and out of a file. Everything else on this screen
                 acts on one design; these two are the whole of it, and are the
@@ -1098,7 +1102,7 @@ function Editor({
               {stored
                 ? dirty
                   ? 'unsaved changes · kept in this browser'
-                  : `saved ${pallet.updatedAt}`
+                  : `saved ${dayMonthYear(pallet.updatedAt)}`
                 : 'not saved yet · kept in this browser'}
             </div>
             <div className="text-micro tabular-nums text-ink-faint">
@@ -1118,7 +1122,7 @@ function Editor({
             PDF
           </Button>
 
-          <Menu label="Export ▾" title="Other ways of getting this design out">
+          <Menu label="Export" caret title="Other ways of getting this design out">
             {(close) => (
               <>
                 <MenuItem

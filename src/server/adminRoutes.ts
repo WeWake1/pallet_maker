@@ -80,7 +80,9 @@ export function adminRoutes(registry: Registry, auth: AuthConfig): Router {
       return;
     }
     if (registry.userByEmail(email)) {
-      res.status(409).json({ error: `${email} already has an account. Send them a new-password link instead.` });
+      res.status(409).json({
+        error: `${email} already has an account. Send them a new-password link instead — or, if that account should not exist, delete it and invite them afresh.`,
+      });
       return;
     }
     const sent = await sendInvitation(registry, auth, {
@@ -166,6 +168,22 @@ export function adminRoutes(registry: Registry, auth: AuthConfig): Router {
     if (!user) return;
     registry.setUserStatus(user.id, 'active');
     res.json(registry.user(user.id));
+  }));
+
+  /**
+   * Take somebody out of the company for good.
+   *
+   * For an account that should never have been — an invitation that went to
+   * the wrong address and was followed — or somebody who has gone and is not
+   * coming back. Turning off keeps the account and its name; this does not,
+   * so the address can be invited afresh. Their designs stay where they are:
+   * they belong to the company, not to whoever drew them.
+   */
+  router.delete('/people/:id', wrap((req, res) => {
+    const user = personHere(req, res);
+    if (!user) return;
+    registry.deleteUser(user.id);
+    res.status(204).end();
   }));
 
   /* --------------------------------------------------------------- brand */

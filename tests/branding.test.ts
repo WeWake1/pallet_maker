@@ -20,6 +20,7 @@ import {
   watermarkSizePt,
 } from '../src/sheet/watermark.js';
 import { loadFixture } from './helpers.js';
+import { dayMonthYear } from '../src/ids.js';
 
 /**
  * Whose drawing this is.
@@ -264,7 +265,7 @@ describe('the SVG stays a drawing rather than a picture of one', () => {
     for (const said of [
       pallet.clientName,
       pallet.palletName,
-      pallet.updatedAt,
+      dayMonthYear(pallet.updatedAt),
       'Overall size',
       'Component tolerance',
       'Third-angle projection',

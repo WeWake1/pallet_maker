@@ -5,6 +5,7 @@ import { createRequire } from 'node:module';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { dayIn, endOfDay } from '../src/ids.js';
 import { createApp } from '../src/server/app.js';
 import { createInvitation } from '../src/server/invitations.js';
 import { Registry, tenantOpen } from '../src/tenancy/registry.js';
@@ -271,6 +272,52 @@ describe('the vendor and trials', () => {
     const customer = await call('POST', '/api/vendor/companies/acme/access', cookie, { unlimited: true });
     expect(customer.body.accessUntil).toBeNull();
     expect(await signIn(base, acme.user.email, acme.password)).toBeTruthy();
+  });
+
+  /**
+   * One more day is a number; the end of the month is a date. A date means
+   * all of that day, where the company is.
+   */
+  it('gives access to the end of a chosen day, in the company\'s own time zone', async () => {
+    const registry = tempRegistry();
+    const { tenant } = await seedTenant(registry, { slug: 'acme', timezone: 'Asia/Kolkata' });
+    const vendor = await seedVendor(registry);
+    await serve(registry);
+    const cookie = await signIn(base, vendor.user.email, vendor.password);
+
+    const day = dayIn(Date.now() + 10 * DAY, 'Asia/Kolkata');
+    const set = await call('POST', '/api/vendor/companies/acme/access', cookie, { until: day });
+    expect(set.status).toBe(200);
+    expect(set.body.accessUntil).toBe(endOfDay(day, 'Asia/Kolkata'));
+    // The last moment of that day there, and not a moment of the next.
+    expect(set.body.accessUntil).toMatch(/T18:29:59\.999Z$/);
+    expect(dayIn(Date.parse(set.body.accessUntil), 'Asia/Kolkata')).toBe(day);
+    expect(dayIn(Date.parse(set.body.accessUntil) + 1, 'Asia/Kolkata')).not.toBe(day);
+
+    // Today is allowed: in until midnight.
+    const todayThere = dayIn(Date.now(), 'Asia/Kolkata');
+    expect((await call('POST', '/api/vendor/companies/acme/access', cookie, { until: todayThere })).status).toBe(200);
+    expect(tenantOpen(registry.tenant(tenant.id)!)).toBe(true);
+  });
+
+  it('refuses a day that has gone by, one that is not a day, and one years off', async () => {
+    const registry = tempRegistry();
+    const { tenant } = await seedTenant(registry, { slug: 'acme' });
+    const vendor = await seedVendor(registry);
+    await serve(registry);
+    const cookie = await signIn(base, vendor.user.email, vendor.password);
+    const before = registry.tenant(tenant.id)!.accessUntil;
+
+    const yesterday = dayIn(Date.now() - DAY, tenant.timezone);
+    const past = await call('POST', '/api/vendor/companies/acme/access', cookie, { until: yesterday });
+    expect(past.status).toBe(400);
+    expect(past.body.error).toMatch(/gone by/);
+    for (const until of ['2026-02-30', '31/10/2026', 'soon', '', 20261031]) {
+      expect((await call('POST', '/api/vendor/companies/acme/access', cookie, { until })).status, String(until)).toBe(400);
+    }
+    const far = dayIn(Date.now() + 5 * 366 * DAY, tenant.timezone);
+    expect((await call('POST', '/api/vendor/companies/acme/access', cookie, { until: far })).status).toBe(400);
+    expect(registry.tenant(tenant.id)!.accessUntil).toBe(before);
   });
 
   it('refuses a change it cannot read, and a company that is not there', async () => {

@@ -1,6 +1,7 @@
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { dayMonthYear } from '../src/ids.js';
 import { createApp } from '../src/server/app.js';
 import type { Pallet } from '../src/types.js';
 import { cleanupStores, loadFixture, tempHandle } from './helpers.js';
@@ -142,7 +143,7 @@ describe('the API', () => {
     const html = await response.text();
     expect(html).toContain('First-angle projection');
     // The title block carries the date the store stamped, not anything typed.
-    expect(html).toContain(new Date().toISOString().slice(0, 10));
+    expect(html).toContain(dayMonthYear(new Date().toISOString().slice(0, 10)));
   });
 
   it('lets no browser keep a stale copy of a document', async () => {
@@ -180,7 +181,7 @@ describe('the API', () => {
     await call('POST', '/api/pallets', pallet);
     const response = await fetch(`${base}/api/pallets/${pallet.id}/drawing.dxf`);
     expect(response.status).toBe(200);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = dayMonthYear(new Date().toISOString().slice(0, 10));
     expect(response.headers.get('content-disposition')).toContain(
       `filename="Export crate base - Demo Client - ${today}.dxf"`,
     );
@@ -195,7 +196,7 @@ describe('the API', () => {
     const response = await fetch(`${base}/api/pallets/${pallet.id}/sheet.svg`);
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toContain('image/svg+xml');
-    const today = new Date().toISOString().slice(0, 10);
+    const today = dayMonthYear(new Date().toISOString().slice(0, 10));
     expect(response.headers.get('content-disposition')).toContain(
       `filename="${pallet.palletName} - Demo Client - ${today}.svg"`,
     );

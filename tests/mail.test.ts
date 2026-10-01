@@ -130,6 +130,9 @@ describe('the email', () => {
     expect(message.text).toContain(link);
     expect(message.html).toContain(`href="${link}"`);
     expect(message.text).toContain('Sun, 04 Oct 2026');
+    // Signed with the service's name and address, so it can be looked up.
+    expect(message.text).toContain('Pallet Spec · palletspec.app');
+    expect(message.html).toContain('href="https://palletspec.app"');
   });
 
   it('asks for a new password, and says ignoring it is safe', () => {

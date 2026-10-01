@@ -425,8 +425,23 @@ export class Registry {
     this.db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(now(), id);
   }
 
+  /**
+   * Take somebody off the service altogether, rather than turning them off.
+   *
+   * Their sessions go with the row — the foreign key cascades — and so does
+   * any link still waiting for them at the same company: a new-password link
+   * left in an inbox should not outlive the account it was for. The address
+   * is free afterwards, to be invited again as somebody new.
+   */
   deleteUser(id: string): void {
-    this.db.prepare('DELETE FROM users WHERE id = ?').run(id);
+    const user = this.user(id);
+    if (!user) throw new RegistryError(`No user ${id}`);
+    this.transaction(() => {
+      this.db
+        .prepare('DELETE FROM invitations WHERE email_lc = ? AND tenant_id IS ?')
+        .run(user.email.toLowerCase(), user.tenantId);
+      this.db.prepare('DELETE FROM users WHERE id = ?').run(id);
+    });
   }
 
   private mapUser(held: unknown): User | undefined {

@@ -1,3 +1,4 @@
+import { dayMonthYear } from '../ids.js';
 import type { Pallet } from '../types.js';
 
 /**
@@ -5,9 +6,9 @@ import type { Pallet } from '../types.js';
  *
  * A sheet leaves this program and lands in a folder of other people's files, so
  * its name has to say what it is without being opened: the design, whose it is,
- * and when it was last saved — "Export crate base - Acme Ltd - 2026-08-06.pdf".
- * The date is the store's stamp, the same one printed in the title block, so a
- * file on disk can be matched to the sheet on the bench.
+ * and when it was last saved — "Export crate base - Acme Ltd - 06-08-2026.pdf".
+ * The date is the store's stamp, written day first exactly as the title block
+ * prints it, so a file on disk can be matched to the sheet on the bench.
  *
  * A design that has been named goes by its name, because that is what the shop
  * calls it; one that has not falls back to its code, and a design with neither
@@ -26,7 +27,7 @@ function clean(part: string): string {
  * printed from the browser rather than downloaded is offered the same name.
  */
 export function documentName(pallet: Pallet): string {
-  const parts = [pallet.palletName || pallet.palletCode, pallet.clientName, pallet.updatedAt]
+  const parts = [pallet.palletName || pallet.palletCode, pallet.clientName, dayMonthYear(pallet.updatedAt)]
     .map(clean)
     .filter((part) => part !== '');
   return parts.length > 0 ? parts.join(' - ') : 'pallet';

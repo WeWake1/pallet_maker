@@ -78,6 +78,31 @@ body {
   border-radius: 0.25rem;
 }
 
+/*
+ * Every select draws the same chevron, the one Chevron in ui.tsx draws on a
+ * menu button.
+ *
+ * The browser's own arrow is placed by the browser: hard against the right
+ * edge, with none of the padding the text gets on the left, and at a
+ * different size and height on every system. This puts it the same distance
+ * in from the edge as the text is, centred, and keeps the text clear of it.
+ *
+ * Unlayered on purpose: that wins over Tailwind's padding utilities on the
+ * same element, so no select has to remember to leave room for it.
+ */
+select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%2364748b' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.5rem center;
+  background-size: 0.875rem;
+  padding-inline-end: 1.75rem;
+}
+
+select:disabled {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23cbd5e1' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E");
+}
+
 /* The boxed row on a layer card — see KeyFields in ui.tsx. It is the row that
    gets typed into on every design, so its fields are a size up from the
    settings around them. Here rather than as a prop on every control. */
@@ -85,6 +110,11 @@ body {
 .key-fields select {
   font-size: var(--text-key);
   padding: 0.35rem 0.55rem;
+}
+
+.key-fields select {
+  padding-inline-end: 1.85rem;
+  background-position: right 0.55rem center;
 }
 
 .key-fields label > span {

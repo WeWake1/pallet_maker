@@ -124,8 +124,19 @@ describe('who may look after what', () => {
 
     expect((await call('POST', `/api/vendor/companies/aa/admin/people/${b.user.id}/disable`, cookie)).status).toBe(404);
     expect((await call('POST', `/api/vendor/companies/aa/admin/people/${b.user.id}/reset`, cookie)).status).toBe(404);
+    expect((await call('DELETE', `/api/vendor/companies/aa/admin/people/${b.user.id}`, cookie)).status).toBe(404);
     expect((await call('GET', '/api/vendor/companies/aa/admin/people', cookie)).body.users.map((u: any) => u.email)).toEqual(['a@aa.test']);
     expect(registry.user(b.user.id)?.status).toBe('active');
+  });
+
+  it('lets nobody at a company delete anybody, themselves included', async () => {
+    const registry = tempRegistry();
+    const { user, password } = await seedTenant(registry, { slug: 'acme' });
+    await serve(registry);
+    const cookie = await signIn(base, user.email, password);
+    expect((await call('DELETE', `/api/admin/people/${user.id}`, cookie)).status).toBe(404);
+    expect((await call('DELETE', `/api/vendor/companies/acme/admin/people/${user.id}`, cookie)).status).toBe(403);
+    expect(registry.user(user.id)).toBeDefined();
   });
 });
 
@@ -188,6 +199,45 @@ describe('the vendor and the people in a company', () => {
     // Turning somebody off reaches the browser they are already in.
     expect((await call('GET', '/api/dashboard', theirs)).status).toBe(401);
     expect((await call('POST', `${PEOPLE}/people/${user.id}/enable`, cookie)).body.status).toBe('active');
+  });
+
+  /**
+   * An invitation sent to the wrong address and followed: the account has the
+   * wrong person's name on it, and turning it off still leaves it holding the
+   * address. Deleting it gives the address back.
+   */
+  it('deletes somebody for good, and the address can be invited again', async () => {
+    const registry = tempRegistry();
+    const { user, password } = await seedTenant(registry);
+    const vendor = await seedVendor(registry);
+    await serve(registry);
+    const cookie = await signIn(base, vendor.user.email, vendor.password);
+    const theirs = await signIn(base, user.email, password);
+    // A new-password link left waiting should not outlive the account.
+    await call('POST', `${PEOPLE}/people/${user.id}/reset`, cookie);
+    expect(registry.listInvitations(user.tenantId)).toHaveLength(1);
+
+    expect((await call('DELETE', `${PEOPLE}/people/${user.id}`, cookie)).status).toBe(204);
+    expect(registry.user(user.id)).toBeUndefined();
+    expect(registry.listInvitations(user.tenantId)).toEqual([]);
+    // The browser they were already in is shut out, and so is the door.
+    expect((await call('GET', '/api/dashboard', theirs)).status).toBe(401);
+    await expect(signIn(base, user.email, password)).rejects.toThrow();
+    expect((await call('GET', `${PEOPLE}/people`, cookie)).body.users).toEqual([]);
+
+    const again = await call('POST', `${PEOPLE}/invitations`, cookie, { email: user.email });
+    expect(again.status).toBe(201);
+    expect((await call('DELETE', `${PEOPLE}/people/${user.id}`, cookie)).status).toBe(404);
+  });
+
+  it('points at deleting when an address is already taken', async () => {
+    const registry = tempRegistry();
+    const { user } = await seedTenant(registry);
+    const vendor = await seedVendor(registry);
+    await serve(registry);
+    const cookie = await signIn(base, vendor.user.email, vendor.password);
+    const again = await call('POST', `${PEOPLE}/invitations`, cookie, { email: user.email });
+    expect(again.body.error).toMatch(/delete it/);
   });
 
   it('hands out a way back in for somebody who has lost their password', async () => {

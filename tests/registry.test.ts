@@ -121,6 +121,26 @@ describe('people', () => {
     expect(db.listUsers(null).map((u) => u.email)).toEqual(['owner@vendor.test']);
   });
 
+  it('may be deleted, taking their links at that company with them and freeing the address', () => {
+    const db = registry();
+    const acme = db.createTenant({ slug: 'acme', name: 'Acme' });
+    const other = db.createTenant({ slug: 'other', name: 'Other' });
+    const user = db.createUser({ tenantId: acme.id, email: 'Wrong@acme.test', role: 'member' });
+    db.createSession({ idHash: 'theirs', userId: user.id, expiresAt: soon() });
+    const link = { email: 'wrong@acme.test', role: 'member' as const, invitedBy: null, expiresAt: soon() };
+    db.createInvitation({ ...link, kind: 'reset', tenantId: acme.id, tokenHash: 'reset' });
+    db.createInvitation({ ...link, kind: 'invite', tenantId: other.id, tokenHash: 'elsewhere' });
+
+    db.deleteUser(user.id);
+    expect(db.user(user.id)).toBeUndefined();
+    expect(db.session('theirs')).toBeUndefined();
+    expect(db.listInvitations(acme.id)).toEqual([]);
+    // Somebody else's decision, at another company, is left alone.
+    expect(db.listInvitations(other.id)).toHaveLength(1);
+    expect(db.createUser({ tenantId: acme.id, email: 'wrong@acme.test', role: 'member' }).id).not.toBe(user.id);
+    expect(() => db.deleteUser(user.id)).toThrow(RegistryError);
+  });
+
   /**
    * A company once had administrators. Only the vendor looks after anybody
    * now, so a registry written before that opens with them as members, and

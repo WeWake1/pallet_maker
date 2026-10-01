@@ -5,6 +5,7 @@ import type { HandlingMethod } from '../types.js';
 import { api } from './api.js';
 import type { BrandFileInput, BrandSettings, Invitation, People, Person, SentLink } from './api.js';
 import { HANDLING_LABEL } from '../sheet/handling.js';
+import { dayMonthYear } from '../ids.js';
 import { Button, Check, Field, inputClass, NumberInput, Panel, Select, TextInput } from './ui.jsx';
 
 /**
@@ -59,7 +60,7 @@ export function Admin({
       </header>
       <div className="flex-1 overflow-auto">
         <div className="mx-auto max-w-4xl px-4 py-6">
-          {tab === 'people' && <PeopleTab calls={calls} />}
+          {tab === 'people' && <PeopleTab calls={calls} companyName={companyName} />}
           {tab === 'brand' && <BrandTab calls={calls} />}
         </div>
       </div>
@@ -148,13 +149,14 @@ function readFileAsBase64(file: File): Promise<string> {
   });
 }
 
-const when = (iso: string | null): string => (iso ? iso.slice(0, 10) : 'never');
+const when = (iso: string | null): string => (iso ? dayMonthYear(iso.slice(0, 10)) : 'never');
 
 /* ------------------------------------------------------------------ people */
 
-function PeopleTab({ calls }: { calls: Calls }) {
+function PeopleTab({ calls, companyName }: { calls: Calls; companyName: string }) {
   const [people, setPeople] = useState<People | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [link, setLink] = useState<{ email: string; sent: SentLink } | null>(null);
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
@@ -164,11 +166,15 @@ function PeopleTab({ calls }: { calls: Calls }) {
     void refresh().catch((e: unknown) => setProblem(e instanceof Error ? e.message : String(e)));
   }, [refresh]);
 
-  const run = (work: () => Promise<unknown>) => {
+  const run = (work: () => Promise<unknown>, done?: string) => {
     setBusy(true);
     setProblem(null);
+    setNotice(null);
     void work()
       .then(refresh)
+      .then(() => {
+        if (done) setNotice(done);
+      })
       .catch((e: unknown) => setProblem(e instanceof Error ? e.message : String(e)))
       .finally(() => setBusy(false));
   };
@@ -185,6 +191,7 @@ function PeopleTab({ calls }: { calls: Calls }) {
   return (
     <>
       <Problem text={problem} />
+      <Notice text={notice} />
       {link && <LinkToSend email={link.email} sent={link.sent} onDone={() => setLink(null)} />}
 
       <Panel title="Invite somebody">
@@ -217,7 +224,15 @@ function PeopleTab({ calls }: { calls: Calls }) {
             </thead>
             <tbody>
               {people.users.map((person) => (
-                <PersonRow key={person.id} person={person} busy={busy} calls={calls} run={run} onLink={setLink} />
+                <PersonRow
+                  key={person.id}
+                  person={person}
+                  companyName={companyName}
+                  busy={busy}
+                  calls={calls}
+                  run={run}
+                  onLink={setLink}
+                />
               ))}
               {people.invitations.map((invitation) => (
                 <InvitationRow
@@ -242,18 +257,32 @@ function PeopleTab({ calls }: { calls: Calls }) {
 
 function PersonRow({
   person,
+  companyName,
   busy,
   calls,
   run,
   onLink,
 }: {
   person: Person;
+  companyName: string;
   busy: boolean;
   calls: Calls;
-  run: (work: () => Promise<unknown>) => void;
+  run: (work: () => Promise<unknown>, done?: string) => void;
   onLink: (link: { email: string; sent: SentLink }) => void;
 }) {
   const off = person.status === 'disabled';
+  const who = person.name ? `${person.name} (${person.email})` : person.email;
+  // Turning off is the everyday way to stop somebody, and can be undone. This
+  // cannot, so it asks first and says what goes and what stays.
+  const remove = () => {
+    const sure = window.confirm(
+      `Delete ${who} from ${companyName}?\n\n` +
+        'Their account goes for good: they are signed out at once, their name is forgotten, and ' +
+        'any link still waiting for them stops working. The designs in the library stay.\n\n' +
+        `${person.email} can then be invited again, as somebody new.`,
+    );
+    if (sure) run(() => calls.remove(person.id), `${who} is deleted. ${person.email} can be invited again.`);
+  };
   return (
     <tr className={`border-t border-line-soft ${off ? 'text-ink-faint' : ''}`}>
       <td className="py-1.5 pr-2">
@@ -282,6 +311,15 @@ function PersonRow({
               Turn off
             </Button>
           )}
+          <Button
+            size="sm"
+            tone="danger"
+            disabled={busy}
+            title="Remove the account for good, so the address can be invited again"
+            onClick={remove}
+          >
+            Delete
+          </Button>
         </div>
       </td>
     </tr>

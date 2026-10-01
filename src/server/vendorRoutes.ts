@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import type { NextFunction, Request, Response } from 'express';
-import { isTimeZone } from '../ids.js';
+import { endOfDay, isTimeZone, today } from '../ids.js';
 import { runInTenant } from '../tenancy/context.js';
 import { backupEverything } from '../tenancy/housekeeping.js';
 import { RegistryError, SlugTakenError } from '../tenancy/registry.js';
@@ -14,6 +14,11 @@ import { mailFailure } from './mail.js';
 export const TRIAL_DAYS = 7;
 /** Longer than any trial anybody means; past this it is a typing slip. */
 const MAX_TRIAL_DAYS = 366;
+/**
+ * How far ahead an end date may be set. Further off than a contract runs is a
+ * slip of the year, and a customer with no end is given full access instead.
+ */
+const MAX_AHEAD_YEARS = 3;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -156,15 +161,37 @@ export function vendorRoutes(registry: Registry, tenants: Tenants, auth: AuthCon
    * `{ addDays: 7 }` gives it seven more days — counted from today where its
    * trial has already run out, or has never had an end, so extending a lapsed
    * trial always leaves a week to use rather than a week that is half gone.
-   * `{ unlimited: true }` takes the end date away: a customer, rather than
-   * somebody trying it. Shutting a company at once is Suspend, above.
+   * `{ until: '2026-10-09' }` lets it in to the end of that day, in the
+   * company's own time zone, for when the answer is a date rather than a
+   * number of days. `{ unlimited: true }` takes the end date away: a customer,
+   * rather than somebody trying it. Shutting a company at once is Suspend,
+   * above.
    */
   router.post('/companies/:slug/access', wrap((req, res) => {
     const tenant = companyOf(req, res);
     if (!tenant) return;
-    const body = req.body as { addDays?: unknown; unlimited?: unknown };
+    const body = req.body as { addDays?: unknown; until?: unknown; unlimited?: unknown };
     if (body.unlimited === true) {
       registry.setTenantAccessUntil(tenant.id, null);
+    } else if (body.until !== undefined) {
+      const day = typeof body.until === 'string' ? body.until : '';
+      const end = endOfDay(day, tenant.timezone);
+      if (end === null) {
+        res.status(400).json({ error: 'Say which day, as YYYY-MM-DD.' });
+        return;
+      }
+      // Compared as text, which for ISO dates is the same as comparing days.
+      if (day < today(tenant.timezone)) {
+        res.status(400).json({ error: `${day} has gone by already. To shut ${tenant.name} out now, suspend it.` });
+        return;
+      }
+      if (Date.parse(end) - Date.now() > MAX_AHEAD_YEARS * 366 * DAY_MS) {
+        res.status(400).json({
+          error: `${day} is more than ${MAX_AHEAD_YEARS} years away. For a company with no end date, give it full access.`,
+        });
+        return;
+      }
+      registry.setTenantAccessUntil(tenant.id, end);
     } else {
       const days = daysFrom(body.addDays);
       if (days === null) {

@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
+import { PRODUCT } from '../product.js';
 import { hashPassword, MIN_PASSWORD_LENGTH } from './auth.js';
 import { RegistryError, tenantOpen } from '../tenancy/registry.js';
 import type { Invitation, Registry, Role, Tenant } from '../tenancy/registry.js';
@@ -200,6 +201,10 @@ export function invitationMessage(input: {
       ? `The link works once, until ${until}. If you did not ask for this, ignore this email and your password stays as it is.`
       : `The link works once, until ${until}. If you were not expecting this, you can ignore this email.`;
 
+  // Signed, so somebody who has never heard of the service can see whose
+  // email this is and look it up before following anything in it.
+  const signature = `${PRODUCT.name} · ${PRODUCT.site}`;
+
   const text = `Hello,
 
 ${lead}
@@ -207,6 +212,9 @@ ${lead}
 ${input.link}
 
 ${small}
+
+--
+${signature}
 `;
 
   const html = `<!doctype html>
@@ -219,6 +227,7 @@ ${small}
 <p style="margin:0 0 24px;font-size:13px;line-height:1.5;word-break:break-all"><a href="${escapeHtml(input.link)}" style="color:#1d4ed8">${escapeHtml(input.link)}</a></p>
 <p style="margin:0;font-size:13px;line-height:1.5;color:#64748b">${escapeHtml(small)}</p>
 </div>
+<p style="max-width:520px;margin:16px auto 0;text-align:center;font-size:12px;line-height:1.5;color:#94a3b8">${escapeHtml(PRODUCT.name)} · <a href="https://${PRODUCT.site}" style="color:#64748b;text-decoration:none">${escapeHtml(PRODUCT.site)}</a></p>
 </body></html>
 `;
 

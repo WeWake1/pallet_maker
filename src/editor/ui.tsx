@@ -485,6 +485,30 @@ export function Button({
   );
 }
 
+/**
+ * The mark a dropdown wears. The same chevron styles.css draws in every
+ * select, so a menu button and a select side by side point the same way.
+ *
+ * It replaced a ▾ typed into the label, which sat on the text's baseline
+ * rather than its middle and came out a different size in every font.
+ */
+export function Chevron({ open = false, small = false }: { open?: boolean; small?: boolean }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.75}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={`${small ? 'h-3 w-3' : 'h-3.5 w-3.5'} shrink-0 text-ink-faint transition-transform ${open ? 'rotate-180' : ''}`}
+    >
+      <path d="m4 6 4 4 4-4" />
+    </svg>
+  );
+}
+
 /** Clear space between a list and its button, and between a list and the window's edge. */
 const MENU_GAP = 4;
 const MENU_EDGE = 8;
@@ -513,18 +537,27 @@ export function Menu({
   label,
   title,
   align = 'right',
-  /** Narrow where the thing it hangs off is small, as on a design card. */
+  /**
+   * Narrow where the thing it hangs off is small, as on a design card; wide
+   * where the list has fields in it as well as choices.
+   */
   width = 'md',
   disabled,
   tone = 'plain',
+  size = 'md',
+  caret = false,
   children,
 }: {
   label: ReactNode;
   title?: string;
   align?: 'left' | 'right';
-  width?: 'sm' | 'md';
+  width?: 'sm' | 'md' | 'lg';
   disabled?: boolean;
   tone?: 'plain' | 'subtle';
+  /** Small in a table row, beside the small buttons there. */
+  size?: 'sm' | 'md';
+  /** Say it opens a list, with the chevron a select has. Not for a bare ⋯. */
+  caret?: boolean;
   /** Given a way to close, so choosing something puts the list away. */
   children: (close: () => void) => ReactNode;
 }) {
@@ -584,12 +617,14 @@ export function Menu({
     <div className="relative inline-flex" ref={box}>
       <Button
         tone={tone}
+        size={size}
         title={title}
         disabled={disabled}
         onClick={() => (open ? close() : setOpen(true))}
       >
         <span aria-expanded={open} className="flex items-center gap-1">
           {label}
+          {caret && <Chevron open={open} small={size === 'sm'} />}
         </span>
       </Button>
       {open &&
@@ -609,7 +644,7 @@ export function Menu({
             className={
               'fixed z-50 overflow-x-hidden overflow-y-auto rounded-card border border-line ' +
               'bg-card py-1 shadow-raised ' +
-              (width === 'sm' ? 'w-52' : 'w-64')
+              (width === 'sm' ? 'w-52' : width === 'lg' ? 'w-72' : 'w-64')
             }
           >
             {children(close)}

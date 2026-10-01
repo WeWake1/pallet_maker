@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { brandNamed } from '../src/brand/defaults.js';
 import { computeLayout } from '../src/geometry/layout.js';
+import { dayMonthYear } from '../src/ids.js';
 import { parsePallet } from '../src/schema.js';
 import { packLanes, Scene, TIER } from '../src/render/scene.js';
 import type { DimSpec, DimTier } from '../src/render/scene.js';
@@ -89,7 +90,15 @@ describe('the sheet', () => {
     expect(text).toContain('1200 x 1000 wing');
     expect(text).toContain('AP-005');
     // The date the design was last saved, which is what says how current it is.
-    expect(text).toContain(pallet.updatedAt);
+    expect(text).toContain(dayMonthYear(pallet.updatedAt));
+  });
+
+  it('writes the date day first, the way the shop reads one', () => {
+    const dated = { ...pallet, updatedAt: '2026-08-06' };
+    const header = /<header>([\s\S]*?)<\/header>/.exec(renderSheet(dated, layout))![1]!;
+    expect(textOf(header)).toContain('06-08-2026');
+    expect(textOf(header)).not.toContain('2026-08-06');
+    expect(renderSheetSvg(dated, layout)).toContain('06-08-2026');
   });
 
   it('prints the free-text note beside the date, and nothing when there is none', () => {
@@ -480,7 +489,7 @@ describe('a design with no name', () => {
   it('still prints, and names itself by whatever it does have', () => {
     const bare = { ...pallet, palletName: '', palletCode: '' };
     expect(renderSheet(bare, layout)).toContain('</html>');
-    expect(sheetContent(bare, layout).title).toBe(`${pallet.clientName} - ${pallet.updatedAt}`);
+    expect(sheetContent(bare, layout).title).toBe(`${pallet.clientName} - ${dayMonthYear(pallet.updatedAt)}`);
   });
 
   it('changes nothing for a design that has a name', () => {
@@ -618,31 +627,31 @@ describe('the name a sheet downloads as', () => {
   };
 
   it('is the design, the client and the date', () => {
-    expect(downloadName(named, 'pdf')).toBe('Export crate base - Acme Ltd - 2026-08-06.pdf');
-    expect(downloadName(named, 'dxf')).toBe('Export crate base - Acme Ltd - 2026-08-06.dxf');
+    expect(downloadName(named, 'pdf')).toBe('Export crate base - Acme Ltd - 06-08-2026.pdf');
+    expect(downloadName(named, 'dxf')).toBe('Export crate base - Acme Ltd - 06-08-2026.dxf');
   });
 
   it('falls back to the code while a design has no name', () => {
     expect(downloadName({ ...named, palletName: '' }, 'pdf')).toBe(
-      'AP-001 - Acme Ltd - 2026-08-06.pdf',
+      'AP-001 - Acme Ltd - 06-08-2026.pdf',
     );
   });
 
   it('still has something to save under when a design has neither', () => {
     expect(downloadName({ ...named, palletName: '', palletCode: '', clientName: '' }, 'pdf')).toBe(
-      '2026-08-06.pdf',
+      '06-08-2026.pdf',
     );
   });
 
   it('drops what a file system would not take', () => {
     const awkward = { ...named, palletName: '1000/800 pallet', clientName: 'A: B' };
-    expect(downloadName(awkward, 'pdf')).toBe('1000800 pallet - A B - 2026-08-06.pdf');
+    expect(downloadName(awkward, 'pdf')).toBe('1000800 pallet - A B - 06-08-2026.pdf');
   });
 
   it('carries the name in full as well as in ASCII, for every browser', () => {
-    const header = contentDisposition('Palé - Café Ltd - 2026-08-06.pdf', 'inline');
-    expect(header).toContain('inline; filename="Pal_ - Caf_ Ltd - 2026-08-06.pdf"');
-    expect(header).toContain("filename*=UTF-8''Pal%C3%A9%20-%20Caf%C3%A9%20Ltd%20-%202026-08-06.pdf");
+    const header = contentDisposition('Palé - Café Ltd - 06-08-2026.pdf', 'inline');
+    expect(header).toContain('inline; filename="Pal_ - Caf_ Ltd - 06-08-2026.pdf"');
+    expect(header).toContain("filename*=UTF-8''Pal%C3%A9%20-%20Caf%C3%A9%20Ltd%20-%2006-08-2026.pdf");
   });
 });
 

@@ -3,6 +3,7 @@ import type { FormEvent } from 'react';
 import type { InvitationOffer, Session } from './api.js';
 import { api } from './api.js';
 import { Button, inputClass } from './ui.jsx';
+import { Wordmark } from './Wordmark.jsx';
 
 /**
  * The door, from this side.
@@ -26,12 +27,23 @@ function clearHash(): void {
   window.history.replaceState(null, '', window.location.pathname + window.location.search);
 }
 
+/**
+ * The door is the one screen everybody sees before they see anybody's name
+ * on anything, so it is where the service says whose it is. It is seen once a
+ * month or so — a session lasts that long — so it never stands between
+ * somebody and a day's work.
+ */
 function Frame({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="flex h-full items-center justify-center bg-ground-soft px-4">
       <div className="w-full max-w-sm">
-        <h1 className="text-title font-semibold tracking-tight text-ink">{title}</h1>
-        {children}
+        <div className="mb-8">
+          <Wordmark size="lg" />
+        </div>
+        <div className="rounded-card border border-line-soft bg-card p-6 shadow-card">
+          <h1 className="text-title font-semibold tracking-tight text-ink">{title}</h1>
+          {children}
+        </div>
       </div>
     </div>
   );
@@ -73,7 +85,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: (session: Session) => void 
 
   return (
     <Frame title="Sign in">
-      <p className="mt-2 text-ui text-ink-soft">Pallet specification sheets.</p>
+      <p className="mt-1 text-ui text-ink-soft">Pallet specification sheets, drawn and printed.</p>
       {/* A real form, so a password manager fills it and the enter key works. */}
       <form className="mt-6 flex flex-col gap-3" onSubmit={submit}>
         <label className="flex flex-col gap-1">

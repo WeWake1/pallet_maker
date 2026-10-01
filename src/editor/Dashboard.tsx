@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { analysePallet } from '../geometry/layout.js';
+import { dayMonthYear } from '../ids.js';
 import type { ClientDesigns, PalletSummary } from './api.js';
 import { draftAge } from './drafts.js';
 import type { Draft } from './drafts.js';
@@ -492,7 +493,7 @@ function DesignCard({
         <CardWords name={name} code={design.palletCode}>
           {/* The date reads with the design rather than with the buttons: it is
               something the card says, not something the card does. */}
-          <span className="tabular-nums text-slate-400">{design.updatedAt}</span>
+          <span className="tabular-nums text-slate-400">{dayMonthYear(design.updatedAt)}</span>
           {unsaved && <span className="font-medium text-amber-700">unsaved</span>}
         </CardWords>
       </button>

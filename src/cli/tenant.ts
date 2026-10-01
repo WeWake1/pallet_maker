@@ -12,6 +12,7 @@
  *   pallet-tenant suspend --company ambica
  *   pallet-tenant resume --company ambica
  *   pallet-tenant trial --company ambica --days 7     # start a trial, or add days to one
+ *   pallet-tenant trial --company ambica --until 2026-10-31   # to the end of that day, there
  *   pallet-tenant trial --company ambica --end        # take the end date away: a customer now
  *
  * Run on the server, as the user the service runs as. Nobody's password is
@@ -27,7 +28,7 @@
  */
 import { existsSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { isTimeZone } from '../ids.js';
+import { dayIn, endOfDay, isTimeZone, today } from '../ids.js';
 import { sendInvitation } from '../server/invitations.js';
 import { smtpConfigFromEnv, smtpMailer } from '../server/mail.js';
 import type { Mailer } from '../server/mail.js';
@@ -71,7 +72,8 @@ function days(value: string | undefined): number {
   return count;
 }
 
-const day = (iso: string): string => iso.slice(0, 10);
+/** The day an instant falls on where the company is, which is the day it means. */
+const day = (iso: string, timeZone: string): string => dayIn(Date.parse(iso), timeZone);
 
 const registry = new Registry(resolve(dataRoot, 'registry.sqlite'));
 
@@ -126,7 +128,7 @@ try {
       // in.
       const folder = new Tenants(dataRoot, registry).context(tenant).handle.require().root;
       console.log(`Made ${tenant.name} (${tenant.slug}), dates in ${tenant.timezone}.`);
-      if (tenant.accessUntil) console.log(`It is a trial: nobody in it can sign in after ${day(tenant.accessUntil)}.`);
+      if (tenant.accessUntil) console.log(`It is a trial: nobody in it can sign in after ${day(tenant.accessUntil, tenant.timezone)}.`);
       console.log(`Its designs are in ${folder}`);
       console.log(`Put its branding in ${join(folder, 'brand.json')}.`);
 
@@ -160,7 +162,7 @@ try {
       for (const tenant of tenants) {
         const people = registry.listUsers(tenant.id);
         const access = tenant.accessUntil
-          ? `${Date.parse(tenant.accessUntil) <= Date.now() ? 'trial ended' : 'trial to'} ${day(tenant.accessUntil)}`
+          ? `${Date.parse(tenant.accessUntil) <= Date.now() ? 'trial ended' : 'trial to'} ${day(tenant.accessUntil, tenant.timezone)}`
           : '';
         console.log(
           `${tenant.slug.padEnd(18)} ${tenant.status.padEnd(10)} ${String(people.length).padStart(3)} people  ${tenant.timezone.padEnd(18)} ${tenant.name}${access ? `  (${access})` : ''}`,
@@ -202,12 +204,22 @@ try {
         console.log(`${tenant.name} has no end date now.`);
         break;
       }
+      const on = flag(argv, 'until');
+      if (on !== undefined) {
+        // To the end of that day in the company's own zone, as the screen does.
+        const end = endOfDay(on, tenant.timezone);
+        if (end === null) fail('A day is written YYYY-MM-DD, e.g. --until 2026-10-31.');
+        if (on < today(tenant.timezone)) fail(`${on} has gone by already. To shut ${tenant.name} out now, suspend it.`);
+        registry.setTenantAccessUntil(tenant.id, end);
+        console.log(`${tenant.name} can sign in to the end of ${on} (${tenant.timezone}).`);
+        break;
+      }
       // Counted from today where the trial has run out or never began, so
       // adding seven days always leaves seven to use.
       const from = tenant.accessUntil === null ? Date.now() : Math.max(Date.now(), Date.parse(tenant.accessUntil));
       const until = new Date(from + days(flag(argv, 'days')) * DAY_MS).toISOString();
       registry.setTenantAccessUntil(tenant.id, until);
-      console.log(`${tenant.name} can sign in until ${day(until)}.`);
+      console.log(`${tenant.name} can sign in until ${day(until, tenant.timezone)}.`);
       break;
     }
 
