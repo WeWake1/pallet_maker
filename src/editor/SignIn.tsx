@@ -127,10 +127,6 @@ export function SignIn({ onSignedIn }: { onSignedIn: (session: Session) => void 
         </div>
       </form>
       {problem && <Problem>{problem}</Problem>}
-      <p className="mt-6 text-label leading-relaxed text-ink-faint">
-        Accounts are made by invitation. If you have lost your password, ask whoever looks after
-        this for a new link — there is no password for anyone else to read out.
-      </p>
     </Frame>
   );
 }
