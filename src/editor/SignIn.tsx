@@ -1,9 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { InvitationOffer, Session } from './api.js';
 import { api } from './api.js';
-import { Button, inputClass } from './ui.jsx';
+import { GlassButton, GlassPane } from './Glass.jsx';
 import { Wordmark } from './Wordmark.jsx';
+
+// Its own chunk, and gsap with it: somebody already signed in — nearly
+// everybody, nearly always — never downloads either.
+const DotGrid = lazy(() => import('./DotGrid.jsx'));
 
 /**
  * The door, from this side.
@@ -35,15 +39,18 @@ function clearHash(): void {
  */
 function Frame({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="flex h-full items-center justify-center bg-ground-soft px-4">
-      <div className="w-full max-w-sm">
+    <div className="relative flex h-full items-center justify-center overflow-hidden bg-ground-soft px-4">
+      <Suspense fallback={null}>
+        <DotGrid />
+      </Suspense>
+      <div className="relative w-full max-w-sm">
         <div className="mb-8">
           <Wordmark size="lg" />
         </div>
-        <div className="rounded-card border border-line-soft bg-card p-6 shadow-card">
+        <GlassPane className="p-7">
           <h1 className="text-title font-semibold tracking-tight text-ink">{title}</h1>
           {children}
-        </div>
+        </GlassPane>
       </div>
     </div>
   );
@@ -51,7 +58,7 @@ function Frame({ title, children }: { title: string; children: React.ReactNode }
 
 function Problem({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mt-4 rounded-card border border-red-200 bg-red-50 px-3 py-2 text-ui text-red-700">
+    <div className="mt-4 rounded-xl border border-red-200 bg-red-50/85 px-3 py-2 text-ui text-red-700">
       {children}
     </div>
   );
@@ -92,7 +99,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: (session: Session) => void 
           <span className="text-label text-ink-soft">Email</span>
           <input
             ref={first}
-            className={inputClass}
+            className="glass-field"
             type="email"
             name="email"
             autoComplete="username"
@@ -104,7 +111,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: (session: Session) => void 
         <label className="flex flex-col gap-1">
           <span className="text-label text-ink-soft">Password</span>
           <input
-            className={inputClass}
+            className="glass-field"
             type="password"
             name="password"
             autoComplete="current-password"
@@ -113,10 +120,10 @@ export function SignIn({ onSignedIn }: { onSignedIn: (session: Session) => void 
             onChange={(event) => setPassword(event.target.value)}
           />
         </label>
-        <div className="mt-1">
-          <Button tone="primary" disabled={busy || email.trim() === '' || password === ''} submit>
+        <div className="mt-2">
+          <GlassButton tone="primary" disabled={busy || email.trim() === '' || password === ''} submit>
             {busy ? 'Signing in…' : 'Sign in'}
-          </Button>
+          </GlassButton>
         </div>
       </form>
       {problem && <Problem>{problem}</Problem>}
@@ -168,7 +175,7 @@ export function AcceptInvitation({
       <Frame title="That link does not work">
         <Problem>{problem}</Problem>
         <div className="mt-4">
-          <Button onClick={giveUp}>Go to the sign-in screen</Button>
+          <GlassButton onClick={giveUp}>Go to the sign-in screen</GlassButton>
         </div>
       </Frame>
     );
@@ -205,7 +212,7 @@ export function AcceptInvitation({
           <label className="flex flex-col gap-1">
             <span className="text-label text-ink-soft">Your name</span>
             <input
-              className={inputClass}
+              className="glass-field"
               type="text"
               autoComplete="name"
               value={name}
@@ -217,7 +224,7 @@ export function AcceptInvitation({
         <label className="flex flex-col gap-1">
           <span className="text-label text-ink-soft">Password</span>
           <input
-            className={inputClass}
+            className="glass-field"
             type="password"
             autoComplete="new-password"
             value={password}
@@ -228,7 +235,7 @@ export function AcceptInvitation({
         <label className="flex flex-col gap-1">
           <span className="text-label text-ink-soft">And again</span>
           <input
-            className={inputClass}
+            className="glass-field"
             type="password"
             autoComplete="new-password"
             value={again}
@@ -237,10 +244,10 @@ export function AcceptInvitation({
           />
         </label>
         {mismatch && <p className="text-label text-red-600">Those two do not match.</p>}
-        <div className="mt-1">
-          <Button tone="primary" disabled={busy || password.length < 10 || mismatch || again === ''} submit>
+        <div className="mt-2">
+          <GlassButton tone="primary" disabled={busy || password.length < 10 || mismatch || again === ''} submit>
             {busy ? 'Setting up…' : offer.kind === 'reset' ? 'Set the password' : 'Set up and sign in'}
-          </Button>
+          </GlassButton>
         </div>
       </form>
       {problem && <Problem>{problem}</Problem>}
