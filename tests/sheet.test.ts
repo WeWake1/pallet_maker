@@ -101,14 +101,13 @@ describe('the sheet', () => {
     expect(renderSheetSvg(dated, layout)).toContain('06-08-2026');
   });
 
-  it('prints the free-text note beside the date, and nothing when there is none', () => {
-    const noted = textOf(
-      /<header>([\s\S]*?)<\/header>/.exec(
-        renderSheet({ ...pallet, note: 'supersedes AP-004 (old)' }, layout),
-      )![1]!,
-    );
-    expect(noted).toContain('supersedes AP-004 (old)');
-    expect(textOf(/<header>([\s\S]*?)<\/header>/.exec(html)![1]!)).not.toContain('supersedes');
+  it('prints nothing beside the date from a note an older document still carries', () => {
+    // The note printed there was dropped as a field; one left on a stored
+    // document is let go when the document is read, not printed and not refused.
+    const older = parsePallet({ ...(pallet as object), note: 'supersedes AP-004 (old)' });
+    const header = /<header>([\s\S]*?)<\/header>/.exec(renderSheet(older, computeLayout(older)))![1]!;
+    expect(textOf(header)).not.toContain('supersedes');
+    expect(renderSheetSvg(older, computeLayout(older))).not.toContain('supersedes');
   });
 
   it('carries all five views, each once', () => {

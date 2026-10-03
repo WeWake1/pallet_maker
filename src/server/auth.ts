@@ -33,9 +33,7 @@ const SCRYPT = { N: 32_768, r: 8, p: 1, maxmem: 64 * 1024 * 1024 } as const;
 const SALT_BYTES = 16;
 const KEY_BYTES = 64;
 
-/** Long enough to be worth having. No rules about punctuation: they only
- *  produce one capital at the front and one digit at the end. */
-export const MIN_PASSWORD_LENGTH = 10;
+export { MIN_PASSWORD_LENGTH } from '../passwords.js';
 
 export const SESSION_COOKIE = 'pallet_session';
 /** How long a session lasts without being used. */

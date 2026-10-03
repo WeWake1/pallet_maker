@@ -81,7 +81,6 @@ export interface SheetHeading {
   subtitle: string;
   /** When it was last saved, day first: 06-08-2026. */
   date: string;
-  note: string;
 }
 
 /** One method of moving the pallet, and whether this design is cleared for it. */
@@ -148,7 +147,6 @@ export function sheetContent(
       palletName: heading,
       subtitle,
       date: dayMonthYear(pallet.updatedAt),
-      note: pallet.note ?? '',
     },
     size,
     overall: overallRows(pallet, layout, size),

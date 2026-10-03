@@ -5,6 +5,7 @@ import { api } from './api.js';
 import type { CompanySummary, MailStatus, People, SentLink } from './api.js';
 import { Admin, LinkToSend } from './Admin.jsx';
 import { Button, Check, Field, inputClass, Menu, MenuItem, NumberInput, Panel, TextInput } from './ui.jsx';
+import { AccountMenu } from './TopBar.jsx';
 import { Wordmark } from './Wordmark.jsx';
 
 /**
@@ -52,7 +53,15 @@ function trialState(company: CompanySummary, now = Date.now()): { text: string; 
   return { text: `trial · ends ${on}, ${left} day${left === 1 ? '' : 's'} left`, ended: false };
 }
 
-export function VendorAdmin({ userName, onSignOut }: { userName: string; onSignOut: () => void }) {
+export function VendorAdmin({
+  userName,
+  userEmail,
+  onSignOut,
+}: {
+  userName: string;
+  userEmail: string;
+  onSignOut: () => void;
+}) {
   const [companies, setCompanies] = useState<CompanySummary[] | null>(null);
   const [people, setPeople] = useState<People | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
@@ -112,7 +121,7 @@ export function VendorAdmin({ userName, onSignOut }: { userName: string; onSignO
       setSlug('');
       setName('');
       setFirstEmail('');
-    }, 'Made. Its folder is ready for its branding.');
+    }, 'Company created.');
 
   if (inside) {
     return (
@@ -130,14 +139,13 @@ export function VendorAdmin({ userName, onSignOut }: { userName: string; onSignO
 
   return (
     <div className="flex h-full flex-col bg-slate-100 text-slate-900">
-      <header className="flex items-center gap-3 border-b border-line bg-card px-4 py-2.5">
+      <header className="flex h-13 items-center gap-3 border-b border-line bg-card px-4">
         <Wordmark />
         <span aria-hidden="true" className="text-line">/</span>
         <h1 className="text-title font-semibold tracking-tight text-ink">Companies</h1>
-        <span className="ml-auto text-label text-ink-soft">{userName}</span>
-        <button type="button" onClick={onSignOut} className="text-label text-ink-soft underline underline-offset-2 hover:text-ink">
-          Sign out
-        </button>
+        <div className="ml-auto">
+          <AccountMenu name={userName} email={userEmail} onSignOut={onSignOut} />
+        </div>
       </header>
       <div className="flex-1 overflow-auto">
         <div className="mx-auto max-w-5xl px-4 py-6">
@@ -193,21 +201,16 @@ export function VendorAdmin({ userName, onSignOut }: { userName: string; onSignO
                 </Field>
               </div>
               <div className="mt-3 flex items-center gap-2">
-                <Check
-                  checked={trial}
-                  disabled={busy}
-                  label="A trial — nobody in it can sign in after"
-                  onChange={setTrial}
-                />
+                <Check checked={trial} disabled={busy} label="Trial for" onChange={setTrial} />
                 <div className="w-16">
                   <NumberInput value={trialDays} min={1} max={366} disabled={busy || !trial} onChange={setTrialDays} />
                 </div>
                 <span className="text-ui text-ink-soft">days</span>
-                <span className="text-label text-ink-faint">
-                  {trial
-                    ? `(until ${shortDate(Date.now() + trialDays * DAY_MS, timezone)}; change it or give full access from the list above)`
-                    : '(no end date: a customer)'}
-                </span>
+                {trial && (
+                  <span className="text-label text-ink-faint">
+                    ends {shortDate(Date.now() + trialDays * DAY_MS, timezone)}
+                  </span>
+                )}
               </div>
               <div className="mt-3">
                 <Button
@@ -222,7 +225,7 @@ export function VendorAdmin({ userName, onSignOut }: { userName: string; onSignO
           </div>
 
           <div className="mt-6">
-            <Panel title="Who looks after the service">
+            <Panel title="Vendor team">
               {people && (
                 <ul className="mb-3 flex flex-col gap-1 text-ui">
                   {people.users.map((person) => (
@@ -282,8 +285,7 @@ export function VendorAdmin({ userName, onSignOut }: { userName: string; onSignO
             >
               {mail === null ? null : mail.configured ? (
                 <p className="text-ui text-ink-soft">
-                  Invitations and new-password links are emailed from <strong className="text-ink">{mail.from}</strong>.
-                  The link is shown to you as well, in case one goes astray.
+                  Invitations are emailed from <strong className="text-ink">{mail.from}</strong>.
                 </p>
               ) : (
                 <p className="text-ui text-ink-soft">

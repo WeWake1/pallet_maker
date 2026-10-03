@@ -157,7 +157,7 @@ function headerBand(content: SheetContent): string {
   return (
     cell(left, 'start', heading.clientName, heading.clientPartNo ? `Client part ${heading.clientPartNo}` : '') +
     cell(PAGE.width / 2, 'middle', heading.palletName, heading.subtitle) +
-    cell(right, 'end', heading.date, heading.note) +
+    cell(right, 'end', heading.date, '') +
     line(px(left), px(bottom), px(right), px(bottom), { stroke: INK, 'stroke-width': px(0.21) })
   );
 }

@@ -6,7 +6,7 @@ import { api } from './api.js';
 import type { BrandFileInput, BrandSettings, Invitation, People, Person, SentLink } from './api.js';
 import { HANDLING_LABEL } from '../sheet/handling.js';
 import { dayMonthYear } from '../ids.js';
-import { Button, Check, Field, inputClass, NumberInput, Panel, Select, TextInput } from './ui.jsx';
+import { Button, Check, DecimalInput, Field, inputClass, NumberInput, Panel, Select, TextInput } from './ui.jsx';
 
 /**
  * Looking after a company: who is in it, and whose name is on its sheets.
@@ -111,18 +111,17 @@ export function LinkToSend({ email, sent, onDone }: { email: string; sent: SentL
     <div className={`mb-4 rounded-card border px-3 py-3 ${tone}`}>
       {sent.emailed ? (
         <p className="text-ui text-ink">
-          Emailed to <strong>{email}</strong>. If it does not arrive — have them check their spam folder — send them
-          this link yourself. It works once, for seven days, and will not be shown again.
+          Emailed to <strong>{email}</strong>. If it does not arrive, send them this link. It works once, for 7
+          days, and will not be shown again.
         </p>
       ) : sent.mailProblem ? (
         <p className="text-ui text-ink">
-          Could not email <strong>{email}</strong>: {sent.mailProblem}. Send them this link yourself. It works once,
-          for seven days, and will not be shown again.
+          Could not email <strong>{email}</strong>: {sent.mailProblem}. Send them this link. It works once, for 7
+          days, and will not be shown again.
         </p>
       ) : (
         <p className="text-ui text-ink">
-          Send this to <strong>{email}</strong>. It works once, and for seven days. It will not be shown again.
-          <span className="text-ink-soft"> (This server is not set up to send email.)</span>
+          Send this link to <strong>{email}</strong>. It works once, for 7 days, and will not be shown again.
         </p>
       )}
       <div className="mt-2 flex gap-2">
@@ -205,11 +204,6 @@ function PeopleTab({ calls, companyName }: { calls: Calls; companyName: string }
             Invite
           </Button>
         </div>
-        <p className="mt-2 text-label leading-relaxed text-ink-faint">
-          They are emailed a link, and you are shown it too in case it goes astray. They follow it,
-          choose a password, and are in. They can draw and print; nobody at the company can change who
-          is in it or its branding.
-        </p>
       </Panel>
 
       <div className="mt-6">
@@ -512,7 +506,7 @@ function BrandTab({ calls }: { calls: Calls }) {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="flex flex-col gap-6">
-          <Panel title="Whose sheets these are">
+          <Panel title="Name & watermark">
             <div className="flex flex-col gap-3">
               <Field label="Company name, as it prints">
                 <TextInput value={form.companyName} onChange={(companyName) => patch({ companyName })} disabled={busy} />
@@ -529,34 +523,30 @@ function BrandTab({ calls }: { calls: Calls }) {
                     <TextInput value={form.watermarkText} onChange={(watermarkText) => patch({ watermarkText })} disabled={busy} />
                   </Field>
                   <Field label="Opacity" hint="0.06 is faint enough to build from.">
-                    <NumberInput value={form.watermarkOpacity} min={0.01} max={0.3} step={0.01} onChange={(watermarkOpacity) => patch({ watermarkOpacity })} disabled={busy} />
+                    <DecimalInput value={form.watermarkOpacity} min={0.01} max={0.3} step={0.01} onChange={(watermarkOpacity) => patch({ watermarkOpacity })} disabled={busy} />
                   </Field>
                 </div>
               )}
             </div>
           </Panel>
 
-          <Panel title="The mark in the corner">
+          <Panel title="Logo">
             <ArtworkRow
               held={held.logo}
-              nothing="No logo. The corner is left empty."
+              nothing="No logo"
               accept=".svg,.png,.jpg,.jpeg,image/svg+xml,image/png,image/jpeg"
               input={logoInput}
               busy={busy}
               onChoose={upload('logo')}
               onRemove={() => run(() => calls.removeLogo(), 'Logo removed.')}
             />
-            <p className="mt-2 text-label leading-relaxed text-ink-faint">
-              SVG prints sharpest and keeps the vector sheet something a drawing program can take
-              apart. A PNG or JPEG is fine; it costs only that. An SVG with a stylesheet, a clip
-              path or a filter in it will be refused — flatten it to plain shapes when you export.
-            </p>
+            <p className="mt-2 text-label text-ink-faint">SVG, PNG or JPEG.</p>
           </Panel>
 
-          <Panel title="The face the watermark is set in">
+          <Panel title="Watermark font">
             <ArtworkRow
               held={held.font}
-              nothing="The sheet's own sans."
+              nothing="Default"
               accept=".otf,.ttf,.woff,.woff2"
               input={fontInput}
               busy={busy}
@@ -564,20 +554,19 @@ function BrandTab({ calls }: { calls: Calls }) {
               onRemove={() => run(() => calls.removeFont(), 'Face removed.')}
             />
             <div className="mt-3 grid grid-cols-2 gap-3">
-              <Field label="Called" hint="Any name; it is only what the sheet asks for it by.">
+              <Field label="Called">
                 <TextInput value={form.fontFamily} onChange={(fontFamily) => patch({ fontFamily })} disabled={busy || !held.font} />
               </Field>
               <Field label="Width per letter" hint="About 0.39 for a condensed face, 0.49 for an ordinary one. Decides the size that fills the diagonal.">
-                <NumberInput value={form.fontAdvanceEm ?? 0.49} min={0.2} max={1} step={0.01} onChange={(fontAdvanceEm) => patch({ fontAdvanceEm })} disabled={busy || !held.font} />
+                <DecimalInput value={form.fontAdvanceEm ?? 0.49} min={0.2} max={1} step={0.01} onChange={(fontAdvanceEm) => patch({ fontAdvanceEm })} disabled={busy || !held.font} />
               </Field>
             </div>
-            <p className="mt-2 text-label leading-relaxed text-ink-faint">
-              Every sheet carries a copy of the face, so it has to be one the company is licensed
-              to embed in documents. Under 1 MB.
+            <p className="mt-2 text-label text-ink-faint">
+              OTF, TTF or WOFF, under 1 MB. It must be licensed for embedding.
             </p>
           </Panel>
 
-          <Panel title="House conventions">
+          <Panel title="Drawing">
             <div className="flex flex-col gap-3">
               <Field label="Printed under the drawings">
                 <Select<string>
@@ -593,7 +582,7 @@ function BrandTab({ calls }: { calls: Calls }) {
             </div>
           </Panel>
 
-          <Panel title="What a new design starts as">
+          <Panel title="New design defaults">
             <div className="grid grid-cols-2 gap-3">
               <Field label="Length (mm)">
                 <NumberInput value={form.newLength} min={100} onChange={(newLength) => patch({ newLength })} disabled={busy} />
@@ -635,18 +624,13 @@ function BrandTab({ calls }: { calls: Calls }) {
             <Button tone="primary" disabled={busy} onClick={save}>
               Save
             </Button>
-            <span className="text-label text-ink-faint">
-              {held.from === 'folder' ? 'This company has a brand of its own.' : 'Using the branding this version ships with until saved.'}
-            </span>
           </div>
         </div>
 
         <div className="lg:sticky lg:top-6 lg:self-start">
-          <Panel title="The sheet, as it prints now">
+          <Panel title="Preview">
             <SheetPreview src={calls.previewUrl()} refreshKey={previewKey} />
-            <p className="mt-2 text-label leading-relaxed text-ink-faint">
-              The same design for every company, so two brands can be compared. Save to see a change.
-            </p>
+            <p className="mt-2 text-label text-ink-faint">Updates when you save.</p>
           </Panel>
         </div>
       </div>

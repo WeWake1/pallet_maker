@@ -196,7 +196,9 @@ export const PalletSchema = z.object({
   // The store stamps this on every write. A document arriving from an older
   // export, or from a hand-written fixture, is dated today rather than refused.
   updatedAt: z.string().min(1).default(() => today()),
-  note: z.string().optional(),
+  // A note printed beside the date was dropped as a field of its own; Notes
+  // says whatever the sheet needs to. One still on an older document is not
+  // refused — it is not one of these keys, so it is let go when read.
 
   layers: z.array(LayerSchema).min(1),
 });

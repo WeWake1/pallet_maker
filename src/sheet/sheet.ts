@@ -249,11 +249,11 @@ export function renderSheet(pallet: Pallet, layout: Layout, options: SheetOption
       <div class="sub">${esc(heading.subtitle)}</div>
     </div>
     <!-- The date is stamped by the store on every save, so it is always the
-         date of the drawing on this page. The note underneath is free text and
-         says whatever the shop or the client needs it to. -->
+         date of the drawing on this page. The empty line under it keeps the
+         three cells on one baseline. -->
     <div class="when">
       <div class="name">${esc(heading.date)}</div>
-      <div class="sub">${esc(heading.note)}</div>
+      <div class="sub"></div>
     </div>
   </header>
 

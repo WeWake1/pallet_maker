@@ -93,7 +93,6 @@ const absent = {
     'nails',
     'nailPlacements',
     'notes',
-    'note',
     'updatedAt',
     'componentTolerance',
     'palletTolerance',

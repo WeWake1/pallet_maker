@@ -6,7 +6,7 @@ import type { ClientDesigns, PalletSummary } from './api.js';
 import { draftAge } from './drafts.js';
 import type { Draft } from './drafts.js';
 import { Thumbnail, useDesignLayout, useInView } from './Thumbnail.jsx';
-import { Button, Menu, MenuItem } from './ui.jsx';
+import { Button, Icon, Menu, MenuItem } from './ui.jsx';
 
 /**
  * The design library: every client in turn, each with their designs as cards.
@@ -60,11 +60,15 @@ export interface DesignActions {
 }
 
 /** True where the design answers to what has been typed in the search box. */
-function matches(design: PalletSummary, needle: string): boolean {
+function matches(design: { palletName: string; palletCode: string }, needle: string): boolean {
   if (needle === '') return true;
-  return `${design.palletName} ${design.palletCode} ${design.clientName}`
-    .toLowerCase()
-    .includes(needle);
+  return `${design.palletName} ${design.palletCode}`.toLowerCase().includes(needle);
+}
+
+/** True where the client's own name answers to the search. */
+export function clientMatches(section: ClientDesigns, search: string): boolean {
+  const needle = search.trim().toLowerCase();
+  return needle === '' || section.client.name.toLowerCase().includes(needle);
 }
 
 function sorted(designs: PalletSummary[], order: SortOrder): PalletSummary[] {
@@ -80,11 +84,13 @@ function sorted(designs: PalletSummary[], order: SortOrder): PalletSummary[] {
 /**
  * The sections as they are to be shown.
  *
- * Searching narrows each client to the designs that answer, and drops the
- * clients left with none — a search that left every empty client on screen
- * would bury the handful that matched. With nothing typed every client stays,
- * including one with no designs at all, which is the point of a client being a
- * record of their own.
+ * A search naming a client brings that client back whole — every design,
+ * and the card that starts a new one — because looking a client up is most
+ * often the first step of drawing them something, and a client with nothing
+ * drawn yet is still a client that can be found. Otherwise each client is
+ * narrowed to the designs whose name or code answers, and the clients left
+ * with none are dropped: a search that left every empty client on screen
+ * would bury the handful that matched. With nothing typed every client stays.
  */
 export function visibleSections(
   sections: ClientDesigns[],
@@ -92,18 +98,22 @@ export function visibleSections(
   order: SortOrder,
 ): ClientDesigns[] {
   const needle = search.trim().toLowerCase();
-  const narrowed = sections.map((section) => ({
-    client: section.client,
-    designs: sorted(section.designs.filter((design) => matches(design, needle)), order),
-  }));
-  return needle === '' ? narrowed : narrowed.filter((section) => section.designs.length > 0);
+  if (needle === '') {
+    return sections.map((section) => ({ client: section.client, designs: sorted(section.designs, order) }));
+  }
+  return sections.flatMap((section) => {
+    const designs = clientMatches(section, needle)
+      ? section.designs
+      : section.designs.filter((design) => matches(design, needle));
+    if (designs.length === 0 && !clientMatches(section, needle)) return [];
+    return [{ client: section.client, designs: sorted(designs, order) }];
+  });
 }
 
 export function Dashboard({
   sections,
   drafts,
   busy,
-  startingSize,
   actions,
   onOpenDraft,
   onDiscardDraft,
@@ -116,8 +126,6 @@ export function Dashboard({
   sections: ClientDesigns[];
   drafts: Draft[];
   busy: boolean;
-  /** The size a new design opens at, e.g. "1200 × 800", from the company's defaults. */
-  startingSize: string;
   actions: DesignActions;
   onOpenDraft: (draft: Draft) => void;
   onDiscardDraft: (id: string) => void;
@@ -218,9 +226,7 @@ export function Dashboard({
           <div className="rounded-card border border-line bg-card p-10 text-center shadow-card">
             <h3 className="text-title font-semibold text-ink">Nothing here yet</h3>
             <p className="mx-auto mt-2 max-w-md text-ui leading-relaxed text-ink-soft">
-              Every design belongs to a client, so a client comes first. Add one and you can start
-              a design straight away — it opens as a complete {startingSize} pallet, ready to have
-              its numbers changed.
+              Designs are kept by client. Add your first client to start a design.
             </p>
             <div className="mt-5 flex justify-center">
               {adding ? (
@@ -248,28 +254,32 @@ export function Dashboard({
           </div>
         ) : (
           <div className="space-y-6">
-            {shown.map((section) => (
-              <ClientSection
-                startingSize={startingSize}
-                key={section.client.id}
-                section={section}
-                drafts={
-                  searching
-                    ? []
-                    : drafts.filter((draft) => draft.pallet.clientId === section.client.id)
-                }
-                held={held}
-                busy={busy}
-                searching={searching}
-                actions={actions}
-                onOpenDraft={onOpenDraft}
-                onDiscardDraft={onDiscardDraft}
-                onCreate={onCreate}
-                onRename={onRenameClient}
-                onRemove={onRemoveClient}
-                onImportDesign={onImportDesign}
-              />
-            ))}
+            {shown.map((section) => {
+              // Whole where the client itself was searched for, or nothing
+              // was; narrowed to what answered otherwise.
+              const whole = !searching || clientMatches(section, search);
+              return (
+                <ClientSection
+                  key={section.client.id}
+                  section={section}
+                  drafts={drafts.filter(
+                    (draft) =>
+                      draft.pallet.clientId === section.client.id &&
+                      (whole || matches(draft.pallet, needle)),
+                  )}
+                  held={held}
+                  busy={busy}
+                  searching={!whole}
+                  actions={actions}
+                  onOpenDraft={onOpenDraft}
+                  onDiscardDraft={onDiscardDraft}
+                  onCreate={onCreate}
+                  onRename={onRenameClient}
+                  onRemove={onRemoveClient}
+                  onImportDesign={onImportDesign}
+                />
+              );
+            })}
           </div>
         )}
       </div>
@@ -284,7 +294,6 @@ function ClientSection({
   held,
   busy,
   searching,
-  startingSize,
   actions,
   onOpenDraft,
   onDiscardDraft,
@@ -297,9 +306,10 @@ function ClientSection({
   drafts: Draft[];
   held: ReadonlySet<string>;
   busy: boolean;
-  /** The size a new design opens at, said on the card that starts one. */
-  startingSize: string;
-  /** A search is on, so this section is a result rather than the whole client. */
+  /**
+   * The section shows only the designs that answered a search, not the whole
+   * client, so nothing that counts them off — deleting the client — is offered.
+   */
   searching: boolean;
   actions: DesignActions;
   onOpenDraft: (draft: Draft) => void;
@@ -417,27 +427,20 @@ function ClientSection({
             }}
           />
         ))}
-        {!searching && (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => onCreate(client.id)}
-            title={`New design for ${client.name}`}
-            className={`flex ${CARD} flex-col items-center justify-center rounded-card border-2 border-dashed
-                       border-line bg-card px-3 text-center text-ink-faint transition-colors
-                       hover:border-accent hover:bg-blue-50/40 hover:text-accent disabled:opacity-40`}
-          >
-            <span className="text-2xl leading-none">+</span>
-            <span className="mt-1 text-label font-medium">New design</span>
-            {/* A new design is not an empty one, and someone who has not seen
-                that yet has no reason to expect it. */}
-            {designs.length === 0 && (
-              <span className="mt-1 text-micro leading-tight text-ink-faint">
-                starts as a complete {startingSize} pallet
-              </span>
-            )}
-          </button>
-        )}
+        {/* Offered in a search result too: finding the client is so often the
+            first half of starting something new for them. */}
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => onCreate(client.id)}
+          title={`New design for ${client.name}`}
+          className={`flex ${CARD} flex-col items-center justify-center rounded-card border-2 border-dashed
+                     border-line bg-card px-3 text-center text-ink-faint transition-colors
+                     hover:border-accent hover:bg-blue-50/40 hover:text-accent disabled:opacity-40`}
+        >
+          <Icon name="plus" size={22} />
+          <span className="mt-1 text-label font-medium">New design</span>
+        </button>
       </div>
     </section>
   );
@@ -501,7 +504,7 @@ function DesignCard({
       {/* What is most often wanted of a design that is not being changed: its
           sheet, a copy of it, the design itself as a file, or its removal. */}
       <div className="absolute right-1 top-1">
-        <Menu label="⋯" tone="subtle" align="right" width="sm" disabled={busy} title={`More for ${name}`}>
+        <Menu label={<Icon name="more" size={16} />} tone="subtle" size="sm" align="right" width="sm" disabled={busy} title={`More for ${name}`}>
           {(close) => (
             <>
               <MenuItem
@@ -509,7 +512,6 @@ function DesignCard({
                   close();
                   actions.onSheet(design.id);
                 }}
-                note="The sheet, ready to print"
               >
                 Open the PDF
               </MenuItem>
@@ -518,7 +520,6 @@ function DesignCard({
                   close();
                   actions.onDuplicate(design.id);
                 }}
-                note="Kept as it is; the copy is what gets reworked"
               >
                 Duplicate
               </MenuItem>
@@ -527,7 +528,6 @@ function DesignCard({
                   close();
                   actions.onExport(design.id);
                 }}
-                note="The design itself, to import elsewhere"
               >
                 Download as file
               </MenuItem>
@@ -542,7 +542,6 @@ function DesignCard({
                     actions.onDelete(design);
                   }
                 }}
-                note="Cannot be undone"
               >
                 Delete
               </MenuItem>

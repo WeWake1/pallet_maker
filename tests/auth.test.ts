@@ -328,7 +328,22 @@ describe('an invitation', () => {
 
     const response = await call('POST', '/api/auth/accept', { body: { token, name: 'A', password: 'short' } });
     expect(response.status).toBe(400);
-    expect(response.body.error).toMatch(/at least 10 characters/);
+    expect(response.body.error).toMatch(/at least 8 characters/);
+  });
+
+  it('takes a password of exactly eight characters, and not one of seven', async () => {
+    const registry = tempRegistry();
+    const tenant = registry.createTenant({ slug: 'acme', name: 'Acme Pallets' });
+    const invite = (email: string) =>
+      createInvitation(registry, {
+        kind: 'invite', tenantId: tenant.id, email, role: 'member', invitedBy: null,
+      }).token;
+    await serve(registry, tempDataRoot());
+
+    const seven = await call('POST', '/api/auth/accept', { body: { token: invite('seven@acme.test'), name: 'A', password: '1234567' } });
+    expect(seven.status).toBe(400);
+    const eight = await call('POST', '/api/auth/accept', { body: { token: invite('eight@acme.test'), name: 'A', password: '12345678' } });
+    expect(eight.status).toBe(200);
   });
 
   it('says nothing useful about a link that was never real', async () => {

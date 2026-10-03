@@ -12,49 +12,30 @@
  * say different things.
  */
 export const HINTS = {
-  span: 'How far across the pallet this layer of boards reaches. Left at 0 it uses the full width, which is nearly always what is wanted.',
-  offset:
-    'Where the layer starts, measured from the edge. 0 means flush with the edge; a larger number sets the whole layer in.',
-  runSpan:
-    'How long the boards themselves are, along the way they run. Left at 0 they run the whole length.',
-  runOffset: 'How far along their own run the boards start, measured from the end.',
-  slack:
-    'The room left over once every board in the layer is laid out and evenly spaced. Negative means the boards add up to more than the space they have — the layer is over-full and will not print.',
-  gap: 'The space between one board and the next, worked out by spreading the layer evenly. It is not typed in: change a width or a count and the gaps re-space themselves.',
-  nudge:
-    'Moving one board off the evenly-spaced position the layout gave it, in millimetres. It is the only record of where a board sits — nothing here is ever dragged.',
-  variant:
-    'A mark distinguishing two boards that are the same size but not the same part — a different notch or bevel, say. Boards with different variants get different part numbers.',
-  joined:
-    'This board and the one before it are one board, butted end to end, rather than two with a gap between them.',
-  notches:
-    'Two cuts in the underside of each runner, right through its width, so a fork can get into a stringer pallet from the side as well as the ends. Say how long and how deep they are and how far in from the ends they start; every runner in the layer is cut the same. The mouth corners are square and the top corners rounded to the standard radius, as the cutter leaves them.',
-  notchFromEnd:
-    'From the end of the runner to the near edge of the nearest notch, measured at the mouth of the cut, at both ends alike.',
-  sameLevel:
-    'This layer sits alongside the one above it in the same course of timber, not on top of it. It is how a deck whose boards run two different ways is built.',
-  derivedHeight:
-    'Left at 0, the height is whatever the layers add up to — shown beside it as the stack. Type a number only to state a height the timber does not itself give.',
-  palletType:
-    'How the pallet is built. Block pallets sit on blocks and can be entered from all four sides; stringer pallets sit on long runners and take a fork from two.',
-  deckType:
-    'Whether there is timber on the underside as well as the top, and if so whether the pallet can be used either way up.',
-  entry:
-    'Which sides a fork lift can get its forks into. 4-way means all four; 2-way means the two ends only.',
-  planing: 'How many faces of the timber are planed smooth rather than left sawn.',
-  staticLoad: 'What the pallet will carry standing still — stacked in a rack or on the floor.',
-  dynamicLoad:
-    'What the pallet will carry while it is being moved. Always the lower of the two figures.',
-  species: 'The timber the pallet is made from — pine, hardwood, and so on.',
-  componentTolerance:
-    'How far a single board or block may be off its stated size. Written however the shop writes it. Leave it as it is unless this design is held to something tighter; type na to keep the line off the sheet.',
-  palletTolerance:
-    'How far the finished pallet may be off its overall size. Type na to keep the line off the sheet.',
-  handling:
-    'What the finished pallet may be moved with. Ticked prints as a tick on the sheet, unticked as a cross — the sheet says both, because what a pallet must not be lifted with is what gets it dropped.',
-  palletCode: 'The shop’s own number for this design. A design can be drawn, saved and printed before it has one.',
-  clientPartNo: 'The number the client knows this pallet by, which is rarely the same as the shop’s.',
-  sheetNote: 'A line printed in the title block beside the date — a client drawing number, or “(old)”.',
+  span: 'How far across the pallet the layer reaches; 0 is the full width.',
+  offset: 'How far in from the edge the layer starts; 0 is flush.',
+  runSpan: 'How long the boards are along their run; 0 is the full length.',
+  runOffset: 'How far from the end the boards start.',
+  slack: 'Room left once the boards are evenly spaced; below zero, they do not fit.',
+  gap: 'The space between neighbouring boards, worked out from the widths and count.',
+  nudge: 'Millimetres this board is moved off its evenly spaced position.',
+  variant: 'Tells apart two boards of one size that are different parts.',
+  joined: 'Butted end to end with the board before it, as one board.',
+  notches: 'Two cuts in the underside of each runner, so a fork can enter from the side.',
+  notchFromEnd: 'From the end of the runner to the near edge of the notch.',
+  sameLevel: 'Sits beside the layer above, in the same course, rather than on it.',
+  derivedHeight: 'Leave empty to use what the layers add up to.',
+  palletType: 'How it is built: on blocks, on runners, or with a sheet deck.',
+  deckType: 'Whether it has a bottom deck, and whether it can be used either way up.',
+  entry: 'Which sides a fork can enter: 4-way is all four, 2-way the ends only.',
+  planing: 'How many faces of the timber are planed smooth.',
+  staticLoad: 'What it carries standing still.',
+  dynamicLoad: 'What it carries while being moved.',
+  species: 'The timber — pine, hardwood and so on.',
+  componentTolerance: 'How far one board or block may be off its size; na leaves it off the sheet.',
+  palletTolerance: 'How far the whole pallet may be off its size; na leaves it off the sheet.',
+  palletCode: 'Your own number for this design. Optional.',
+  clientPartNo: 'The number the client knows this pallet by.',
 } as const;
 
 export type HintKey = keyof typeof HINTS;
@@ -82,7 +63,6 @@ export const GLOSSARY: Array<{ term: string; hint: HintKey }> = [
   { term: 'Static load', hint: 'staticLoad' },
   { term: 'Dynamic load', hint: 'dynamicLoad' },
   { term: 'Planing', hint: 'planing' },
-  { term: 'Handling', hint: 'handling' },
 ];
 
 /** The id a field carries so the problem list can scroll to it. */
@@ -109,7 +89,6 @@ const FIELD_LABEL: Record<string, string> = {
   handling: 'Handling',
   staticLoadKg: 'Static load',
   dynamicLoadKg: 'Dynamic load',
-  note: 'Sheet note',
   notes: 'Notes',
   length: 'length',
   width: 'width',

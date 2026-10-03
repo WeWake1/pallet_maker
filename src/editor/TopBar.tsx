@@ -1,5 +1,7 @@
+import type { ReactNode } from 'react';
 import type { Session, StoreStatus } from './api.js';
-import { Button } from './ui.jsx';
+import { Button, Icon, Menu, MenuItem } from './ui.jsx';
+import { Wordmark } from './Wordmark.jsx';
 
 /**
  * The two things every library screen carries: who you are, and whether the
@@ -68,7 +70,7 @@ function TrialNote({ accessUntil }: { accessUntil: string | null }) {
   if (left < 1) return null;
   return (
     <span
-      className={`rounded-full px-2 py-px text-micro font-medium ${left <= 2 ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-800'}`}
+      className={`shrink-0 rounded-full px-2 py-px text-micro font-medium ${left <= 2 ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-800'}`}
       title={`Trial access ends ${new Date(accessUntil).toLocaleString()}`}
     >
       Trial · {left} day{left === 1 ? '' : 's'} left
@@ -76,25 +78,111 @@ function TrialNote({ accessUntil }: { accessUntil: string | null }) {
   );
 }
 
+/** "AP" for Ambica Patterns, "AD" for admin@… — two letters, never empty. */
+function initials(name: string): string {
+  const words = name.replace(/@.*$/, '').split(/[\s._-]+/).filter(Boolean);
+  const letters =
+    words.length >= 2 ? `${words[0]![0]}${words[1]![0]}` : (words[0] ?? '?').slice(0, 2);
+  return letters.toUpperCase();
+}
+
 /**
- * Whose designs these are, and the way out.
+ * Who is signed in, as the one thing at the right-hand end of the bar.
+ *
+ * The name, the way out and the build number used to sit in a row of their
+ * own above the header, at one weight, as three loose words. They are things
+ * looked at now and then — who am I signed in as, which version is this —
+ * and never while working, so they fold into the one button every web app
+ * puts there, and the row they took goes back to the screen.
+ */
+export function AccountMenu({
+  name,
+  email,
+  version,
+  busy,
+  onSignOut,
+}: {
+  name: string;
+  email: string;
+  /** Said at the foot of the list, for a bug report to quote. */
+  version?: string | null;
+  busy?: boolean;
+  onSignOut: () => void;
+}) {
+  return (
+    <Menu
+      tone="subtle"
+      width="sm"
+      title={`Signed in as ${email}`}
+      label={
+        <span className="flex items-center gap-2">
+          <span
+            aria-hidden="true"
+            className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-800 text-[10px] font-semibold tracking-wide text-white"
+          >
+            {initials(name || email)}
+          </span>
+          <span className="max-w-40 truncate text-ui font-medium text-ink">{name || email}</span>
+        </span>
+      }
+      caret
+    >
+      {(close) => (
+        <>
+          <div className="px-3 pb-2 pt-1.5">
+            <div className="truncate text-ui font-medium text-ink">{name || email}</div>
+            {name && <div className="truncate text-label text-ink-faint">{email}</div>}
+          </div>
+          <div className="border-t border-line-soft pt-1">
+            <MenuItem
+              disabled={busy}
+              onClick={() => {
+                close();
+                onSignOut();
+              }}
+            >
+              <span className="flex items-center gap-2">
+                <Icon name="signOut" size={14} className="text-ink-faint" />
+                Sign out
+              </span>
+            </MenuItem>
+          </div>
+          {version && (
+            <div className="mt-1 border-t border-line-soft px-3 pb-1 pt-2 text-micro text-ink-faint">
+              Version {version}
+            </div>
+          )}
+        </>
+      )}
+    </Menu>
+  );
+}
+
+/**
+ * The bar across the top of the library: whose it is on the left, the way
+ * out on the right, and between them whatever the screen itself offers.
  *
  * The company is named on every screen rather than only at sign-in: somebody
  * who looks after two of them should never have to wonder which one they are
- * in before they press save.
+ * in before they press save. It sits beside the service's own name, the way a
+ * workspace does in any tool that has more than one.
  */
 export function TopBar({
   status,
   session,
   busy,
   onSignOut,
+  children,
 }: {
   status: StoreStatus;
   /** Who is signed in, where anybody has to be. */
   session: Session | null;
   busy: boolean;
   onSignOut: () => void;
+  /** What this screen offers, ahead of the account at the far end. */
+  children?: ReactNode;
 }) {
+  const user = session?.user ?? null;
   return (
     <>
       {/* A sheet going to a customer under the wrong name, or under none, is
@@ -104,44 +192,52 @@ export function TopBar({
           <strong className="font-semibold">Branding:</strong> {status.brandProblem}
         </div>
       )}
-      <div className="flex items-center gap-2 border-b border-line bg-ground-soft px-4 py-1.5">
+      <header className="flex h-13 items-center gap-3 border-b border-line bg-card px-4">
+        <h1 className="shrink-0">
+          <Wordmark />
+        </h1>
         {session?.company ? (
           <>
-            <span className="font-medium text-label text-ink">{session.company.name}</span>
+            <span aria-hidden="true" className="h-5 w-px shrink-0 bg-line" />
+            <span className="truncate text-ui font-medium text-ink-soft">{session.company.name}</span>
             <TrialNote accessUntil={session.company.accessUntil} />
           </>
         ) : (
           // Run locally there is no company and no door; the folder in use is
           // what there is to say.
-          <span className="truncate font-mono text-label text-ink-soft" title={status.root ?? ''}>
-            {status.root}
-          </span>
+          status.root && (
+            <>
+              <span aria-hidden="true" className="h-5 w-px shrink-0 bg-line" />
+              <span className="truncate font-mono text-label text-ink-faint" title={status.root}>
+                {status.root}
+              </span>
+            </>
+          )
         )}
-        <span className="ml-auto flex items-center gap-2">
-          {session?.user && (
-            <span className="text-label text-ink-soft" title={session.user.email}>
-              {session.user.name || session.user.email}
-            </span>
+        <div className="ml-auto flex shrink-0 items-center gap-1.5">
+          {children}
+          {user && session?.signInRequired ? (
+            <>
+              <span aria-hidden="true" className="mx-1 h-5 w-px bg-line" />
+              <AccountMenu
+                name={user.name}
+                email={user.email}
+                version={status.version}
+                busy={busy}
+                onSignOut={onSignOut}
+              />
+            </>
+          ) : (
+            // People update at their own pace, so a bug report is much easier
+            // to place when the screen it was seen on says which build it was.
+            status.version && (
+              <span className="ml-1 text-label text-ink-faint" title="Which version of the app this is">
+                v{status.version}
+              </span>
+            )
           )}
-          {session?.signInRequired && (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={onSignOut}
-              className="text-label text-ink-soft underline underline-offset-2 hover:text-ink disabled:opacity-40"
-            >
-              Sign out
-            </button>
-          )}
-          {/* People update at their own pace, so a bug report is much easier to
-              place when the screen it was seen on says which build it was. */}
-          {status.version && (
-            <span className="text-label text-ink-faint" title="Which version of the app this is">
-              v{status.version}
-            </span>
-          )}
-        </span>
-      </div>
+        </div>
+      </header>
     </>
   );
 }

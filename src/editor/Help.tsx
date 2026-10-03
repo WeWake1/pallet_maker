@@ -27,28 +27,28 @@ const KEYS: Array<[string, string]> = [
 
 const RULES: Array<{ heading: string; body: string }> = [
   {
-    heading: 'The drawing is the design, not a picture of it',
-    body: 'Everything on screen is rebuilt from the numbers on every keystroke, by the same renderer that prints the sheet. There is nothing to refresh, and what is on screen is what will print.',
+    heading: 'The drawing is the design',
+    body: 'It is redrawn from the numbers as you type, by the same code that prints the sheet.',
   },
   {
     heading: 'One row sets a whole layer',
-    body: 'In about eight designs in ten every board in a layer is the same size, so the boxed row at the top of each card — length, width, thickness, how many, what timber — describes the whole of it. The board-by-board table folded away underneath is for the odd board out.',
+    body: 'A layer’s row sizes every board in it. Open the layer to change one board on its own.',
   },
   {
     heading: 'Boards are selected, never dragged',
-    body: 'Click a board on the drawing to select it. The arrow keys nudge it, Shift by ten, Delete removes it, Esc lets it go. The nudge in millimetres is the only record of where a board sits.',
+    body: 'Click a board, then nudge it with the arrow keys — Shift for ten.',
   },
   {
     heading: 'Gaps look after themselves',
-    body: 'Boards are spread evenly across the space they are given. Change a width or a count and the gaps re-space themselves — there is no gap to type in. Slack going negative means the boards add up to more than the space, and the design will not print until it does not.',
+    body: 'Boards are spaced evenly. Negative slack means they do not fit.',
   },
   {
-    heading: 'Part numbers are worked out, not typed',
-    body: 'A part is one kind of component at one size in one material. Two boards the same share a number; widen one and it becomes a part of its own. Nothing has to be kept in step by hand.',
+    heading: 'Part numbers are worked out',
+    body: 'Same size and material, same part number.',
   },
   {
-    heading: 'Save overwrites, and there is no history',
-    body: 'A design is edited in place. To keep an old version before reworking it, use Duplicate — that makes two designs that never meet again. Work between one Save and the next is kept in this browser, so closing the tab does not lose it, but only Save puts it in the library.',
+    heading: 'Save overwrites',
+    body: 'There is no history: duplicate a design before reworking it. Unsaved work is kept in this browser.',
   },
 ];
 
@@ -144,10 +144,6 @@ export function Help({ onClose }: { onClose: () => void }) {
                 </tr>
               </tbody>
             </table>
-            <p className="mt-3 text-micro text-ink-faint">
-              Undo and Save work mid-field. The rest wait until nothing is being typed into, because
-              Delete belongs to the digits under the cursor first.
-            </p>
           </Section>
 
           <Section title="Words used here">
@@ -165,30 +161,25 @@ export function Help({ onClose }: { onClose: () => void }) {
             <dl className="space-y-2.5 text-label text-ink-soft">
               <div>
                 <dt className="text-ui font-semibold text-ink">PDF</dt>
-                <dd className="mt-0.5">The specification sheet, ready to print or send.</dd>
+                <dd className="mt-0.5">The specification sheet.</dd>
               </div>
               <div>
                 <dt className="text-ui font-semibold text-ink">DXF</dt>
-                <dd className="mt-0.5">The plan as a CAD file, for AutoCAD and the like.</dd>
+                <dd className="mt-0.5">CAD file, for AutoCAD.</dd>
               </div>
               <div>
                 <dt className="text-ui font-semibold text-ink">SVG</dt>
-                <dd className="mt-0.5">
-                  The whole sheet as vector, to work on in Canva, Illustrator or Inkscape.
-                </dd>
+                <dd className="mt-0.5">Vector, for Canva or Illustrator.</dd>
               </div>
               <div>
                 <dt className="text-ui font-semibold text-ink">Export as file</dt>
                 <dd className="mt-0.5">
-                  The design itself, to send to another copy of this program. Export library on the
-                  designs screen does the same for everything at once — keep that somewhere other
-                  than this computer, because it is the only copy that survives it.
+                  The design as a .json file. Export library, on the designs screen, does every
+                  design at once.
                 </dd>
               </div>
             </dl>
-            <p className="mt-3 text-micro text-ink-faint">
-              Every export saves the design first, so what is printed is what is recorded.
-            </p>
+            <p className="mt-3 text-micro text-ink-faint">Exporting saves the design first.</p>
           </Section>
         </div>
       </aside>

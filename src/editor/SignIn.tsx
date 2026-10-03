@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { InvitationOffer, Session } from './api.js';
+import { MIN_PASSWORD_LENGTH } from '../passwords.js';
 import { api } from './api.js';
 import { GlassButton, GlassPane } from './Glass.jsx';
 import { Wordmark } from './Wordmark.jsx';
@@ -92,7 +93,6 @@ export function SignIn({ onSignedIn }: { onSignedIn: (session: Session) => void 
 
   return (
     <Frame title="Sign in">
-      <p className="mt-1 text-ui text-ink-soft">Pallet specification sheets, drawn and printed.</p>
       {/* A real form, so a password manager fills it and the enter key works. */}
       <form className="mt-6 flex flex-col gap-3" onSubmit={submit}>
         <label className="flex flex-col gap-1">
@@ -229,7 +229,7 @@ export function AcceptInvitation({
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-label text-ink-soft">And again</span>
+          <span className="text-label text-ink-soft">Confirm password</span>
           <input
             className="glass-field"
             type="password"
@@ -239,17 +239,16 @@ export function AcceptInvitation({
             onChange={(event) => setAgain(event.target.value)}
           />
         </label>
-        {mismatch && <p className="text-label text-red-600">Those two do not match.</p>}
+        {mismatch && <p className="text-label text-red-600">The passwords do not match.</p>}
         <div className="mt-2">
-          <GlassButton tone="primary" disabled={busy || password.length < 10 || mismatch || again === ''} submit>
+          <GlassButton tone="primary" disabled={busy || password.length < MIN_PASSWORD_LENGTH || mismatch || again === ''} submit>
             {busy ? 'Setting up…' : offer.kind === 'reset' ? 'Set the password' : 'Set up and sign in'}
           </GlassButton>
         </div>
       </form>
       {problem && <Problem>{problem}</Problem>}
       <p className="mt-6 text-label leading-relaxed text-ink-faint">
-        At least 10 characters. Nobody else ever sees it, so make it one you will not have to
-        write down.
+        At least {MIN_PASSWORD_LENGTH} characters.
       </p>
     </Frame>
   );

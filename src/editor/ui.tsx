@@ -1,18 +1,23 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode, RefObject } from 'react';
 import { createPortal } from 'react-dom';
-import { shade } from '../render/theme.js';
-import type { LayerStyle } from '../render/theme.js';
 import { NOT_APPLICABLE } from '../types.js';
 import type { LoadKg } from '../types.js';
 
 /** Small form controls. Tailwind styles the editor chrome only. */
 
-export const inputClass =
-  'w-full rounded-md border border-line bg-card px-2 py-1.5 text-ui text-ink ' +
-  'transition-colors placeholder:text-slate-400 ' +
+/**
+ * A field, less its width. A field is as wide as what goes in it: four digits
+ * of millimetres want a box four digits wide, and a box the width of the
+ * column says "type a sentence here" to someone about to type 1200.
+ */
+export const inputBase =
+  'rounded-md border border-line bg-card px-2 py-1.5 text-ui text-ink ' +
+  'transition-colors placeholder:text-slate-400 hover:border-slate-400 ' +
   'focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-ring/30 ' +
-  'disabled:bg-ground disabled:text-ink-faint';
+  'disabled:bg-ground disabled:text-ink-faint disabled:hover:border-line';
+
+export const inputClass = `w-full ${inputBase}`;
 
 /**
  * Something that closes when the attention moves off it.
@@ -121,7 +126,7 @@ export function Field({
 }) {
   return (
     <label className="block" id={id}>
-      <span className="mb-1 flex items-center gap-1 text-label font-medium uppercase tracking-wide text-ink-faint">
+      <span className="mb-1 flex items-center gap-1 text-label font-medium text-ink-soft">
         {label}
         {hint && <Hint text={hint} />}
       </span>
@@ -131,48 +136,87 @@ export function Field({
 }
 
 /**
- * A named group of fields inside a panel.
+ * A field with its name beside it rather than over it.
  *
- * Seventeen fields in a row of identical grids is a list to be read from the
- * top every time something has to be found in it. Four named groups is four
- * places to look, and the name says which one.
+ * The name sits in a column of its own, so a stack of these reads down the
+ * left like the attribute list printed on the sheet, and the field next to it
+ * is only as wide as its answer.
  */
-export function SectionHeading({ children, note }: { children: ReactNode; note?: string }) {
-  return (
-    <div className="mb-2 flex items-baseline gap-2 border-b border-line-soft pb-1">
-      <h3 className="text-micro font-semibold uppercase tracking-wider text-ink-soft">{children}</h3>
-      {note && <span className="text-micro text-ink-faint">{note}</span>}
-    </div>
-  );
-}
-
-/** A value the design worked out for itself, shown where a field would be. */
-export function Readout({
+export function Prop({
   label,
-  value,
   hint,
-  tone = 'plain',
+  id,
+  group = false,
+  children,
 }: {
   label: string;
-  value: ReactNode;
   hint?: string;
-  tone?: 'plain' | 'warn';
+  id?: string;
+  /**
+   * More than one field beside the one name. Each is then labelled on its
+   * own, and the row is not a label — a click on the name would otherwise
+   * always land in the first of them.
+   */
+  group?: boolean;
+  children: ReactNode;
 }) {
+  const Row = group ? 'div' : 'label';
   return (
-    <div className="block">
-      <span className="mb-1 flex items-center gap-1 text-label font-medium uppercase tracking-wide text-ink-faint">
+    <Row className="flex min-h-8 items-center gap-3" id={id}>
+      <span className="flex w-28 shrink-0 items-center gap-1 text-label text-ink-soft">
         {label}
         {hint && <Hint text={hint} />}
       </span>
-      <div
-        className={
-          'rounded-md border border-dashed border-line bg-ground-soft px-2 py-1.5 text-ui tabular-nums ' +
-          (tone === 'warn' ? 'text-red-600' : 'text-ink-soft')
-        }
-      >
-        {value}
-      </div>
-    </div>
+      <span className="flex min-w-0 flex-1 items-center gap-2">{children}</span>
+    </Row>
+  );
+}
+
+/**
+ * A field with what is typed into it said after it — mm, kg — inside the
+ * same box, so the unit is read with the number rather than looked for in a
+ * heading somewhere above.
+ */
+export function Unit({ unit, children }: { unit: string; children: ReactNode }) {
+  return (
+    <span className="relative inline-flex">
+      {children}
+      <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-label text-ink-faint">
+        {unit}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * One part of the form: a heading, and what is under it.
+ *
+ * The form is one sheet with a rule between its parts, not a stack of cards —
+ * a card each is a box around every thought, and a screen of boxes is read as
+ * boxes before it is read as a pallet.
+ */
+export function Section({
+  title,
+  note,
+  actions,
+  id,
+  children,
+}: {
+  title: string;
+  note?: ReactNode;
+  actions?: ReactNode;
+  id?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section id={id} className="border-t border-line-soft px-6 py-4">
+      <header className="mb-3 flex min-h-7 items-center gap-2">
+        <h2 className="text-ui font-semibold text-ink">{title}</h2>
+        {note && <span className="text-label text-ink-faint">{note}</span>}
+        {actions && <div className="ml-auto flex items-center gap-1.5">{actions}</div>}
+      </header>
+      {children}
+    </section>
   );
 }
 
@@ -181,19 +225,26 @@ export function TextInput({
   onChange,
   placeholder,
   disabled,
+  className = 'w-full',
+  label,
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
   disabled?: boolean;
+  /** The width, and anything else the field needs that the others do not. */
+  className?: string;
+  /** Said aloud where the field has no caption of its own, as in a table. */
+  label?: string;
 }) {
   return (
     <input
-      className={inputClass}
+      className={`${inputBase} ${className}`}
       type="text"
       value={value}
       placeholder={placeholder}
       disabled={disabled}
+      aria-label={label}
       onChange={(event) => onChange(event.target.value)}
     />
   );
@@ -231,6 +282,8 @@ export function NumberInput({
   placeholder,
   onKeyDown,
   inputRef,
+  className = 'w-full',
+  label,
 }: {
   value: number;
   onChange: (value: number) => void;
@@ -241,6 +294,8 @@ export function NumberInput({
   placeholder?: string;
   onKeyDown?: (event: React.KeyboardEvent<HTMLInputElement>) => void;
   inputRef?: React.Ref<HTMLInputElement>;
+  className?: string;
+  label?: string;
 }) {
   /**
    * What has been typed so far, while it is still being typed.
@@ -256,7 +311,7 @@ export function NumberInput({
   return (
     <input
       ref={inputRef}
-      className={`${inputClass} tabular-nums`}
+      className={`${inputBase} ${className} tabular-nums`}
       type="number"
       value={numberText(typed, value)}
       min={min}
@@ -264,6 +319,7 @@ export function NumberInput({
       step={step}
       disabled={disabled}
       placeholder={placeholder}
+      aria-label={label}
       onKeyDown={onKeyDown}
       onBlur={() => setTyped(null)}
       onChange={(event) => {
@@ -271,6 +327,74 @@ export function NumberInput({
         setTyped(text);
         const next = Number.parseInt(text, 10);
         if (Number.isFinite(next)) onChange(next);
+      }}
+    />
+  );
+}
+
+/**
+ * A number with a fraction to it — an opacity, a width per letter.
+ *
+ * Not NumberInput with a smaller step: that one keeps whole numbers only, so
+ * 0.39 typed into it reported 0, and nothing after the point ever reached the
+ * brand. This reads the whole of what is typed, reports it only once it is a
+ * number inside the range, and keeps the text as typed until then — "0." is
+ * on its way to 0.4, not a request for nothing. Leaving the field with
+ * something out of range puts back the last good value.
+ *
+ * A text box rather than a number box, so what is shown is exactly what was
+ * typed in every browser; the arrow keys still step it.
+ */
+export function DecimalInput({
+  value,
+  onChange,
+  min,
+  max,
+  step = 0.01,
+  disabled,
+  placeholder,
+  className = 'w-full',
+}: {
+  value: number;
+  onChange: (value: number) => void;
+  min?: number;
+  max?: number;
+  step?: number;
+  disabled?: boolean;
+  placeholder?: string;
+  className?: string;
+}) {
+  const [typed, setTyped] = useState<string | null>(null);
+  const inRange = (next: number): boolean =>
+    Number.isFinite(next) && (min === undefined || next >= min) && (max === undefined || next <= max);
+  // As many places as the step has, so stepping 0.49 up gives 0.5 and not
+  // 0.49999999999999994.
+  const places = (String(step).split('.')[1] ?? '').length;
+
+  return (
+    <input
+      className={`${inputBase} ${className} tabular-nums`}
+      type="text"
+      inputMode="decimal"
+      value={typed ?? (Number.isFinite(value) ? String(value) : '')}
+      disabled={disabled}
+      placeholder={placeholder}
+      onBlur={() => setTyped(null)}
+      onKeyDown={(event) => {
+        if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+        event.preventDefault();
+        const next = Number(((Number.isFinite(value) ? value : 0) + (event.key === 'ArrowUp' ? step : -step)).toFixed(places));
+        if (inRange(next)) {
+          setTyped(null);
+          onChange(next);
+        }
+      }}
+      onChange={(event) => {
+        const text = event.target.value;
+        setTyped(text);
+        if (!/^\s*\d*\.?\d+\s*$/.test(text)) return;
+        const next = Number.parseFloat(text);
+        if (inRange(next)) onChange(next);
       }}
     />
   );
@@ -286,22 +410,27 @@ export function OptionalNumberInput({
   onChange,
   min,
   placeholder,
+  className = 'w-full',
+  label,
 }: {
   value: number | undefined;
   onChange: (value: number | undefined) => void;
   min?: number;
   placeholder?: string;
+  className?: string;
+  label?: string;
 }) {
   const [typed, setTyped] = useState<string | null>(null);
 
   return (
     <input
-      className={`${inputClass} tabular-nums`}
+      className={`${inputBase} ${className} tabular-nums`}
       type="number"
       value={typed ?? (value === undefined ? '' : String(value))}
       min={min}
       step={1}
       placeholder={placeholder}
+      aria-label={label}
       onBlur={() => setTyped(null)}
       onChange={(event) => {
         const text = event.target.value;
@@ -329,16 +458,18 @@ export function NumberOrNaInput({
   value,
   onChange,
   placeholder,
+  className = 'w-full',
 }: {
   value: LoadKg | undefined;
   onChange: (value: LoadKg | undefined) => void;
   placeholder?: string;
+  className?: string;
 }) {
   const [typed, setTyped] = useState<string | null>(null);
 
   return (
     <input
-      className={`${inputClass} tabular-nums`}
+      className={`${inputBase} ${className} tabular-nums`}
       type="text"
       inputMode="numeric"
       value={typed ?? (value === undefined ? '' : String(value))}
@@ -364,17 +495,22 @@ export function Select<T extends string>({
   options,
   onChange,
   disabled,
+  className = 'w-full',
+  label,
 }: {
   value: T;
   options: Array<[T, string]>;
   onChange: (value: T) => void;
   disabled?: boolean;
+  className?: string;
+  label?: string;
 }) {
   return (
     <select
-      className={inputClass}
+      className={`${inputBase} ${className}`}
       value={value}
       disabled={disabled}
+      aria-label={label}
       onChange={(event) => onChange(event.target.value as T)}
     >
       {options.map(([key, label]) => (
@@ -730,115 +866,167 @@ export function Disclosure({
         type="button"
         aria-expanded={open}
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-label
-                   text-ink-faint transition-colors hover:bg-ground-soft hover:text-ink-soft"
+        className="-ml-1 flex items-center gap-1 rounded-md px-1 py-0.5 text-left text-label font-medium
+                   text-ink-soft transition-colors hover:bg-ground hover:text-ink"
       >
-        <span className="text-[10px] text-slate-400">{open ? '▼' : '▶'}</span>
+        <Icon name="chevronRight" size={14} className={`transition-transform ${open ? 'rotate-90' : ''}`} />
         {summary}
       </button>
-      {open && <div className="mt-1">{children}</div>}
+      {open && <div className="mt-2">{children}</div>}
     </div>
   );
 }
 
 /**
- * Text dark enough to read on a layer's own pale fill. The drawing's line
- * colour is mixed for a hairline on white, not for a word on a tint.
- */
-function accentInk(accent: LayerStyle): string {
-  return shade(accent.stroke, 0.75);
-}
-
-/**
- * A card. Given a layer's colours it wears them.
- *
- * A stack of a dozen identical white cards makes you read the small print at
- * the top of each one to find out which layer you are editing. Carrying the
- * colour the layer is already drawn in — the header tinted with its fill, the
- * left edge in its line colour — means the card is recognised on the way past
- * rather than read, and the editor and the drawing agree about what is what.
+ * A card, for the screens that are a few separate things side by side — the
+ * company list, its people, its branding. The design form is not one of them:
+ * see Section.
  */
 export function Panel({
   title,
   children,
   actions,
-  accent,
-  /**
-   * Keep the tight padding. A stack of a dozen layer cards is read by
-   * scrolling, and room given to each one is room taken from how many are in
-   * sight at once. The panels there is only one of can afford to breathe.
-   */
-  dense,
 }: {
   title: string;
   children: ReactNode;
   actions?: ReactNode;
-  accent?: LayerStyle;
-  dense?: boolean;
 }) {
   return (
-    <section
-      className="overflow-hidden rounded-card border border-line-soft bg-card shadow-card"
-      style={accent ? { borderLeftWidth: '5px', borderLeftColor: accent.stroke } : undefined}
-    >
-      <header
-        className="flex items-center justify-between gap-2 border-b border-line-soft px-3 py-2"
-        style={accent ? { background: accent.fill, borderBottomColor: accent.stroke } : undefined}
-      >
-        <h2
-          className={
-            accent
-              ? 'text-key font-bold tracking-tight'
-              : 'text-micro font-semibold uppercase tracking-wider text-ink-faint'
-          }
-          style={accent ? { color: accentInk(accent) } : undefined}
-        >
-          {title}
-        </h2>
+    <section className="overflow-hidden rounded-card border border-line bg-card shadow-card">
+      <header className="flex min-h-11 items-center justify-between gap-2 border-b border-line-soft px-4 py-2">
+        <h2 className="text-ui font-semibold text-ink">{title}</h2>
         {actions}
       </header>
-      <div className={dense ? 'p-2.5' : 'p-4'}>{children}</div>
+      <div className="p-4">{children}</div>
     </section>
   );
 }
 
 /**
- * The row a design is actually typed into.
+ * The small drawings on buttons that have no word on them.
  *
- * Most of a layer card is corrections and settings that are right already. One
- * row of it — the size, the count and the material — is filled in on every
- * design there is. Someone entering a dozen designs should not have to find
- * that row again on every card, so it is boxed in the layer's own colour,
- * captioned, and set larger than the settings around it. The type scale comes
- * from `.key-fields` in styles.css rather than from a size prop threaded
- * through every control.
+ * Drawn here rather than typed as ↶ ↑ × — a typed arrow is whatever the font
+ * makes of it, sits on the text's baseline rather than its middle, and comes
+ * out a different size and weight on every machine. These are one stroke
+ * weight, one size and centred, the way the chevron in a select already was.
  */
-export function KeyFields({
-  caption,
-  note,
-  accent,
-  children,
+const ICONS = {
+  undo: (
+    <>
+      <path d="M3 7v6h6" />
+      <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
+    </>
+  ),
+  redo: (
+    <>
+      <path d="M21 7v6h-6" />
+      <path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7" />
+    </>
+  ),
+  plus: <path d="M12 5v14M5 12h14" />,
+  minus: <path d="M5 12h14" />,
+  x: <path d="M18 6 6 18M6 6l12 12" />,
+  check: <path d="M20 6 9 17l-5-5" />,
+  more: (
+    <>
+      <circle cx="5" cy="12" r="1" />
+      <circle cx="12" cy="12" r="1" />
+      <circle cx="19" cy="12" r="1" />
+    </>
+  ),
+  chevronRight: <path d="m9 18 6-6-6-6" />,
+  arrowUp: <path d="M12 19V5M5 12l7-7 7 7" />,
+  arrowDown: <path d="M12 5v14M19 12l-7 7-7-7" />,
+  arrowLeft: <path d="M19 12H5M12 19l-7-7 7-7" />,
+  arrowRight: <path d="M5 12h14M12 5l7 7-7 7" />,
+  trash: (
+    <>
+      <path d="M3 6h18" />
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+    </>
+  ),
+  signOut: (
+    <>
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <path d="m16 17 5-5-5-5" />
+      <path d="M21 12H9" />
+    </>
+  ),
+  help: (
+    <>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+      <path d="M12 17h.01" />
+    </>
+  ),
+} as const;
+
+export type IconName = keyof typeof ICONS;
+
+export function Icon({
+  name,
+  size = 16,
+  className = '',
 }: {
-  caption: string;
-  note?: string;
-  accent?: LayerStyle;
-  children: ReactNode;
+  name: IconName;
+  size?: number;
+  className?: string;
 }) {
   return (
-    <div
-      className="key-fields rounded-card border-2 bg-card p-3 shadow-card"
-      style={{ borderColor: accent?.stroke ?? '#94a3b8' }}
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={`shrink-0 ${className}`}
     >
-      <div className="mb-2 flex items-baseline gap-2">
-        <span
-          className="text-micro font-bold uppercase tracking-wider"
-          style={{ color: accent ? accentInk(accent) : '#475569' }}
-        >
-          {caption}
-        </span>
-        {note && <span className="text-micro font-normal text-ink-faint">{note}</span>}
-      </div>
-      {children}
-    </div>
+      {ICONS[name]}
+    </svg>
+  );
+}
+
+/**
+ * A button that is only a drawing — move, remove, more. Quiet until the
+ * pointer is on it, so a row of them reads as part of the row rather than as
+ * three more things to decide about.
+ */
+export function IconButton({
+  icon,
+  label,
+  onClick,
+  disabled,
+  tone = 'plain',
+  size = 'md',
+}: {
+  icon: IconName;
+  /** What it does, said aloud and on hover. Required: there is no word on it. */
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  tone?: 'plain' | 'danger';
+  size?: 'sm' | 'md';
+}) {
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      disabled={disabled}
+      onClick={onClick}
+      className={
+        'inline-flex shrink-0 items-center justify-center rounded-md text-ink-faint transition-colors ' +
+        'disabled:opacity-30 disabled:hover:bg-transparent ' +
+        (size === 'sm' ? 'h-6 w-6 ' : 'h-7 w-7 ') +
+        (tone === 'danger' ? 'hover:bg-red-50 hover:text-red-600' : 'hover:bg-ground hover:text-ink')
+      }
+    >
+      <Icon name={icon} size={size === 'sm' ? 14 : 16} />
+    </button>
   );
 }

@@ -83,18 +83,18 @@ ${page(`
   <ol>
     <li>Press <strong>New</strong>.</li>
     <li>Name the design. The pallet code is optional — fill it in when the shop gives you one.</li>
-    <li>Set the overall length and width. Leave the height at 0 and it adds up the layers for you.</li>
+    <li>Set the overall length and width. Leave the height empty and it adds up the layers for you.</li>
     <li>
-      Work down the layers. For each one set the length, width, thickness, how
-      many boards and what timber — one row describes the whole layer.
+      Work down the layers table. For each layer set the length, width,
+      thickness, how many and what timber — one row describes the whole layer.
     </li>
     <li>
-      Where one board differs from the rest, open the layer's board list and
-      correct that one. <strong>Add board</strong> and the <strong>×</strong>
+      Where one board differs from the rest, open the layer with the arrow
+      beside its name and correct that one in its board list. <strong>Add board</strong> and the <strong>×</strong>
       to remove one are in there too.
     </li>
     <li>
-      Under <strong>Handling</strong>, tick what the finished pallet may be
+      Under <strong>Handling</strong>, click what the finished pallet may be
       moved with. A hand pallet truck and a forklift are ticked to start with.
       All five print in the corner of the sheet either way — a tick for what may
       be used, a cross for what may not — so untick anything this pallet will
@@ -108,7 +108,7 @@ ${page(`
     You never type a gap. Boards sit flush with both outer edges and the space
     left over is shared equally between them, which is how they are actually
     built. Add a board and every gap narrows; make one wider and the rest adjust.
-    The layer heading shows the gap it worked out.
+    The layer's row shows the gap it worked out, under its name.
   </p>
   <p>
     If the boards will not fit, the tool says so and names the layer instead of
@@ -157,7 +157,7 @@ ${page(`
   </p>
   <ol>
     <li>Add a second <strong>Bottom boards</strong> layer and set its direction the other way.</li>
-    <li>Tick <strong>Same level as the layer above</strong> on it, so the two share a height instead of stacking.</li>
+    <li>Open it with the arrow beside its name and tick <strong>Same level as the layer above</strong>, so the two share a height instead of stacking.</li>
     <li>Press <strong>Fit between the boards on this level</strong> to cut them to the space the first layer leaves.</li>
   </ol>
   <p class="note">
@@ -168,8 +168,8 @@ ${page(`
   <h2>A stringer pallet a fork can enter from the side</h2>
   <p>
     Runners take a fork from the two ends only. To let one in from the sides
-    as well, the runners are notched underneath. On the <strong>Runners</strong>
-    layer, tick <strong>Notched</strong> — every runner gets two — then say how
+    as well, the runners are notched underneath. Open the <strong>Runners</strong>
+    layer and tick <strong>Notched</strong> — every runner gets two — then say how
     long and how deep the notches are and how far in from the ends they start.
     The top corners are rounded to the standard radius on their own. The side
     view draws them and dimensions them for the saw, and the sheet lists the

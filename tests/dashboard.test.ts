@@ -88,6 +88,21 @@ describe('searching', () => {
     expect(visibleSections(sections, '   ', 'name').map((s) => s.client.id)).toEqual(['c1', 'c2']);
   });
 
+  it('keeps a client found by name even when they have no designs yet', () => {
+    // Looking a client up is how a new design for them gets started, and the
+    // card that starts one lives in their section.
+    expect(visibleSections(sections, 'quiet', 'name').map((s) => s.client.id)).toEqual(['c2']);
+  });
+
+  it('brings a client found by name back whole, not narrowed to designs that say it', () => {
+    const named: ClientDesigns = {
+      client: { id: 'c3', name: 'Crate Co', createdAt: '2025-01-01' },
+      designs: [design({ id: 'x', clientId: 'c3', clientName: 'Crate Co', palletName: 'Light base' })],
+    };
+    const result = visibleSections([acme, named], 'crate', 'name');
+    expect(ids(result)).toEqual([['a'], ['x']]);
+  });
+
   it('still orders what it found', () => {
     expect(ids(visibleSections(sections, 'acme', 'recent'))).toEqual([['b', 'a', 'c']]);
   });

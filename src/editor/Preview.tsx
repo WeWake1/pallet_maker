@@ -7,6 +7,7 @@ import type { ViewKind } from '../render/project.js';
 import { renderView } from '../render/views.js';
 import type { Action, Selection } from './state.js';
 import { sameSource } from './state.js';
+import { Icon } from './ui.jsx';
 
 /**
  * A live preview, regenerated from the document on every change.
@@ -262,9 +263,7 @@ function NailControls({
       </button>
 
       <span className="text-micro text-ink-faint">
-        {on
-          ? `click a crossing to step it 0 → 4 and round · ${dots} nails in this view`
-          : `${dots} nails in this view`}
+        {on ? `click a crossing · ${dots} nails` : `${dots} nails`}
       </span>
 
       {changed > 0 && (
@@ -390,18 +389,18 @@ function OrbitControls({
     <div className="flex shrink-0 items-center justify-center gap-3 border-t border-line-soft bg-card px-2.5 py-2">
       <div className="flex items-center gap-1">
         <button type="button" className={arrow} title="Turn left" aria-label="Turn left" onClick={() => onTurn(-STEP, 0)}>
-          ←
+          <Icon name="arrowLeft" size={14} />
         </button>
         <div className="flex flex-col gap-1">
           <button type="button" className={arrow} title="Tip up" aria-label="Tip up" onClick={() => onTurn(0, -STEP)}>
-            ↑
+            <Icon name="arrowUp" size={14} />
           </button>
           <button type="button" className={arrow} title="Tip down" aria-label="Tip down" onClick={() => onTurn(0, STEP)}>
-            ↓
+            <Icon name="arrowDown" size={14} />
           </button>
         </div>
         <button type="button" className={arrow} title="Turn right" aria-label="Turn right" onClick={() => onTurn(STEP, 0)}>
-          →
+          <Icon name="arrowRight" size={14} />
         </button>
       </div>
       <button
@@ -412,7 +411,6 @@ function OrbitControls({
       >
         Reset
       </button>
-      <span className="text-micro text-ink-faint">drag to turn · wheel to zoom</span>
     </div>
   );
 }

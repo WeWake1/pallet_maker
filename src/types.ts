@@ -377,11 +377,6 @@ export interface Pallet {
    * what says how current it is.
    */
   updatedAt: string;
-  /**
-   * Free text printed in the title block beside the date. Whatever the shop or
-   * the client needs it to say — "(old)", a client drawing number, nothing.
-   */
-  note?: string;
 
   /** Ordered top to bottom. */
   layers: Layer[];

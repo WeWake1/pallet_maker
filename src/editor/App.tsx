@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { DEFAULT_BRAND } from '../brand/defaults.js';
 import type { Brand } from '../brand/types.js';
 import { duplicatePallet } from '../duplicate.js';
 import { analysePallet } from '../geometry/layout.js';
 import { dayMonthYear } from '../ids.js';
-import { LAYER_STYLE } from '../render/theme.js';
 import { PalletSchema, parsePallet } from '../schema.js';
 import { downloadName } from '../sheet/filename.js';
 import { handlingCatalogue, handlingIconSvg } from '../sheet/handling.js';
@@ -35,9 +35,8 @@ import type { Draft } from './drafts.js';
 import { Help } from './Help.jsx';
 import { describePath, fieldId, HINTS, pathAnchor, sayIssue } from './hints.js';
 import { canRedo, canUndo, historyReducer, initialHistory } from './history.js';
-import { LayerEditor } from './LayerEditor.jsx';
+import { Layers } from './LayerEditor.jsx';
 import { Preview } from './Preview.jsx';
-import { Wordmark } from './Wordmark.jsx';
 import { shortcutLabel, useShortcuts } from './shortcuts.js';
 import { fingerprint } from '../store/fingerprint.js';
 import { selectedSlot } from './state.js';
@@ -46,20 +45,21 @@ import type { Action } from './state.js';
 import { emptyPallet, newPallet } from './templates.js';
 import {
   Button,
-  Check,
   Field,
   Hint,
+  Icon,
+  IconButton,
   Menu,
   MenuHeading,
   MenuItem,
   NumberInput,
   NumberOrNaInput,
   OptionalNumberInput,
-  Panel,
-  Readout,
-  SectionHeading,
+  Prop,
+  Section,
   Select,
   TextInput,
+  Unit,
   useDismiss,
 } from './ui.jsx';
 
@@ -473,7 +473,8 @@ export function App() {
   if (session.user?.role === 'vendor') {
     return (
       <VendorAdmin
-        userName={session.user.name || session.user.email}
+        userName={session.user.name}
+        userEmail={session.user.email}
         onSignOut={() => {
           void api.signOut().catch(() => undefined).finally(signedOut);
         }}
@@ -544,6 +545,9 @@ export function App() {
         />
       ) : (
         <>
+          {/* The library in and out of a file. Everything else on this screen
+              acts on one design; these two are the whole of it, and are the
+              only copy of it that survives this computer. */}
           <TopBar
             status={folder}
             session={session}
@@ -554,58 +558,35 @@ export function App() {
                 .catch(() => undefined)
                 .finally(signedOut);
             }}
-          />
-          <header className="flex items-center gap-2 border-b border-line bg-card px-4 py-2.5">
-            <h1>
-              <Wordmark />
-            </h1>
-
-            {/* The library in and out of a file. Everything else on this screen
-                acts on one design; these two are the whole of it, and are the
-                only copy of it that survives this computer. */}
-            <div className="ml-auto flex gap-1.5">
-              <Button
-                onClick={() => setHelp(true)}
-                label="Help"
-                title="Help, and what the words mean"
-              >
-                ?
-              </Button>
-              <Button
-                disabled={busy}
-                onClick={() => window.open(api.libraryUrl(), '_blank')}
-                title={
-                  'Download every client and design as one file. Keep it somewhere ' +
-                  'other than this computer — it is the only copy that survives this one.'
-                }
-              >
-                Export library
-              </Button>
-              <Button
-                disabled={busy}
-                onClick={() => libraryFile.current?.click()}
-                title={
-                  'Read a library file back in. Designs already here are left alone ' +
-                  'unless you say otherwise.'
-                }
-              >
-                Import library
-              </Button>
-              <input
-                ref={libraryFile}
-                type="file"
-                accept="application/json,.json"
-                className="hidden"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (file) importLibrary(file);
-                  event.target.value = '';
-                }}
-              />
-            </div>
-          </header>
+          >
+            <Button
+              disabled={busy}
+              onClick={() => window.open(api.libraryUrl(), '_blank')}
+              title="Download every client and design as one file"
+            >
+              Export library
+            </Button>
+            <Button
+              disabled={busy}
+              onClick={() => libraryFile.current?.click()}
+              title="Load a library file. Designs already here are left alone."
+            >
+              Import library
+            </Button>
+            <input
+              ref={libraryFile}
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) importLibrary(file);
+                event.target.value = '';
+              }}
+            />
+            <IconButton icon="help" label="Help, and what the words mean" onClick={() => setHelp(true)} />
+          </TopBar>
           <Dashboard
-            startingSize={`${brand.defaults.newPallet.length} × ${brand.defaults.newPallet.width}`}
             sections={sections}
             drafts={drafts}
             busy={busy}
@@ -702,17 +683,6 @@ function Editor({
     }));
   }, [pallet]);
   const chosen = selectedSlot(pallet, selection);
-  /** A block or a sheet that is selected, said the way the form says it. */
-  const picked = useMemo(() => {
-    if (!selection || selection.source.kind === 'slot') return null;
-    const layer = pallet.layers.find((each) => each.id === selection.layerId);
-    if (!layer) return null;
-    const name = LAYER_KINDS.find(([kind]) => kind === layer.kind)?.[1] ?? layer.kind;
-    return selection.source.kind === 'cell'
-      ? `${name}, block r${selection.source.row + 1} c${selection.source.col + 1}`
-      : name;
-  }, [pallet, selection]);
-
   const dirty = savedDoc !== JSON.stringify(pallet);
   const canStore = missing.length === 0 && errors.length === 0;
 
@@ -1008,10 +978,7 @@ function Editor({
       {recovered && (
         <div className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-3 py-2 text-label text-amber-900">
           <span>
-            Restored what you were working on {draftAge(recovered)}.{' '}
-            {saved
-              ? 'These changes are not in the library until you press Save.'
-              : 'This design has never been saved.'}
+            {saved ? 'Restored unsaved changes' : 'Restored an unsaved design'} · {draftAge(recovered)}
           </span>
           <div className="ml-auto flex gap-1">
             <Button
@@ -1041,7 +1008,10 @@ function Editor({
       */}
       <header className="flex items-center gap-2 border-b border-line bg-card px-3 py-2">
         <Button onClick={onBack} title="Back to the design library">
-          ← Designs
+          <span className="flex items-center gap-1.5">
+            <Icon name="arrowLeft" size={14} />
+            Designs
+          </span>
         </Button>
 
         <div className="ml-1 mr-2 min-w-0">
@@ -1053,29 +1023,19 @@ function Editor({
 
         {/* The keyboard is how these are actually used; the buttons are here so
             that the shortcut is written down somewhere the hand can find it. */}
-        <div className="flex overflow-hidden rounded-md border border-line shadow-xs">
-          <button
-            type="button"
+        <div className="flex items-center gap-0.5">
+          <IconButton
+            icon="undo"
+            label={`Undo (${shortcutLabel('mod+z')})`}
             onClick={() => dispatch({ type: 'undo' })}
             disabled={!canUndo(history)}
-            aria-label="Undo"
-            title={`Undo (${shortcutLabel('mod+z')})`}
-            className="border-r border-line bg-card px-2.5 py-1 text-ui text-slate-700
-                       transition-colors hover:bg-ground-soft disabled:opacity-40 disabled:hover:bg-card"
-          >
-            ↶
-          </button>
-          <button
-            type="button"
+          />
+          <IconButton
+            icon="redo"
+            label={`Redo (${shortcutLabel('mod+shift+z')})`}
             onClick={() => dispatch({ type: 'redo' })}
             disabled={!canRedo(history)}
-            aria-label="Redo"
-            title={`Redo (${shortcutLabel('mod+shift+z')})`}
-            className="bg-card px-2.5 py-1 text-ui text-slate-700 transition-colors
-                       hover:bg-ground-soft disabled:opacity-40 disabled:hover:bg-card"
-          >
-            ↷
-          </button>
+          />
         </div>
 
         <input
@@ -1091,19 +1051,14 @@ function Editor({
         />
 
         <div className="ml-auto flex items-center gap-2">
-          {/* Unsaved work is kept in this browser as it is typed, so say so
-              rather than only warning — the warning was the whole message
-              before, and it is not the frightening half that is true. */}
+          {/* Unsaved work is kept in this browser as it is typed; the word is
+              enough here, and hovering says where it is kept. */}
           <div
             className="mr-1 text-right leading-tight"
             title={unsaved ? 'Kept in this browser until you press Save' : undefined}
           >
             <div className={`text-micro ${dirty || !stored ? 'text-amber-700' : 'text-ink-faint'}`}>
-              {stored
-                ? dirty
-                  ? 'unsaved changes · kept in this browser'
-                  : `saved ${dayMonthYear(pallet.updatedAt)}`
-                : 'not saved yet · kept in this browser'}
+              {stored && !dirty ? `saved ${dayMonthYear(pallet.updatedAt)}` : 'unsaved'}
             </div>
             <div className="text-micro tabular-nums text-ink-faint">
               {layout.pieces.length} pieces · {layout.overallLength} × {layout.overallWidth} ×{' '}
@@ -1131,7 +1086,7 @@ function Editor({
                     openSheet();
                   }}
                   disabled={errors.length > 0}
-                  note="The same sheet in a browser tab, without saving"
+                  note="In a browser tab, without saving"
                 >
                   Sheet preview
                 </MenuItem>
@@ -1141,7 +1096,7 @@ function Editor({
                     void openDxf();
                   }}
                   disabled={busy || !canStore}
-                  note="The plan as a CAD file, for AutoCAD and the like"
+                  note="CAD file, for AutoCAD"
                 >
                   DXF
                 </MenuItem>
@@ -1151,7 +1106,7 @@ function Editor({
                     void openSvg();
                   }}
                   disabled={busy || !canStore}
-                  note="The whole sheet as vector, for Canva, Illustrator or Inkscape"
+                  note="Vector, for Canva or Illustrator"
                 >
                   SVG
                 </MenuItem>
@@ -1160,7 +1115,7 @@ function Editor({
                     close();
                     exportJson();
                   }}
-                  note="The design itself, to send to another copy of this program"
+                  note="The design as a .json file"
                 >
                   Export as file
                 </MenuItem>
@@ -1168,7 +1123,7 @@ function Editor({
             )}
           </Menu>
 
-          <Menu label="⋯" title="More to do with this design">
+          <Menu label={<Icon name="more" size={16} />} title="More to do with this design">
             {(close) => (
               <>
                 <MenuItem
@@ -1177,7 +1132,6 @@ function Editor({
                     void copy();
                   }}
                   disabled={busy || !canStore}
-                  note="A copy, as a new design. This is how an old design is kept before reworking it."
                 >
                   Duplicate
                 </MenuItem>
@@ -1186,7 +1140,7 @@ function Editor({
                     close();
                     fileInput.current?.click();
                   }}
-                  note="Read a design file in over this one"
+                  note="Replaces this design"
                 >
                   Import from file
                 </MenuItem>
@@ -1206,7 +1160,6 @@ function Editor({
                       adopt(emptyPallet({ id: pallet.clientId, name: pallet.clientName }, brand.defaults));
                     }
                   }}
-                  note="No layers at all, to build up from nothing"
                 >
                   Start from scratch
                 </MenuItem>
@@ -1234,7 +1187,7 @@ function Editor({
                     close();
                     if (window.confirm('Delete this design? This cannot be undone.')) void remove();
                   }}
-                  note="Gone from the library. This cannot be undone."
+                  note="Cannot be undone"
                 >
                   Delete this design
                 </MenuItem>
@@ -1242,9 +1195,7 @@ function Editor({
             )}
           </Menu>
 
-          <Button onClick={() => setHelp(true)} label="Help" title="Help, and what the words mean">
-            ?
-          </Button>
+          <IconButton icon="help" label="Help, and what the words mean" onClick={() => setHelp(true)} />
 
           <Button
             tone="primary"
@@ -1260,297 +1211,270 @@ function Editor({
       {help && <Help onClose={() => setHelp(false)} />}
 
       <div className="flex min-h-0 flex-1">
-        <div className="min-w-0 flex-1 space-y-2.5 overflow-y-auto p-2.5">
-          <Panel title="Design">
-            {/*
-              Four named groups rather than five identical grids. The fields are
-              the same fields; what changes is that there are now four places to
-              look instead of seventeen boxes at one weight.
-            */}
-            <SectionHeading>This design</SectionHeading>
-            <div className="grid grid-cols-4 gap-3">
-              {/* Optional: a design is drawn and printed long before the shop
-                  has a code to give it. */}
-              <Field
-                label="Pallet code (optional)"
-                id={fieldId('palletCode')}
-                hint={HINTS.palletCode}
-              >
-                <TextInput
-                  value={pallet.palletCode}
-                  onChange={(palletCode) => patch({ palletCode })}
-                  placeholder={brand.defaults.palletCodePlaceholder}
-                />
-              </Field>
-              {/* The name is a copy of the client's, kept on the document so a
-                  sheet can be printed from it alone. Both move together. */}
-              <Field label="Client" id={fieldId('clientId')}>
-                <Select
-                  value={pallet.clientId}
-                  options={clients.map((client) => [client.id, client.name] as [string, string])}
-                  onChange={(clientId) => {
-                    const client = clients.find((candidate) => candidate.id === clientId);
-                    if (client) patch({ clientId: client.id, clientName: client.name });
-                  }}
-                />
-              </Field>
-              <Field label="Client part no" id={fieldId('clientPartNo')} hint={HINTS.clientPartNo}>
-                <TextInput
-                  value={pallet.clientPartNo ?? ''}
-                  onChange={(value) => patch({ clientPartNo: value === '' ? undefined : value })}
-                />
-              </Field>
-              {/* Optional as well: unnamed, the sheet heads itself with the
-                  overall size and the dashboard reads "Untitled". */}
-              <Field label="Pallet name (optional)" id={fieldId('palletName')}>
-                <TextInput
+        <div className="min-w-0 flex-1 overflow-y-auto bg-ground px-4 py-4" data-form-scroll>
+          {/*
+            One sheet, read top to bottom in the order a design is thought
+            about: what it is called and whose it is, how big, what kind of
+            pallet, then the timber layer by layer. It used to be a stack of
+            boxed cards with every field the width of its column; the parts
+            are now ruled off one sheet, and a field is as wide as its answer.
+          */}
+          <div className="mx-auto max-w-[60rem] rounded-card border border-line bg-card shadow-card">
+            <div className="px-6 pb-5 pt-5">
+              {/* Optional: unnamed, the sheet heads itself with the overall
+                  size and the dashboard reads "Untitled". */}
+              <div id={fieldId('palletName')}>
+                <input
+                  aria-label="Pallet name"
                   value={pallet.palletName}
-                  onChange={(palletName) => patch({ palletName })}
-                  placeholder={`${brand.defaults.newPallet.length} x ${brand.defaults.newPallet.width}`}
-                />
-              </Field>
-            </div>
-
-            <div className="mt-5">
-              <SectionHeading note="millimetres, always">Overall size</SectionHeading>
-              <div className="grid grid-cols-4 gap-3">
-                <Field label="Length" id={fieldId('overallLength')}>
-                  <NumberInput value={pallet.overallLength} min={1} onChange={(overallLength) => patch({ overallLength })} />
-                </Field>
-                <Field label="Width" id={fieldId('overallWidth')}>
-                  <NumberInput value={pallet.overallWidth} min={1} onChange={(overallWidth) => patch({ overallWidth })} />
-                </Field>
-                <Field
-                  label="Height"
-                  id={fieldId('overallHeight')}
-                  hint={HINTS.derivedHeight}
-                >
-                  <NumberInput
-                    value={pallet.overallHeight}
-                    min={0}
-                    placeholder="0 — use the stack"
-                    onChange={(overallHeight) => patch({ overallHeight })}
-                  />
-                </Field>
-                <Readout
-                  label="Stack"
-                  value={`${layout.derivedHeight} mm`}
-                  hint="What the layers themselves add up to. With the height left at 0, this is the height the sheet prints."
+                  placeholder={`${pallet.overallLength} x ${pallet.overallWidth}`}
+                  onChange={(event) => patch({ palletName: event.target.value })}
+                  className="-mx-2 w-[calc(100%+1rem)] rounded-md border border-transparent bg-transparent px-2 py-1
+                             text-[1.5rem] font-semibold leading-tight tracking-tight text-ink transition-colors
+                             placeholder:text-slate-300 hover:border-line focus:border-accent focus:outline-none
+                             focus:ring-2 focus:ring-accent-ring/30"
                 />
               </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {/* The name is a copy of the client's, kept on the document so
+                    a sheet can be printed from it alone. Both move together. */}
+                <Labelled label="Client" id={fieldId('clientId')}>
+                  <select
+                    className={`${bare} max-w-64`}
+                    value={pallet.clientId}
+                    onChange={(event) => {
+                      const client = clients.find((candidate) => candidate.id === event.target.value);
+                      if (client) patch({ clientId: client.id, clientName: client.name });
+                    }}
+                  >
+                    {clients.map((client) => (
+                      <option key={client.id} value={client.id}>
+                        {client.name}
+                      </option>
+                    ))}
+                  </select>
+                </Labelled>
+                {/* Optional: a design is drawn and printed long before the shop
+                    has a code to give it. */}
+                <Labelled label="Code" hint={HINTS.palletCode} id={fieldId('palletCode')}>
+                  <input
+                    className={`${bare} w-32`}
+                    value={pallet.palletCode}
+                    placeholder={brand.defaults.palletCodePlaceholder}
+                    onChange={(event) => patch({ palletCode: event.target.value })}
+                  />
+                </Labelled>
+                <Labelled label="Client part no" hint={HINTS.clientPartNo} id={fieldId('clientPartNo')}>
+                  <input
+                    className={`${bare} w-32`}
+                    value={pallet.clientPartNo ?? ''}
+                    onChange={(event) =>
+                      patch({ clientPartNo: event.target.value === '' ? undefined : event.target.value })
+                    }
+                  />
+                </Labelled>
+              </div>
             </div>
+
+            <Section title="Size" note="mm">
+              <div className="flex flex-wrap items-end gap-x-2 gap-y-3">
+                <Field label="Length" id={fieldId('overallLength')}>
+                  <NumberInput
+                    className="w-24 text-key"
+                    value={pallet.overallLength}
+                    min={1}
+                    onChange={(overallLength) => patch({ overallLength })}
+                  />
+                </Field>
+                <span className="pb-2 text-ink-faint">×</span>
+                <Field label="Width" id={fieldId('overallWidth')}>
+                  <NumberInput
+                    className="w-24 text-key"
+                    value={pallet.overallWidth}
+                    min={1}
+                    onChange={(overallWidth) => patch({ overallWidth })}
+                  />
+                </Field>
+                <span className="pb-2 text-ink-faint">×</span>
+                {/* Left empty, the height is what the layers add up to — shown
+                    greyed in the field rather than in a box of its own. */}
+                <Field label="Height" id={fieldId('overallHeight')} hint={HINTS.derivedHeight}>
+                  <OptionalNumberInput
+                    className="w-24 text-key"
+                    value={pallet.overallHeight > 0 ? pallet.overallHeight : undefined}
+                    min={0}
+                    placeholder={String(layout.derivedHeight)}
+                    onChange={(overallHeight) => patch({ overallHeight: overallHeight ?? 0 })}
+                  />
+                </Field>
+                <span className="pb-2 pl-1 text-label text-ink-faint">
+                  {pallet.overallHeight === 0 ? (
+                    'height from the layers'
+                  ) : pallet.overallHeight !== layout.derivedHeight ? (
+                    <span className="text-amber-700">layers add up to {layout.derivedHeight}</span>
+                  ) : null}
+                </span>
+              </div>
+            </Section>
 
             {/* Every attribute below is allowed not to have an answer, and the
                 two ways of not having one mean different things on the sheet.
                 See NOT_APPLICABLE in types.ts. */}
-            <div className="mt-5">
-              <SectionHeading>Specification</SectionHeading>
-              <div className="grid grid-cols-4 gap-3">
-              <Field label="Type" id={fieldId('palletType')} hint={HINTS.palletType}>
-                <Select
-                  value={pallet.palletType}
-                  options={[
-                    BLANK,
-                    ['block_4way', 'Block, 4-way'],
-                    ['stringer_2way', 'Stringer, 2-way'],
-                    ['plywood_type1', 'Plywood type 1, sheet on blocks'],
-                    ['plywood_type2', 'Plywood type 2, sheet on centre boards'],
-                    ['plywood_type3', 'Plywood type 3, sheet over a boarded deck'],
-                    ['wing', 'Wing'],
-                    ['other', 'Other'],
-                    NOT_ON_SHEET,
-                  ]}
-                  onChange={(palletType) => patch({ palletType })}
-                />
-              </Field>
-              <Field label="Deck" id={fieldId('deckType')} hint={HINTS.deckType}>
-                <Select
-                  value={pallet.deckType}
-                  options={[
-                    BLANK,
-                    ['single_face', 'Single face'],
-                    ['double_face_reversible', 'Double face, reversible'],
-                    ['double_face_non_reversible', 'Double face, non-reversible'],
-                    NOT_ON_SHEET,
-                  ]}
-                  onChange={(deckType) => patch({ deckType })}
-                />
-              </Field>
-              <Field label="Entry" id={fieldId('entry')} hint={HINTS.entry}>
-                <Select
-                  value={pallet.entry}
-                  options={[
-                    BLANK,
-                    ['2_way', '2-way'],
-                    ['4_way', '4-way'],
-                    ['partial_4way', 'Partial 4-way'],
-                    NOT_ON_SHEET,
-                  ]}
-                  onChange={(entry) => patch({ entry })}
-                />
-              </Field>
-              <Field label="Species" id={fieldId('species')} hint={HINTS.species}>
-                <TextInput
-                  value={pallet.species}
-                  placeholder={brand.defaults.species}
-                  onChange={(species) => patch({ species })}
-                />
-              </Field>
-              <Field label="Planing" id={fieldId('planing')} hint={HINTS.planing}>
-                <Select
-                  value={pallet.planing}
-                  options={[
-                    BLANK,
-                    ['none', 'None'],
-                    ['1_side', '1 side'],
-                    ['2_side', '2 sides'],
-                    ['4_side', '4 sides'],
-                    NOT_ON_SHEET,
-                  ]}
-                  onChange={(planing) => patch({ planing })}
-                />
-              </Field>
-              <Field
-                label="Component tolerance"
-                id={fieldId('componentTolerance')}
-                hint={HINTS.componentTolerance}
-              >
-                <TextInput
-                  value={pallet.componentTolerance}
-                  placeholder={DEFAULT_COMPONENT_TOLERANCE}
-                  onChange={(componentTolerance) => patch({ componentTolerance })}
-                />
-              </Field>
-              <Field
-                label="Total pallet tolerance"
-                id={fieldId('palletTolerance')}
-                hint={HINTS.palletTolerance}
-              >
-                <TextInput
-                  value={pallet.palletTolerance}
-                  placeholder={DEFAULT_PALLET_TOLERANCE}
-                  onChange={(palletTolerance) => patch({ palletTolerance })}
-                />
-              </Field>
+            <Section title="Specification">
+              <div className="grid grid-cols-1 gap-x-10 gap-y-2 lg:grid-cols-2">
+                <Prop label="Type" id={fieldId('palletType')} hint={HINTS.palletType}>
+                  <Select
+                    className="w-full max-w-72"
+                    value={pallet.palletType}
+                    options={[
+                      BLANK,
+                      ['block_4way', 'Block, 4-way'],
+                      ['stringer_2way', 'Stringer, 2-way'],
+                      ['plywood_type1', 'Plywood type 1, sheet on blocks'],
+                      ['plywood_type2', 'Plywood type 2, sheet on centre boards'],
+                      ['plywood_type3', 'Plywood type 3, sheet over a boarded deck'],
+                      ['wing', 'Wing'],
+                      ['other', 'Other'],
+                      NOT_ON_SHEET,
+                    ]}
+                    onChange={(palletType) => patch({ palletType })}
+                  />
+                </Prop>
+                <Prop label="Deck" id={fieldId('deckType')} hint={HINTS.deckType}>
+                  <Select
+                    className="w-full max-w-72"
+                    value={pallet.deckType}
+                    options={[
+                      BLANK,
+                      ['single_face', 'Single face'],
+                      ['double_face_reversible', 'Double face, reversible'],
+                      ['double_face_non_reversible', 'Double face, non-reversible'],
+                      NOT_ON_SHEET,
+                    ]}
+                    onChange={(deckType) => patch({ deckType })}
+                  />
+                </Prop>
+                <Prop label="Entry" id={fieldId('entry')} hint={HINTS.entry}>
+                  <Select
+                    className="w-full max-w-72"
+                    value={pallet.entry}
+                    options={[
+                      BLANK,
+                      ['2_way', '2-way'],
+                      ['4_way', '4-way'],
+                      ['partial_4way', 'Partial 4-way'],
+                      NOT_ON_SHEET,
+                    ]}
+                    onChange={(entry) => patch({ entry })}
+                  />
+                </Prop>
+                <Prop label="Planing" id={fieldId('planing')} hint={HINTS.planing}>
+                  <Select
+                    className="w-full max-w-72"
+                    value={pallet.planing}
+                    options={[
+                      BLANK,
+                      ['none', 'None'],
+                      ['1_side', '1 side'],
+                      ['2_side', '2 sides'],
+                      ['4_side', '4 sides'],
+                      NOT_ON_SHEET,
+                    ]}
+                    onChange={(planing) => patch({ planing })}
+                  />
+                </Prop>
+                <Prop label="Species" id={fieldId('species')} hint={HINTS.species}>
+                  <TextInput
+                    className="w-40"
+                    value={pallet.species}
+                    placeholder={brand.defaults.species}
+                    onChange={(species) => patch({ species })}
+                  />
+                </Prop>
+                <Prop label="Tolerance" group id={fieldId('componentTolerance')} hint={HINTS.componentTolerance}>
+                  <label className="flex items-center gap-2">
+                    <span className="text-label text-ink-faint">part</span>
+                    <TextInput
+                      className="w-24"
+                      label="Component tolerance"
+                      value={pallet.componentTolerance}
+                      placeholder={DEFAULT_COMPONENT_TOLERANCE}
+                      onChange={(componentTolerance) => patch({ componentTolerance })}
+                    />
+                  </label>
+                  <label id={fieldId('palletTolerance')} className="flex items-center gap-2">
+                    <span className="pl-1 text-label text-ink-faint">pallet</span>
+                    <TextInput
+                      className="w-24"
+                      label="Total pallet tolerance"
+                      value={pallet.palletTolerance}
+                      placeholder={DEFAULT_PALLET_TOLERANCE}
+                      onChange={(palletTolerance) => patch({ palletTolerance })}
+                    />
+                  </label>
+                </Prop>
               </div>
-            </div>
+            </Section>
 
             <Handling pallet={pallet} patch={patch} />
 
-            <div className="mt-5">
-              <SectionHeading>Load and notes</SectionHeading>
-              <div className="grid grid-cols-4 gap-3">
-                <Field label="Static load (kg)" id={fieldId('staticLoadKg')} hint={HINTS.staticLoad}>
-                  <NumberOrNaInput
-                    value={pallet.staticLoadKg}
-                    placeholder="kg"
-                    onChange={(staticLoadKg) => patch({ staticLoadKg })}
-                  />
-                </Field>
-                <Field
-                  label="Dynamic load (kg)"
-                  id={fieldId('dynamicLoadKg')}
-                  hint={HINTS.dynamicLoad}
-                >
-                  <NumberOrNaInput
-                    value={pallet.dynamicLoadKg}
-                    placeholder="kg"
-                    onChange={(dynamicLoadKg) => patch({ dynamicLoadKg })}
-                  />
-                </Field>
-                {/* Printed in the title block under the date. Free text: a client
-                    drawing number, "(old)", or nothing at all. */}
-                <Field label="Sheet note" id={fieldId('note')} hint={HINTS.sheetNote}>
-                  <TextInput
-                    value={pallet.note ?? ''}
-                    placeholder="printed beside the date"
-                    onChange={(value) => patch({ note: value === '' ? undefined : value })}
-                  />
-                </Field>
-                <Field label="Notes" id={fieldId('notes')}>
-                  <TextInput value={pallet.notes ?? ''} onChange={(value) => patch({ notes: value === '' ? undefined : value })} />
-                </Field>
-              </div>
-
-              <p className="mt-3 rounded-md bg-ground-soft px-3 py-2 text-micro text-ink-soft">
-                Left blank, an attribute prints as “—” on the sheet — still asked, not yet answered.
-                Typed as <code className="rounded bg-slate-200 px-1">na</code>, or picked as{' '}
-                <em>not applicable</em> from a list, the whole line comes off the sheet.
-              </p>
-            </div>
-          </Panel>
-
-          {pallet.layers.map((layer, index) => (
-            <LayerEditor
-              key={layer.id}
-              layer={layer}
-              layout={layout}
-              computed={layout.layers.find((computed) => computed.layerId === layer.id)}
-              first={index === 0}
-              selection={selection}
-              dispatch={dispatch}
-            />
-          ))}
-
-          {/* Named so the problem list has somewhere to send a design that has
-              no layers yet — the answer to "needs at least one" is here. */}
-          <div id={fieldId('layers')}>
-          <Panel
-            title="Add layer"
-            actions={
-              <div className="flex flex-wrap gap-1">
-                {/* The swatch is the colour the layer will be drawn in, and the
-                    colour its card will wear once it is there. */}
-                {LAYER_KINDS.map(([kind, label]) => (
-                  <Button key={kind} onClick={() => dispatch({ type: 'addLayer', kind })}>
-                    <span
-                      className="mr-1.5 inline-block h-2.5 w-2.5 rounded-sm align-middle"
-                      style={{
-                        background: LAYER_STYLE[kind].fill,
-                        boxShadow: `inset 0 0 0 1px ${LAYER_STYLE[kind].stroke}`,
-                      }}
+            <Section title="Load and notes">
+              <div className="grid grid-cols-1 gap-x-10 gap-y-2 lg:grid-cols-2">
+                <Prop label="Static load" id={fieldId('staticLoadKg')} hint={HINTS.staticLoad}>
+                  <Unit unit="kg">
+                    <NumberOrNaInput
+                      className="w-28 pr-8"
+                      value={pallet.staticLoadKg}
+                      onChange={(staticLoadKg) => patch({ staticLoadKg })}
                     />
-                    {label}
-                  </Button>
-                ))}
+                  </Unit>
+                </Prop>
+                <Prop label="Dynamic load" id={fieldId('dynamicLoadKg')} hint={HINTS.dynamicLoad}>
+                  <Unit unit="kg">
+                    <NumberOrNaInput
+                      className="w-28 pr-8"
+                      value={pallet.dynamicLoadKg}
+                      onChange={(dynamicLoadKg) => patch({ dynamicLoadKg })}
+                    />
+                  </Unit>
+                </Prop>
+                {/* The whole width: it is the one free-text line on the sheet. */}
+                <div className="lg:col-span-2">
+                  <Prop label="Notes" id={fieldId('notes')}>
+                    <TextInput
+                      value={pallet.notes ?? ''}
+                      onChange={(value) => patch({ notes: value === '' ? undefined : value })}
+                    />
+                  </Prop>
+                </div>
               </div>
-            }
-          >
-            <p className="text-label leading-relaxed text-ink-faint">
-              Layers are ordered top to bottom. A new layer goes underneath the rest. A deck
-              whose boards do not all run the same way is built as one layer per direction,
-              each marked <em>same level as the layer above</em>.
-            </p>
-          </Panel>
-          </div>
 
-          <Nails pallet={pallet} dispatch={dispatch} nailType={brand.defaults.nailType} />
+              <p className="mt-4 text-label text-ink-faint">
+                Blank prints “—”. Type <code className="rounded bg-ground px-1">na</code>, or pick
+                n/a, to leave the line off the sheet.
+              </p>
+            </Section>
+
+            <Layers layers={pallet.layers} layout={layout} selection={selection} dispatch={dispatch} />
+
+            <Nails pallet={pallet} dispatch={dispatch} nailType={brand.defaults.nailType} />
+          </div>
         </div>
 
         <div className="flex w-[36%] min-w-0 shrink-0 flex-col border-l border-line bg-card">
           <Preview layout={layout} selection={selection} dispatch={dispatch} />
 
-          <div className="border-t border-line-soft p-3">
-            {chosen ? (
+          {/* Only there while a board is picked: a board is the one thing
+              under the drawing that can be nudged. */}
+          {chosen && (
+            <div className="border-t border-line-soft p-3">
               <NudgeControl
                 slotLabel={`${LAYER_KINDS.find(([kind]) => kind === chosen.layer.kind)?.[1] ?? chosen.layer.kind}, board ${chosen.index + 1}`}
                 value={chosen.slot.nudgeMm}
                 dispatch={dispatch}
               />
-            ) : picked ? (
-              // A block or a sheet: nothing to nudge, but the click should
-              // still be seen to have landed somewhere.
-              <p className="text-label leading-relaxed text-ink-soft">
-                <span className="font-medium text-ink">{picked}</span> selected — its sizes are
-                lit in the form. Esc lets it go.
-              </p>
-            ) : (
-              <p className="text-label leading-relaxed text-ink-faint">
-                Click a board to select it. Selection only — boards are never dragged; the arrow
-                keys nudge the selected one, Shift by ten, Delete removes it, Esc lets it go.
-              </p>
-            )}
-          </div>
+            </div>
+          )}
 
           <Problems missing={missing} errors={errors} warnings={warnings} />
         </div>
@@ -1584,33 +1508,79 @@ function Handling({
   };
 
   return (
-    <div className="mt-5" id={fieldId('handling')}>
-      <SectionHeading note="printed in the corner of the sheet, ticked and crossed">
-        Handling
-      </SectionHeading>
-      <div className="flex flex-wrap gap-x-5 gap-y-2">
-        {handlingCatalogue().map(({ method, label }) => (
-          <Check
-            key={method}
-            checked={pallet.handling.includes(method)}
-            onChange={(on) => toggle(method, on)}
-            label={label}
-            strikeWhenOff
-            // The sheet's own icon, taking its colour from the label around it,
-            // so the row on screen is the row on paper.
-            icon={
+    <Section title="Handling" id={fieldId('handling')}>
+      {/* A tick or a cross each, as the sheet prints them: what the pallet
+          may not be lifted with is said as plainly as what it may. */}
+      <div className="flex flex-wrap gap-2">
+        {handlingCatalogue().map(({ method, label }) => {
+          const on = pallet.handling.includes(method);
+          return (
+            <button
+              key={method}
+              type="button"
+              aria-pressed={on}
+              onClick={() => toggle(method, !on)}
+              title={on ? `${label}: allowed — click to rule it out` : `${label}: ruled out — click to allow it`}
+              className={
+                'flex items-center gap-2 rounded-full border py-1 pl-2.5 pr-2 text-ui transition-colors ' +
+                (on
+                  ? 'border-emerald-300 bg-emerald-50 text-emerald-950 hover:bg-emerald-100'
+                  : 'border-line bg-card text-ink-faint hover:border-slate-400 hover:text-ink-soft')
+              }
+            >
+              {/* The sheet's own icon, taking its colour from the label around
+                  it, so the row on screen is the row on paper. */}
               <span
                 className="inline-block h-5 w-5 shrink-0"
                 dangerouslySetInnerHTML={{ __html: handlingIconSvg(method, 'currentColor', '100%') }}
               />
-            }
-          />
-        ))}
+              {label}
+              <Icon
+                name={on ? 'check' : 'x'}
+                size={14}
+                className={on ? 'text-emerald-600' : 'text-slate-400'}
+              />
+            </button>
+          );
+        })}
       </div>
-      <p className="mt-2 text-micro text-ink-faint">{HINTS.handling}</p>
-    </div>
+    </Section>
   );
 }
+
+/**
+ * A field with its name inside the same box, in front of it — for the short
+ * line of facts under the design's name, where a caption over each one would
+ * take a second line to say three words.
+ */
+function Labelled({
+  label,
+  hint,
+  id,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  id?: string;
+  children: ReactNode;
+}) {
+  return (
+    <label
+      id={id}
+      className="flex h-8 items-stretch overflow-hidden rounded-md border border-line bg-card transition-colors
+                 focus-within:border-accent focus-within:ring-2 focus-within:ring-accent-ring/30 hover:border-slate-400"
+    >
+      <span className="flex items-center gap-1 border-r border-line-soft bg-ground-soft px-2 text-label text-ink-soft">
+        {label}
+        {hint && <Hint text={hint} />}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+/** A field inside Labelled: the box is Labelled's, so it has none of its own. */
+const bare = 'min-w-0 bg-transparent px-2 text-ui text-ink placeholder:text-slate-400 focus:outline-none';
 
 /** What is still to be filled in, and what does not add up. */
 interface Missing {
@@ -1788,6 +1758,14 @@ function NudgeControl({
   );
 }
 
+const NAIL_COLUMNS =
+  'grid grid-cols-[minmax(10rem,1fr)_10rem_6rem_5rem_1.75rem] items-center gap-x-2';
+
+/**
+ * The nail schedule printed on the sheet: typed, not worked out. Where the
+ * nails go on the drawing is a separate thing, set by clicking crossings in
+ * the top and bottom views.
+ */
 function Nails({
   pallet,
   dispatch,
@@ -1799,81 +1777,69 @@ function Nails({
   nailType: string;
 }) {
   return (
-    <Panel
+    <Section
       title="Nails"
-      actions={<Button onClick={() => dispatch({ type: 'addNail', nailType })}>Add</Button>}
+      actions={
+        <Button onClick={() => dispatch({ type: 'addNail', nailType })}>
+          <span className="flex items-center gap-1.5">
+            <Icon name="plus" size={14} />
+            Add row
+          </span>
+        </Button>
+      }
     >
       {/* No schedule until one is typed: an empty table is a row of headings
           standing over nothing, and a pallet with no schedule prints none. */}
       {pallet.nails.length > 0 && (
-        <table className="w-full text-ui">
-          <thead>
-            <tr className="text-micro uppercase tracking-wide text-slate-400">
-              <th className="text-left font-medium">Joint</th>
-              <th className="w-32 text-left font-medium">Type</th>
-              <th className="w-20 text-left font-medium">Size</th>
-              <th className="w-20 text-left font-medium">Qty</th>
-              <th className="w-8" />
-            </tr>
-          </thead>
-          <tbody>
+        <div>
+          <div className={`${NAIL_COLUMNS} pb-1.5 text-label text-ink-faint`}>
+            <span>Joint</span>
+            <span>Type</span>
+            <span>Size</span>
+            <span>Qty</span>
+            <span />
+          </div>
+          <div className="space-y-1.5">
             {pallet.nails.map((nail, index) => (
-              <tr key={index}>
-                <td className="pr-1">
-                  <TextInput
-                    value={nail.label}
-                    placeholder="top board to centre board"
-                    onChange={(label) => dispatch({ type: 'patchNail', index, patch: { label } })}
-                  />
-                </td>
-                <td className="pr-1">
-                  <TextInput
-                    value={nail.type}
-                    onChange={(type) => dispatch({ type: 'patchNail', index, patch: { type } })}
-                  />
-                </td>
-                <td className="pr-1">
+              <div key={index} className={NAIL_COLUMNS}>
+                <TextInput
+                  label={`Nail row ${index + 1}: joint`}
+                  value={nail.label}
+                  placeholder="top board to centre board"
+                  onChange={(label) => dispatch({ type: 'patchNail', index, patch: { label } })}
+                />
+                <TextInput
+                  label={`Nail row ${index + 1}: type`}
+                  value={nail.type}
+                  onChange={(type) => dispatch({ type: 'patchNail', index, patch: { type } })}
+                />
+                <Unit unit="mm">
                   <OptionalNumberInput
+                    label={`Nail row ${index + 1}: size`}
+                    className="w-full pr-9"
                     value={nail.sizeMm}
                     min={1}
-                    placeholder="mm"
                     onChange={(sizeMm) => dispatch({ type: 'patchNail', index, patch: { sizeMm } })}
                   />
-                </td>
-                <td className="pr-1">
-                  <OptionalNumberInput
-                    value={nail.count}
-                    min={0}
-                    placeholder="qty"
-                    onChange={(count) => dispatch({ type: 'patchNail', index, patch: { count } })}
-                  />
-                </td>
-                <td>
-                  <Button
-                    size="sm"
-                    tone="danger"
-                    label={`Remove nail row ${index + 1}`}
-                    onClick={() => dispatch({ type: 'removeNail', index })}
-                  >
-                    ×
-                  </Button>
-                </td>
-              </tr>
+                </Unit>
+                <OptionalNumberInput
+                  label={`Nail row ${index + 1}: quantity`}
+                  value={nail.count}
+                  min={0}
+                  onChange={(count) => dispatch({ type: 'patchNail', index, patch: { count } })}
+                />
+                <IconButton
+                  icon="x"
+                  size="sm"
+                  tone="danger"
+                  label={`Remove nail row ${index + 1}`}
+                  onClick={() => dispatch({ type: 'removeNail', index })}
+                />
+              </div>
             ))}
-          </tbody>
-        </table>
+          </div>
+        </div>
       )}
-      <p className="mt-3 text-label leading-relaxed text-ink-faint">
-        The schedule printed on the sheet. Typed as you work it out; nothing
-        here is derived, and nothing here moves a dot on the drawing. With no rows added, the sheet
-        carries no nail table at all.
-      </p>
-      <p className="mt-1.5 text-label leading-relaxed text-ink-faint">
-        Where the nails <em>go</em> is set on the drawing instead. Every crossing gets two on a
-        diagonal, and the four corners of the top face get three. To change one, open the top or
-        bottom view, turn on <em>Place nails</em> and click the crossing.
-      </p>
-    </Panel>
+    </Section>
   );
 }
-

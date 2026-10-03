@@ -103,23 +103,29 @@ select:disabled {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23cbd5e1' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E");
 }
 
-/* The boxed row on a layer card — see KeyFields in ui.tsx. It is the row that
-   gets typed into on every design, so its fields are a size up from the
-   settings around them. Here rather than as a prop on every control. */
-.key-fields input,
-.key-fields select {
-  font-size: var(--text-key);
-  padding: 0.35rem 0.55rem;
+/*
+ * No spinner on a number field. The browser's pair of arrows takes a third of
+ * a box sized for four digits, and covers the last of them; the arrow keys do
+ * the same job and are what a hand on the keyboard already uses.
+ */
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
-.key-fields select {
-  padding-inline-end: 1.85rem;
-  background-position: right 0.55rem center;
+input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
 }
 
-.key-fields label > span {
-  font-size: var(--text-label);
-  color: var(--color-slate-700);
+/*
+ * A select inside a table row is smaller than one in the form, and its chevron
+ * comes in with it, so a narrow column still has room for the words.
+ */
+select.compact {
+  padding-inline-end: 1.5rem;
+  background-position: right 0.4rem center;
 }
 
 /*
