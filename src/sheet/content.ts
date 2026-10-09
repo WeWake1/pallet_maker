@@ -1,5 +1,6 @@
 import { DEFAULT_BRAND } from '../brand/defaults.js';
 import type { Brand } from '../brand/types.js';
+import { choiceLabel } from '../choices.js';
 import type { Layout } from '../geometry/types.js';
 import { dayMonthYear } from '../ids.js';
 import { mmLabel } from '../render/scene.js';
@@ -23,40 +24,6 @@ export type { ComponentRow };
  * No geometry is computed here either: everything is read off the pallet
  * document and the layout it produced.
  */
-
-/**
- * What each code prints as. Partial because the two states that are not values
- * — blank and `na` — are not printed names but instructions about the row
- * itself, and are handled by `stated` below.
- */
-const DECK_TYPE: Partial<Record<Pallet['deckType'], string>> = {
-  single_face: 'Single face',
-  double_face_reversible: 'Double face, reversible',
-  double_face_non_reversible: 'Double face, non-reversible',
-};
-
-const PALLET_TYPE: Partial<Record<Pallet['palletType'], string>> = {
-  block_4way: 'Block, 4-way',
-  stringer_2way: 'Stringer, 2-way',
-  plywood_type1: 'Plywood type 1, sheet on blocks',
-  plywood_type2: 'Plywood type 2, sheet on centre boards',
-  plywood_type3: 'Plywood type 3, sheet over a boarded deck',
-  wing: 'Wing',
-  other: 'Other',
-};
-
-const ENTRY: Partial<Record<Pallet['entry'], string>> = {
-  '2_way': '2-way',
-  '4_way': '4-way',
-  partial_4way: 'Partial 4-way',
-};
-
-const PLANING: Partial<Record<Pallet['planing'], string>> = {
-  none: 'None',
-  '1_side': '1 side',
-  '2_side': '2 sides',
-  '4_side': '4 sides',
-};
 
 /** What an attribute reads as when the design has not settled it. */
 export const DASH = '—';
@@ -174,11 +141,6 @@ function stated(label: string, value: string): Pair[] {
   return [[label, value === '' ? DASH : value]];
 }
 
-/** A code as it prints. Blank and `na` carry through as themselves. */
-function named<T extends string>(value: T, names: Partial<Record<T, string>>): string {
-  return names[value] ?? value;
-}
-
 /** A load: a figure in kilograms, a dash, or no row. */
 function loadRow(label: string, value: LoadKg | undefined): Pair[] {
   if (typeof value === 'number') return stated(label, `${value} kg`);
@@ -188,9 +150,9 @@ function loadRow(label: string, value: LoadKg | undefined): Pair[] {
 function overallRows(pallet: Pallet, layout: Layout, size: string): Pair[] {
   const rows: Pair[] = [
     ['Overall size', size],
-    ...stated('Type', named(pallet.palletType, PALLET_TYPE)),
-    ...stated('Entry', named(pallet.entry, ENTRY)),
-    ...stated('Deck', named(pallet.deckType, DECK_TYPE)),
+    ...stated('Type', choiceLabel('palletType', pallet.palletType)),
+    ...stated('Entry', choiceLabel('entry', pallet.entry)),
+    ...stated('Deck', choiceLabel('deckType', pallet.deckType)),
   ];
   const overhang = layout.topOverhang;
   if (overhang && (overhang.lengthStart || overhang.lengthEnd)) {
@@ -243,7 +205,7 @@ function materialRows(pallet: Pallet): Pair[] {
     ...loadRow('Static load', pallet.staticLoadKg),
     ...loadRow('Dynamic load', pallet.dynamicLoadKg),
     ...stated('Species', pallet.species),
-    ...stated('Planing', named(pallet.planing, PLANING)),
+    ...stated('Planing', choiceLabel('planing', pallet.planing)),
     ...stated('Component tolerance', pallet.componentTolerance),
     ...stated('Total pallet tolerance', pallet.palletTolerance),
   ];

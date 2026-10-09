@@ -121,6 +121,24 @@ describe('two companies on one server', () => {
     expect(acmeClients[0].id).not.toBe(northClients[0].id);
   }, 20_000);
 
+  it('keep their own additions to the lists', async () => {
+    const registry = tempRegistry();
+    const acme = await seedTenant(registry, { slug: 'acme', email: 'a@acme.test' });
+    const northgate = await seedTenant(registry, { slug: 'northgate', email: 'n@northgate.test' });
+    await serve(registry);
+
+    const acmeCookie = await signIn(base, acme.user.email, acme.password);
+    const northCookie = await signIn(base, northgate.user.email, northgate.password);
+    const added = await call('POST', '/api/choices/palletType', acmeCookie, { value: 'Euro' });
+    expect(added.status).toBe(200);
+
+    expect((await call('GET', '/api/choices', acmeCookie)).body.palletType).toEqual(['Euro']);
+    expect((await call('GET', '/api/choices', northCookie)).body.palletType).toEqual([]);
+    const file = JSON.parse(readFileSync(join(dataRoot, 'tenants', 'acme', 'choices.json'), 'utf8'));
+    expect(file.palletType).toEqual(['Euro']);
+    expect(existsSync(join(dataRoot, 'tenants', 'northgate', 'choices.json'))).toBe(false);
+  }, 20_000);
+
   it('never see each other on the dashboard', async () => {
     const registry = tempRegistry();
     const acme = await seedTenant(registry, { slug: 'acme', email: 'a@acme.test' });

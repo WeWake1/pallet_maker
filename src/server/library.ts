@@ -1,3 +1,4 @@
+import { ChoiceError, CHOICE_FIELDS, withChoice } from '../choices.js';
 import { duplicatePallet } from '../duplicate.js';
 import { today } from '../ids.js';
 import { LIBRARY_FORMAT, LIBRARY_VERSION } from '../library.js';
@@ -5,7 +6,7 @@ import type { ImportMode, ImportReport, Library } from '../library.js';
 import { parsePallet } from '../schema.js';
 import type { Pallet } from '../types.js';
 import type { FileStore } from '../store/files.js';
-import type { ClientRepository, PalletRepository } from './repository.js';
+import type { ChoiceRepository, ClientRepository, PalletRepository } from './repository.js';
 
 /**
  * The library in and out of a file.
@@ -16,14 +17,22 @@ import type { ClientRepository, PalletRepository } from './repository.js';
  * in.
  */
 
-/** Every client and every design, as one document. */
-export function exportLibrary(pallets: PalletRepository, clients: ClientRepository): Library {
+/**
+ * Every client and every design, as one document — and what the company has
+ * added to the lists, where it is asked for, so a backup brings those back too.
+ */
+export function exportLibrary(
+  pallets: PalletRepository,
+  clients: ClientRepository,
+  choices?: ChoiceRepository,
+): Library {
   return {
     format: LIBRARY_FORMAT,
     version: LIBRARY_VERSION,
     exportedAt: today(),
     clients: clients.list(),
     designs: pallets.all(),
+    ...(choices ? { choices: choices.get() } : {}),
   };
 }
 
@@ -85,6 +94,24 @@ export function importLibrary(
       pallets.restore({ ...design, clientId }, clients);
       if (held) report.designsReplaced += 1;
       else report.designsAdded += 1;
+    }
+
+    // Added to the lists, never taken off them: an entry here that the file
+    // does not have is somebody's, and the file does not know about it.
+    if (library.choices) {
+      let lists = store.readChoices();
+      for (const field of CHOICE_FIELDS) {
+        for (const value of library.choices[field]) {
+          try {
+            lists = withChoice(lists, field, value);
+          } catch (error) {
+            // A list already full, or an entry this version would not take:
+            // neither is worth refusing the designs over.
+            if (!(error instanceof ChoiceError)) throw error;
+          }
+        }
+      }
+      store.writeChoices(lists);
     }
   });
 

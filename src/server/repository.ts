@@ -1,3 +1,5 @@
+import { withChoice, withoutChoice } from '../choices.js';
+import type { ChoiceField, Choices } from '../choices.js';
 import { duplicatePallet } from '../duplicate.js';
 import { newId, today } from '../ids.js';
 import { parsePallet } from '../schema.js';
@@ -336,6 +338,34 @@ export class PalletRepository {
   delete(id: string): void {
     if (!this.has(id)) throw new PalletNotFoundError(id);
     this.store.deleteDesign(id);
+  }
+}
+
+/**
+ * What the company has added to the four lists — type, deck, entry, planing —
+ * shared by everybody in it, so words one person saved are offered to all.
+ */
+export class ChoiceRepository {
+  constructor(private readonly ref: StoreRef) {}
+
+  private get store(): FileStore {
+    return typeof this.ref === 'function' ? this.ref() : this.ref;
+  }
+
+  get(): Choices {
+    return this.store.readChoices();
+  }
+
+  add(field: ChoiceField, value: string): Choices {
+    const next = withChoice(this.get(), field, value);
+    this.store.writeChoices(next);
+    return next;
+  }
+
+  remove(field: ChoiceField, value: string): Choices {
+    const next = withoutChoice(this.get(), field, value);
+    this.store.writeChoices(next);
+    return next;
   }
 }
 

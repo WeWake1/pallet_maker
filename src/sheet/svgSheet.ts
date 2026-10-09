@@ -7,7 +7,7 @@ import { el, esc, fmt, fragmentSize, line, rect, text } from '../render/svg.js';
 import type { Pallet } from '../types.js';
 import type { ComponentRow, HandlingRow, Pair, SheetContent } from './content.js';
 import { sheetContent } from './content.js';
-import { HANDLING_INK, ICON_BOX, handlingIcon, handlingMark } from './handling.js';
+import { HANDLING_HEADING, HANDLING_INK, ICON_BOX, handlingIcon, handlingMark } from './handling.js';
 import { DRAWING, HANDLING, LOGO, PAGE, PX_PER_MM, SHEET, WATERMARK, handlingHeight } from './layout.js';
 import { drawingRows, sheetViews } from './sheet.js';
 import type { DrawingRows } from './sheet.js';
@@ -246,7 +246,7 @@ function handlingBand(rows: HandlingRow[], left: number, foot: number): string {
   const top = foot - handlingHeight(rows.length) + HANDLING.gapAbove;
   const columnWidth = DATA_INNER / HANDLING.columns;
   const parts = [
-    label(left, top + 3, 'HANDLING', {
+    label(left, top + 3, HANDLING_HEADING.toUpperCase(), {
       size: 9,
       weight: 700,
       fill: MUTED,

@@ -1,5 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { ChoicesSchema, emptyChoices } from '../choices.js';
+import type { Choices } from '../choices.js';
 import { parseClient, parsePallet } from '../schema.js';
 import type { Client, Pallet } from '../types.js';
 
@@ -18,12 +20,14 @@ import type { Client, Pallet } from '../types.js';
  * dashboard down with it.
  *
  *   <root>/clients.json      every client
+ *   <root>/choices.json      what the company has added to the lists
  *   <root>/designs/<id>.json one design
  *   <root>/backups/<stamp>/  a copy of both, taken at startup
  */
 
 export const DESIGNS_DIR = 'designs';
 export const CLIENTS_FILE = 'clients.json';
+export const CHOICES_FILE = 'choices.json';
 
 /**
  * The folder is not there, and this is not the moment to invent one.
@@ -105,6 +109,7 @@ interface Staged {
   designs: Map<string, Pallet>;
   deletes: Set<string>;
   clients?: Client[];
+  choices?: Choices;
   /** A step inside it threw, so none of it may be written. */
   failed: boolean;
 }
@@ -129,10 +134,12 @@ export class FileStore {
   readonly root: string;
   readonly designsDir: string;
   readonly clientsPath: string;
+  readonly choicesPath: string;
 
   /** Parsed designs, keyed by file name, kept only while the file is untouched. */
   private designCache = new Map<string, Cached<Pallet>>();
   private clientCache: Cached<Client[]> | undefined;
+  private choiceCache: Cached<Choices> | undefined;
 
   /** Files that would not parse on the last read. */
   private problems: StoreProblem[] = [];
@@ -144,6 +151,7 @@ export class FileStore {
     this.root = resolve(root);
     this.designsDir = join(this.root, DESIGNS_DIR);
     this.clientsPath = join(this.root, CLIENTS_FILE);
+    this.choicesPath = join(this.root, CHOICES_FILE);
 
     if (!existsSync(this.root)) {
       if (!options.create) throw new StoreUnavailableError(this.root, 'there is no such folder');
@@ -198,6 +206,46 @@ export class FileStore {
     }
     writeAtomic(this.clientsPath, `${JSON.stringify(clients, null, 2)}\n`);
     this.clientCache = undefined;
+  }
+
+  // -- choices ------------------------------------------------------------
+
+  /**
+   * What the company has added to the four lists. No file is a company that
+   * has added nothing, which is every company until somebody does.
+   *
+   * A file that will not read is reported and treated as empty rather than
+   * stopping anything: it is a convenience, and every design that used an
+   * entry from it still carries the words itself.
+   */
+  readChoices(): Choices {
+    if (this.pending?.choices) return this.pending.choices;
+    if (!existsSync(this.choicesPath)) return emptyChoices();
+
+    const mark = fingerprint(this.choicesPath);
+    const cached = this.choiceCache;
+    if (cached && cached.mtimeNs === mark.mtimeNs && cached.size === mark.size) return cached.value;
+
+    let value: Choices;
+    try {
+      value = ChoicesSchema.parse(JSON.parse(readFileSync(this.choicesPath, 'utf8')));
+      this.problems = this.problems.filter((problem) => problem.file !== CHOICES_FILE);
+    } catch (error) {
+      this.note(CHOICES_FILE, error);
+      return this.choiceCache?.value ?? emptyChoices();
+    }
+
+    this.choiceCache = { ...mark, value };
+    return value;
+  }
+
+  writeChoices(choices: Choices): void {
+    if (this.pending) {
+      this.pending.choices = choices;
+      return;
+    }
+    writeAtomic(this.choicesPath, `${JSON.stringify(choices, null, 2)}\n`);
+    this.choiceCache = undefined;
   }
 
   // -- designs ------------------------------------------------------------
@@ -319,6 +367,7 @@ export class FileStore {
           this.designCache.delete(name);
         }
         if (staged.clients) this.writeClients(staged.clients);
+        if (staged.choices) this.writeChoices(staged.choices);
       }
     }
   }

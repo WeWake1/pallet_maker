@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ChoicesSchema } from './choices.js';
 import { today } from './ids.js';
 import { ClientSchema, PalletSchema, parsed } from './schema.js';
 
@@ -30,6 +31,9 @@ export const LibrarySchema = z.object({
   exportedAt: z.string().min(1).default(() => today()),
   clients: z.array(ClientSchema),
   designs: z.array(PalletSchema),
+  // What the company added to the lists. Absent from every file written
+  // before there were such lists, and from any file that never had them.
+  choices: ChoicesSchema.optional(),
 });
 
 export type Library = z.infer<typeof LibrarySchema>;

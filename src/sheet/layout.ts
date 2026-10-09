@@ -45,7 +45,7 @@ export const SHEET = {
  * that says what must not be put under this pallet is not a thing to lose to a
  * long table. So the band is reserved and the tables clip against it.
  *
- * Two columns, because five methods down one would cost 35 mm of a column the
+ * Two columns, because six methods down one would cost 41 mm of a column the
  * components table is already competing for, and three rows of two cost 21.
  */
 export const HANDLING = {

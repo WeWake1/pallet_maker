@@ -32,31 +32,33 @@ export function notApplicable(value: string | number | undefined): boolean {
 /** Kilograms, or `na` where the design does not state a load at all. */
 export type LoadKg = number | typeof NOT_APPLICABLE;
 
+/**
+ * Words a design states for itself where the list has nothing that fits.
+ * Printed as typed. See `src/choices.ts`, which holds the lists and labels.
+ */
+type OwnWords = string & {};
+
 export type PalletType =
   | Unstated
   | 'block_4way'
   | 'stringer_2way'
-  /** Blocks and a bottom deck, with a plywood sheet straight on top. */
-  | 'plywood_type1'
-  /** As type 1, with centre boards between the blocks and the sheet. */
-  | 'plywood_type2'
-  /** A whole boarded pallet, with a plywood sheet laid over its top deck. */
-  | 'plywood_type3'
-  | 'wing'
-  | 'other';
+  /** Any pallet with a plywood sheet for a deck. */
+  | 'plywood'
+  | OwnWords;
 
 export type DeckType =
   | Unstated
   | 'single_face'
   | 'double_face_reversible'
-  | 'double_face_non_reversible';
+  | 'double_face_non_reversible'
+  | OwnWords;
 
-export type Entry = Unstated | '2_way' | '4_way' | 'partial_4way';
+export type Entry = Unstated | '2_way' | '4_way' | 'partial_4way' | OwnWords;
 
-export type Planing = Unstated | 'none' | '1_side' | '2_side' | '4_side';
+export type Planing = Unstated | 'none' | '1_side' | '2_side' | '4_side' | OwnWords;
 
 /**
- * What the finished pallet may be moved with.
+ * What the finished pallet may be moved with, and whether it may be racked.
  *
  * Not the three states the attributes above have. A handling method is asked as
  * a yes or a no — the shop either may put a fork in this pallet or may not — and
@@ -74,7 +76,9 @@ export type HandlingMethod =
   /** Run over a roller bed, which the underside has to be able to cross. */
   | 'conveyor'
   /** Light enough to be picked up and carried. */
-  | 'manual';
+  | 'manual'
+  /** Stored on pallet racking, carried on its beams. */
+  | 'racks';
 
 /** Every method, in the order the sheet prints them. */
 export const HANDLING_METHODS: readonly HandlingMethod[] = [
@@ -83,6 +87,7 @@ export const HANDLING_METHODS: readonly HandlingMethod[] = [
   'crane',
   'conveyor',
   'manual',
+  'racks',
 ];
 
 /**

@@ -36,9 +36,10 @@ function clearHash(): void {
  * The door is the one screen everybody sees before they see anybody's name
  * on anything, so it is where the service says whose it is. It is seen once a
  * month or so — a session lasts that long — so it never stands between
- * somebody and a day's work.
+ * somebody and a day's work. A phone, which gets no further, is shown the same
+ * frame — see MobileNotice.
  */
-function Frame({ title, children }: { title: string; children: React.ReactNode }) {
+export function Frame({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="relative flex h-full items-center justify-center overflow-hidden bg-ground-soft px-4">
       <Suspense fallback={null}>

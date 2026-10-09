@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Layout } from '../geometry/types.js';
 import { ISO_ORIENTATION, MAX_PITCH } from '../render/orbit.js';
 import type { Orientation } from '../render/orbit.js';
@@ -41,6 +41,36 @@ const ZOOM_LIMIT = { min: 0.4, max: 5 };
 const DRAG_RATE = 0.008;
 /** A pointer that moved less than this was a click at a piece, not a drag. */
 const DRAG_SLOP = 4;
+
+/**
+ * Zoom per pixel of wheel travel, as a power of e: a mouse wheel's click, 100
+ * px in most browsers, is about 11%.
+ */
+const WHEEL_RATE = 0.0012;
+/**
+ * A pinch on a trackpad comes as a wheel with Control held and small deltas,
+ * scaled so that this rate makes the pallet follow the fingers.
+ */
+const PINCH_RATE = 0.01;
+/** Wheel travel given in lines or pages, in pixels. */
+const LINE_PX = 33;
+const PAGE_PX = 800;
+/** No single event zooms more than this, as a power of e: about 28%. */
+const MAX_WHEEL_STEP = 0.25;
+
+/**
+ * How much one wheel event zooms by: by how far the wheel moved, not by how
+ * many events it sent.
+ *
+ * It used to be a fixed 12% an event. A mouse wheel sends a few big steps and
+ * that was fine; a trackpad sends a stream of small ones, dozens for the
+ * gentlest stroke, and went through the whole range on the slightest touch.
+ */
+export function wheelZoom(event: Pick<WheelEvent, 'deltaY' | 'deltaMode' | 'ctrlKey'>): number {
+  const unit = event.deltaMode === 1 ? LINE_PX : event.deltaMode === 2 ? PAGE_PX : 1;
+  const rate = event.ctrlKey ? PINCH_RATE : WHEEL_RATE;
+  return Math.exp(clamp(-event.deltaY * unit * rate, -MAX_WHEEL_STEP, MAX_WHEEL_STEP));
+}
 
 export function Preview({
   layout,
@@ -178,7 +208,13 @@ export function Preview({
   );
 }
 
-/** One of the four printed views, at the size the panel gives it. */
+/**
+ * One of the four printed views, at the size the panel gives it.
+ *
+ * Fitted to the panel, dimension lanes and all, rather than drawn at a fixed
+ * size and centred: a wider window gives the drawing the room, which is what
+ * a wider window is for. The writing on it stays the size it is.
+ */
 function FlatStage({
   layout,
   view,
@@ -192,11 +228,16 @@ function FlatStage({
   nailMode: boolean;
   onSelect: (target: EventTarget) => void;
 }) {
+  const box = useRef<HTMLDivElement>(null);
+  const size = useSize(box, { width: 560, height: 420 });
+
   const svg = useMemo(
     () =>
       renderView(layout, view, {
-        targetWidth: 560,
-        targetHeight: 420,
+        // A pixel short of the box each way, so rounding never brings in a
+        // scrollbar — which would shrink the box and redraw it smaller.
+        fitWidth: Math.max(size.width - 1, 1),
+        fitHeight: Math.max(size.height - 1, 1),
         interactive: true,
         selectedPiece: selectedIndex,
         nailTargets: nailMode,
@@ -205,13 +246,14 @@ function FlatStage({
         // so they are drawn to be read rather than held back for the print.
         emphasis: 'screen',
       }),
-    [layout, view, selectedIndex, nailMode],
+    [layout, view, selectedIndex, nailMode, size.width, size.height],
   );
 
   return (
     <div
+      ref={box}
       className={
-        'flex flex-1 items-center justify-center overflow-auto bg-ground-soft p-3 ' +
+        'flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-ground-soft p-3 ' +
         (nailMode ? 'cursor-pointer' : '')
       }
       onClick={(event) => onSelect(event.target)}
@@ -313,7 +355,7 @@ function OrbitStage({
     if (!node) return;
     const onWheel = (event: WheelEvent) => {
       event.preventDefault();
-      onZoom(event.deltaY < 0 ? 1.12 : 1 / 1.12);
+      onZoom(wheelZoom(event));
     };
     node.addEventListener('wheel', onWheel, { passive: false });
     return () => node.removeEventListener('wheel', onWheel);
@@ -421,6 +463,21 @@ function useSize(
   fallback: { width: number; height: number },
 ): { width: number; height: number } {
   const [size, setSize] = useState(fallback);
+
+  // Measured once before the first paint as well. The observer's first answer
+  // can come a frame late, and the drawing would be seen at the fallback size
+  // and then jump.
+  useLayoutEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    const style = getComputedStyle(node);
+    const across = Number.parseFloat(style.paddingLeft) + Number.parseFloat(style.paddingRight);
+    const down = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
+    setSize({
+      width: Math.max(Math.round(node.clientWidth - across), 1),
+      height: Math.max(Math.round(node.clientHeight - down), 1),
+    });
+  }, [ref]);
 
   useEffect(() => {
     const node = ref.current;

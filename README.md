@@ -152,11 +152,24 @@ which is what they were when they were house conventions rather than the
 design's own. A design that has never touched them prints exactly what it
 always printed.
 
-### Handling
+Type, deck, entry and planing are picked from a list, and the list is not the
+only answer. **Custom…** takes words of the design's own, which print as typed;
+words that already name a choice ("4-way") become that choice. Words can also be
+put on the list — with the small icon in the box while they are typed, or from
+the foot of the list afterwards — and are then offered to everybody in the
+company ([src/choices.ts](src/choices.ts), kept in `choices.json` beside
+`clients.json`). A design holds the words themselves, so taking an entry off the
+list changes no design. The type list is 4-way, 2-way and Plywood pallet: a
+design saved with one of the old plywood types reads as Plywood pallet, and one
+saved as Wing or Other keeps that word as its own, so its sheet prints what it
+always did.
 
-The bottom left corner says what the finished pallet may be moved with: a hand
-pallet truck, a forklift, a crane, a conveyor, a manual lift — each drawn, and
-each ticked or crossed ([src/sheet/handling.ts](src/sheet/handling.ts)).
+### Handling and storage
+
+The bottom left corner says what the finished pallet may be moved with — a hand
+pallet truck, a forklift, a crane, a conveyor, a manual lift — and whether it
+may go on racks: each drawn, and each ticked or crossed
+([src/sheet/handling.ts](src/sheet/handling.ts)).
 
 **Not the three states above.** A handling method is asked as a yes or a no, and
 a method nobody has cleared prints crossed rather than blank. Every method is on
@@ -171,10 +184,10 @@ the bottom of a twelve-part pallet's sheet — so the band is reserved and the
 tables clip against it. Both presenters reserve the same band, the printed one by
 holding the block out of the flow and the SVG by placing it from the bottom up.
 
-Adding a sixth method is a line in `HANDLING_METHODS`, a label and an icon: the
-icons are plain shapes in a 24-unit box, drawn once and used by the printed
-sheet, the SVG and the editor's own checkbox row, so none of the three can drift
-from the others.
+Adding another method is a line in `HANDLING_METHODS`, a label and an icon — a
+seventh starts a fourth row of the band. The icons are plain shapes in a 24-unit
+box, drawn once and used by the printed sheet, the SVG and the editor's own
+checkbox row, so none of the three can drift from the others.
 
 **None of them is a picture.** The pallet truck and the forklift are drawn from
 the artwork in [assets/icons/](assets/icons/), the way the mark in
@@ -406,6 +419,10 @@ Deleting from a card takes the browser's draft of that design with it. A draft
 left behind would come straight back as a card of a design that has just been
 thrown away, and could be saved again from there.
 
+Export library, Import library and Help are in the list under the signed-in
+person's name, above Sign out — or under ⋯ where nobody signs in — because they
+are done now and then, never mid-design.
+
 The search box narrows every client at once, by design name, code or client
 name, and drops the clients left with nothing — a search that left every empty
 client on screen would bury the handful that matched. Cards are ordered most
@@ -420,6 +437,18 @@ apart. See `visibleSections` in
 `npm run dev`. Left panel is the form, right panel is a live preview of the top
 view, regenerated from the document on every keystroke by the same renderer the
 sheet and the PDF use — so what is on screen is what will print.
+
+The form is as wide as it needs and no wider (a 60rem sheet); the preview has
+the rest of the window and never less than about a third of it, so a bigger
+screen gives a bigger drawing rather than grey margins round the form. The flat
+views are fitted to the panel, and the 3D view zooms by how far the wheel or
+trackpad moved rather than a fixed step an event — a trackpad sends dozens of
+small events for the gentlest stroke. Specification goes to two columns once the
+sheet is 56rem wide: a container query, so it follows the form, not the window.
+
+A phone is shown a notice that the mobile version is being developed, and
+nothing else — not even the sign-in ([src/editor/device.ts](src/editor/device.ts)).
+Tablets get the app.
 
 Clicking a board selects it and focuses its row in the form. **Selection only,
 no dragging.** A selected board takes a nudge typed in millimetres or stepped
@@ -568,7 +597,7 @@ has always run on a laptop: one folder, and nobody asked who they are.
 ### Several companies, on one server
 
 A company is a folder under `PALLET_DATA_ROOT/tenants/<short name>`, holding
-its designs, its `clients.json` and its branding — the same shape a folder has
+its designs, its `clients.json`, its `choices.json` and its branding — the same shape a folder has
 when the tool is run locally, so a company's whole library is still something
 that can be zipped and handed back. Beside them is one small SQLite file, the **registry**,
 holding the few facts that decide which folder a request may see: the
@@ -637,7 +666,7 @@ stored, whichever way they got there.
 A folder of JSON files — chosen in the editor, `data/library` until one is, and
 `PALLET_STORE` overriding both:
 one file per design under `designs/`, named by its id, and `clients.json` beside
-them. The document is the whole of what is stored — there is no index to keep in
+them, with `choices.json` for what the company has added to the lists. The document is the whole of what is stored — there is no index to keep in
 step with it — and a design names its own client inside itself, so a file on its
 own is a complete record. `npm run serve` puts an Express API in front of the
 folder and serves the built editor from the same port, so the whole tool is one
@@ -722,7 +751,8 @@ from somewhere else can never overwrite a design already held, and whose it is
 gets settled by whoever imports it rather than by what the file says.
 
 **Everything.** `Export library` writes `pallet-library-<date>.json`: every
-client, every design, dates and all. That one file is the whole business record
+client, every design, dates and all, and what the company has added to the
+lists. That one file is the whole business record
 in a form that fits in a Drive folder or on a stick, and is what to keep
 somewhere other than this computer.
 
@@ -732,7 +762,8 @@ restored onto an empty machine comes back as exactly what it was rather than as
 copies of it. **Nothing is overwritten**: designs already held are counted and
 left alone, and only then is replacing them offered, with the number said out
 loud. Clients are matched by name, because the same customer entered by hand on
-two machines has one name and two ids.
+two machines has one name and two ids. List entries in the file are added to the
+ones already here; none is taken off.
 
 The format is in [src/library.ts](src/library.ts) and what it does to the store
 is in [src/server/library.ts](src/server/library.ts).

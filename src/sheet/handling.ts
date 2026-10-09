@@ -42,7 +42,14 @@ export const HANDLING_LABEL: Record<HandlingMethod, string> = {
   crane: 'Crane',
   conveyor: 'Conveyor',
   manual: 'Manual lift',
+  racks: 'Racks',
 };
+
+/**
+ * The block's heading, on the sheet and in the editor. Racks is storage rather
+ * than a way of moving the pallet, which is why it is not just "Handling".
+ */
+export const HANDLING_HEADING = 'Handling and storage';
 
 /**
  * A cleared method is drawn in the sheet's ink; a crossed one in the grey the
@@ -61,10 +68,10 @@ type Shape =
   | { x: number; y: number; w: number; h: number };
 
 /**
- * The five icons, each a side view in the 24-unit box.
+ * The six icons, each a side view in the 24-unit box.
  *
- * Side views throughout, and all five sit on the same imaginary floor, so the
- * row reads as five ways of moving one pallet rather than five unrelated marks.
+ * Side views throughout, and all six sit on the same imaginary floor, so the
+ * row reads as six things done with one pallet rather than six unrelated marks.
  */
 const ICONS: Record<HandlingMethod, readonly Shape[]> = {
   // Loop tiller, pump housing and steer wheel at the near end; the fork running
@@ -128,6 +135,16 @@ const ICONS: Record<HandlingMethod, readonly Shape[]> = {
     { d: 'M6.5 13L8.3 20' },
     { d: 'M6.5 9L11 11' },
     { x: 11, y: 9.5, w: 7.5, h: 6.5 },
+  ],
+  // A bay of racking from the front: two uprights, two beams, a load on each.
+  // The loads stop short of the uprights so the frame still reads as a frame.
+  racks: [
+    { d: 'M3.5 3V20' },
+    { d: 'M20.5 3V20' },
+    { d: 'M3.5 9.5H20.5' },
+    { d: 'M3.5 16H20.5' },
+    { x: 6.5, y: 4.8, w: 11, h: 4.7 },
+    { x: 6.5, y: 11.3, w: 11, h: 4.7 },
   ],
 };
 

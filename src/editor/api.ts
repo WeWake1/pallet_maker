@@ -1,4 +1,5 @@
 import type { Brand } from '../brand/types.js';
+import type { ChoiceField, Choices } from '../choices.js';
 import type { ImportMode, ImportReport } from '../library.js';
 import type { ClientDesigns, PalletSummary } from '../server/repository.js';
 import type { StoreStatus } from '../store/handle.js';
@@ -211,6 +212,13 @@ export const api = {
    * would carry different names.
    */
   brand: () => call<Brand>('/api/brand'),
+
+  /** What the company has added to the lists of type, deck, entry and planing. */
+  choices: () => call<Choices>('/api/choices'),
+  addChoice: (field: ChoiceField, value: string) =>
+    call<Choices>(`/api/choices/${field}`, { method: 'POST', body: JSON.stringify({ value }) }),
+  removeChoice: (field: ChoiceField, value: string) =>
+    call<Choices>(`/api/choices/${field}?value=${encodeURIComponent(value)}`, { method: 'DELETE' }),
 
   /** One design from a file, as a new design of that client's. */
   importDesign: (pallet: unknown, clientId: string) =>

@@ -675,10 +675,10 @@ describe('the handling block', () => {
   it('names every method on every sheet, whatever the design allows', () => {
     // The printed sheet sets its headings in capitals with CSS; the SVG has no
     // stylesheet to do it with and writes them out that way.
-    expect(textOf(html)).toContain('Handling');
-    expect(svg).toContain('HANDLING');
+    expect(textOf(html)).toContain('Handling and storage');
+    expect(svg).toContain('HANDLING AND STORAGE');
     for (const page of [textOf(html), svg]) {
-      for (const label of ['Hand pallet truck', 'Forklift', 'Crane', 'Conveyor', 'Manual lift']) {
+      for (const label of ['Hand pallet truck', 'Forklift', 'Crane', 'Conveyor', 'Manual lift', 'Racks']) {
         expect(page).toContain(label);
       }
     }
@@ -692,29 +692,34 @@ describe('the handling block', () => {
       { method: 'crane', label: 'Crane', allowed: false },
       { method: 'conveyor', label: 'Conveyor', allowed: false },
       { method: 'manual', label: 'Manual lift', allowed: false },
+      { method: 'racks', label: 'Racks', allowed: false },
     ]);
-    expect(marks(html)).toEqual(['yes', 'yes', 'no', 'no', 'no']);
+    expect(marks(html)).toEqual(['yes', 'yes', 'no', 'no', 'no', 'no']);
   });
 
   it('ticks and crosses what the design says, not what it was clicked in', () => {
-    // Typed in any order, with a repeat: the sheet still prints five rows in the
+    // Typed in any order, with a repeat: the sheet still prints six rows in the
     // catalogue's order, and the repeat is one row.
-    const slung = { ...pallet, handling: ['crane' as const, 'pallet_truck' as const, 'crane' as const] };
+    const slung = {
+      ...pallet,
+      handling: ['racks' as const, 'crane' as const, 'pallet_truck' as const, 'crane' as const],
+    };
     expect(sheetContent(slung, layout).handling.map((row) => row.allowed)).toEqual([
       true,
       false,
       true,
       false,
       false,
+      true,
     ]);
-    expect(marks(renderSheet(slung, layout))).toEqual(['yes', 'no', 'yes', 'no', 'no']);
+    expect(marks(renderSheet(slung, layout))).toEqual(['yes', 'no', 'yes', 'no', 'no', 'yes']);
   });
 
   it('says no as clearly as it says yes', () => {
     // Every method crossed is a statement, and a legal one: this pallet is
-    // moved by none of them. It must still print all five rows.
+    // moved by none of them. It must still print all six rows.
     const none = { ...pallet, handling: [] };
-    expect(marks(renderSheet(none, layout))).toEqual(['no', 'no', 'no', 'no', 'no']);
+    expect(marks(renderSheet(none, layout))).toEqual(['no', 'no', 'no', 'no', 'no', 'no']);
     expect(textOf(renderSheet(none, layout))).toContain('Crane');
   });
 

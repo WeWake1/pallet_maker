@@ -120,7 +120,8 @@ describe('the three plywood pallets', () => {
       // Named in the components table, which is why the sheet no longer
       // carries a surface row saying the same thing a second time.
       expect(html).toContain('Plywood sheet');
-      expect(html).toContain('Plywood type');
+      // The three are one type on the list, and print as one.
+      expect(html).toContain('<th>Type</th><td>Plywood pallet</td>');
     }
   });
 
@@ -200,8 +201,8 @@ describe('runners in place of blocks', () => {
     const html = renderSheet(pallet, layout);
     expect(html).toContain('Runners');
     expect(html).toContain('Runner');
-    expect(html).toContain('Stringer, 2-way');
-    expect(html).toContain('2-way');
+    expect(html).toContain('<th>Type</th><td>2-way</td>');
+    expect(html).toContain('<th>Entry</th><td>2-way</td>');
   });
 });
 

@@ -17,7 +17,7 @@ import { DEFAULT_BRAND } from './defaults.js';
  * perfectly good brand file, and everything it does not say is the default.
  */
 
-const HandlingMethodSchema = z.enum(['pallet_truck', 'forklift', 'crane', 'conveyor', 'manual']);
+const HandlingMethodSchema = z.enum(['pallet_truck', 'forklift', 'crane', 'conveyor', 'manual', 'racks']);
 
 export const BrandFileSchema = z.object({
   companyName: z.string().default(DEFAULT_BRAND.companyName),

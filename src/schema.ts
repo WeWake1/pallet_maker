@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { currentPalletType } from './choices.js';
 import { today } from './ids.js';
 import {
   DEFAULT_COMPONENT_TOLERANCE,
@@ -149,28 +150,16 @@ export const PalletSchema = z.object({
   // Every stated attribute below also takes '' and 'na'. Neither is a value:
   // blank is not settled yet and prints as a dash, 'na' does not apply to this
   // design and takes its row off the sheet. See NOT_APPLICABLE in types.ts.
-  palletType: z.enum([
-    '',
-    'na',
-    'block_4way',
-    'stringer_2way',
-    'plywood_type1',
-    'plywood_type2',
-    'plywood_type3',
-    'wing',
-    'other',
-  ]),
-  deckType: z.enum([
-    '',
-    'na',
-    'single_face',
-    'double_face_reversible',
-    'double_face_non_reversible',
-  ]),
-  entry: z.enum(['', 'na', '2_way', '4_way', 'partial_4way']),
+  //
+  // The four picked from a list hold a code from it or the design's own
+  // words, which print as typed: see src/choices.ts. A pallet type the list no
+  // longer offers is read as what took its place.
+  palletType: z.string().transform(currentPalletType),
+  deckType: z.string(),
+  entry: z.string(),
 
   species: z.string().default(''),
-  planing: z.enum(['', 'na', 'none', '1_side', '2_side', '4_side']),
+  planing: z.string(),
   staticLoadKg: loadKg.optional(),
   dynamicLoadKg: loadKg.optional(),
 
@@ -184,7 +173,7 @@ export const PalletSchema = z.object({
   // Absent on every document written before the sheet said how a pallet may be
   // moved, and those all meant the two ways nearly every pallet is moved.
   handling: z
-    .array(z.enum(['pallet_truck', 'forklift', 'crane', 'conveyor', 'manual']))
+    .array(z.enum(['pallet_truck', 'forklift', 'crane', 'conveyor', 'manual', 'racks']))
     .default(() => [...DEFAULT_HANDLING]),
 
   nails: z.array(NailSpecSchema).default([]),

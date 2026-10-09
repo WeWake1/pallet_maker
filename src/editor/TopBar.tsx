@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { Session, StoreStatus } from './api.js';
 import { Button, Icon, Menu, MenuItem } from './ui.jsx';
+import type { IconName } from './ui.jsx';
 import { Wordmark } from './Wordmark.jsx';
 
 /**
@@ -78,6 +79,38 @@ function TrialNote({ accessUntil }: { accessUntil: string | null }) {
   );
 }
 
+/** A line of the account list: its icon, then what it does. */
+export function IconItem({
+  icon,
+  onClick,
+  disabled,
+  children,
+}: {
+  icon: IconName;
+  onClick: () => void;
+  disabled?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <MenuItem disabled={disabled} onClick={onClick}>
+      <span className="flex items-center gap-2">
+        <Icon name={icon} size={14} className="text-ink-faint" />
+        {children}
+      </span>
+    </MenuItem>
+  );
+}
+
+/** Which build this is, at the foot of the list, for a bug report to quote. */
+function VersionNote({ version }: { version?: string | null | undefined }) {
+  if (!version) return null;
+  return (
+    <div className="mt-1 border-t border-line-soft px-3 pb-1 pt-2 text-micro text-ink-faint">
+      Version {version}
+    </div>
+  );
+}
+
 /** "AP" for Ambica Patterns, "AD" for admin@… — two letters, never empty. */
 function initials(name: string): string {
   const words = name.replace(/@.*$/, '').split(/[\s._-]+/).filter(Boolean);
@@ -93,7 +126,8 @@ function initials(name: string): string {
  * own above the header, at one weight, as three loose words. They are things
  * looked at now and then — who am I signed in as, which version is this —
  * and never while working, so they fold into the one button every web app
- * puts there, and the row they took goes back to the screen.
+ * puts there, and the row they took goes back to the screen. Whatever else a
+ * screen does only now and then goes in the same list, above the way out.
  */
 export function AccountMenu({
   name,
@@ -101,6 +135,7 @@ export function AccountMenu({
   version,
   busy,
   onSignOut,
+  children,
 }: {
   name: string;
   email: string;
@@ -108,6 +143,8 @@ export function AccountMenu({
   version?: string | null;
   busy?: boolean;
   onSignOut: () => void;
+  /** What the screen offers besides, between who this is and signing out. */
+  children?: (close: () => void) => ReactNode;
 }) {
   return (
     <Menu
@@ -133,25 +170,20 @@ export function AccountMenu({
             <div className="truncate text-ui font-medium text-ink">{name || email}</div>
             {name && <div className="truncate text-label text-ink-faint">{email}</div>}
           </div>
+          {children && <div className="border-t border-line-soft py-1">{children(close)}</div>}
           <div className="border-t border-line-soft pt-1">
-            <MenuItem
+            <IconItem
+              icon="signOut"
               disabled={busy}
               onClick={() => {
                 close();
                 onSignOut();
               }}
             >
-              <span className="flex items-center gap-2">
-                <Icon name="signOut" size={14} className="text-ink-faint" />
-                Sign out
-              </span>
-            </MenuItem>
+              Sign out
+            </IconItem>
           </div>
-          {version && (
-            <div className="mt-1 border-t border-line-soft px-3 pb-1 pt-2 text-micro text-ink-faint">
-              Version {version}
-            </div>
-          )}
+          <VersionNote version={version} />
         </>
       )}
     </Menu>
@@ -172,6 +204,7 @@ export function TopBar({
   session,
   busy,
   onSignOut,
+  menu,
   children,
 }: {
   status: StoreStatus;
@@ -179,7 +212,9 @@ export function TopBar({
   session: Session | null;
   busy: boolean;
   onSignOut: () => void;
-  /** What this screen offers, ahead of the account at the far end. */
+  /** What this screen does now and then, in the list under the account. */
+  menu?: (close: () => void) => ReactNode;
+  /** What this screen offers on the bar itself, ahead of the account. */
   children?: ReactNode;
 }) {
   const user = session?.user ?? null;
@@ -218,15 +253,28 @@ export function TopBar({
           {children}
           {user && session?.signInRequired ? (
             <>
-              <span aria-hidden="true" className="mx-1 h-5 w-px bg-line" />
+              {children && <span aria-hidden="true" className="mx-1 h-5 w-px bg-line" />}
               <AccountMenu
                 name={user.name}
                 email={user.email}
                 version={status.version}
                 busy={busy}
                 onSignOut={onSignOut}
-              />
+              >
+                {menu}
+              </AccountMenu>
             </>
+          ) : menu ? (
+            // Run locally nobody signs in, so there is no name to hang the
+            // list off; it hangs off the usual three dots instead.
+            <Menu tone="subtle" width="sm" title="More" label={<Icon name="more" size={16} />}>
+              {(close) => (
+                <>
+                  {menu(close)}
+                  <VersionNote version={status.version} />
+                </>
+              )}
+            </Menu>
           ) : (
             // People update at their own pace, so a bug report is much easier
             // to place when the screen it was seen on says which build it was.

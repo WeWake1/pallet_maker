@@ -11,7 +11,7 @@ import type { ViewKind } from '../render/project.js';
 import type { Pallet } from '../types.js';
 import type { ComponentRow, HandlingRow, NailRow, Pair, SheetContent } from './content.js';
 import { sheetContent } from './content.js';
-import { HANDLING_INK, handlingIconSvg, handlingMarkSvg } from './handling.js';
+import { HANDLING_HEADING, HANDLING_INK, handlingIconSvg, handlingMarkSvg } from './handling.js';
 import { DRAWING, HANDLING, mmToPx, PAGE, PX_PER_MM, SHEET, WATERMARK } from './layout.js';
 import { printedWatermarkSizePt } from './watermark.js';
 
@@ -361,7 +361,7 @@ function handlingBlock(rows: HandlingRow[]): string {
       );
     })
     .join('');
-  return `<div class="block handling"><h2>Handling</h2><ul>${items}</ul></div>`;
+  return `<div class="block handling"><h2>${HANDLING_HEADING}</h2><ul>${items}</ul></div>`;
 }
 
 function nailsBlock(nails: SheetContent['nails']): string {

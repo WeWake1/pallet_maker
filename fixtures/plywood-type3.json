@@ -6,7 +6,7 @@
   "notes": "A complete boarded pallet with a plywood sheet laid over the top boards.",
   "overallLength": 1200,
   "overallWidth": 1000,
-  "palletType": "plywood_type3",
+  "palletType": "plywood",
   "deckType": "double_face_non_reversible",
   "entry": "4_way",
   "species": "pine",

@@ -2,7 +2,7 @@ import { mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs
 import { join, resolve } from 'node:path';
 import type { FileStore } from '../store/files.js';
 import { exportLibrary } from './library.js';
-import { ClientRepository, PalletRepository } from './repository.js';
+import { ChoiceRepository, ClientRepository, PalletRepository } from './repository.js';
 
 /**
  * Snapshots of the library.
@@ -48,7 +48,11 @@ export function backupLibrary(store: FileStore, options: BackupOptions = {}): st
   const directory = options.directory ?? backupDirectoryFor(store.root);
   const keep = options.keep ?? 20;
 
-  const library = exportLibrary(new PalletRepository(store), new ClientRepository(store));
+  const library = exportLibrary(
+    new PalletRepository(store),
+    new ClientRepository(store),
+    new ChoiceRepository(store),
+  );
 
   mkdirSync(directory, { recursive: true });
   const target = join(directory, `${PREFIX}${stamp(options.now ?? new Date())}${SUFFIX}`);

@@ -2,22 +2,24 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'r
 import type { ReactNode } from 'react';
 import { DEFAULT_BRAND } from '../brand/defaults.js';
 import type { Brand } from '../brand/types.js';
+import { emptyChoices } from '../choices.js';
+import type { ChoiceField, Choices } from '../choices.js';
 import { duplicatePallet } from '../duplicate.js';
 import { analysePallet } from '../geometry/layout.js';
 import { dayMonthYear } from '../ids.js';
 import { PalletSchema, parsePallet } from '../schema.js';
 import { downloadName } from '../sheet/filename.js';
-import { handlingCatalogue, handlingIconSvg } from '../sheet/handling.js';
+import { HANDLING_HEADING, handlingCatalogue, handlingIconSvg } from '../sheet/handling.js';
 import { renderSheet } from '../sheet/sheet.js';
 import {
   DEFAULT_COMPONENT_TOLERANCE,
   DEFAULT_PALLET_TOLERANCE,
   HANDLING_METHODS,
-  NOT_APPLICABLE,
 } from '../types.js';
-import type { Client, HandlingMethod, LayerKind, Pallet, Unstated } from '../types.js';
+import type { Client, HandlingMethod, LayerKind, Pallet } from '../types.js';
 import { api, StaleEdit, StoreUnavailable, Unauthenticated } from './api.js';
 import type { ClientDesigns, Session, StoreStatus } from './api.js';
+import { ChoiceSelect } from './ChoiceSelect.jsx';
 import { AcceptInvitation, invitationTokenInHash, SignIn } from './SignIn.jsx';
 import { VendorAdmin } from './VendorAdmin.jsx';
 import { Dashboard } from './Dashboard.jsx';
@@ -40,7 +42,7 @@ import { Preview } from './Preview.jsx';
 import { shortcutLabel, useShortcuts } from './shortcuts.js';
 import { fingerprint } from '../store/fingerprint.js';
 import { selectedSlot } from './state.js';
-import { StoreUnreachable, TopBar } from './TopBar.jsx';
+import { IconItem, StoreUnreachable, TopBar } from './TopBar.jsx';
 import type { Action } from './state.js';
 import { emptyPallet, newPallet } from './templates.js';
 import {
@@ -57,7 +59,6 @@ import {
   OptionalNumberInput,
   Prop,
   Section,
-  Select,
   TextInput,
   Unit,
   useDismiss,
@@ -74,14 +75,6 @@ const FIXTURES = Object.entries(fixtureModules)
     pallet: module.default,
   }))
   .sort((a, b) => a.name.localeCompare(b.name));
-
-/**
- * The two choices every stated attribute carries besides its own, and what each
- * of them does to the printed sheet. Both are offered on every list so that a
- * dropdown answers the same way a typed field does.
- */
-const BLANK: [Unstated, string] = ['', '— not stated'];
-const NOT_ON_SHEET: [Unstated, string] = [NOT_APPLICABLE, 'n/a — leave off the sheet'];
 
 const LAYER_KINDS: Array<[LayerKind, string]> = [
   ['panel', 'Plywood sheet over the deck'],
@@ -150,6 +143,8 @@ export function App() {
    * out to be wrong is worse than no name at all.
    */
   const [brand, setBrand] = useState<Brand>(DEFAULT_BRAND);
+  /** What the company has added to the lists of type, deck, entry and planing. */
+  const [choices, setChoices] = useState<Choices>(emptyChoices);
   const [open, setOpen] = useState<OpenDesign | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   // What an import did. An import that quietly succeeds looks the same as one
@@ -212,6 +207,7 @@ export function App() {
     setSession({ signInRequired: true, user: null, company: null });
     setSections([]);
     setDrafts([]);
+    setChoices(emptyChoices());
     setOpen(null);
   }, []);
 
@@ -258,7 +254,12 @@ export function App() {
    */
   const load = useCallback(async () => {
     await refresh();
-    await api.brand().then(setBrand).catch(() => setBrand(DEFAULT_BRAND));
+    await Promise.all([
+      api.brand().then(setBrand).catch(() => setBrand(DEFAULT_BRAND)),
+      // The lists still offer their built-in choices without these, so a
+      // failure here is not worth more than an empty list of the company's own.
+      api.choices().then(setChoices).catch(() => setChoices(emptyChoices())),
+    ]);
   }, [refresh]);
 
   const signedIn = useCallback(
@@ -444,6 +445,24 @@ export function App() {
     });
   };
 
+  /**
+   * Words put on one of the company's lists, or taken off it. Not through
+   * `attempt`: nothing on the dashboard changes, and an editor half way
+   * through a design has no reason to go busy for it.
+   */
+  const changeChoices = (work: () => Promise<Choices>) => {
+    setProblem(null);
+    void work()
+      .then(setChoices)
+      .catch((error: unknown) => {
+        if (error instanceof Unauthenticated) {
+          signedOut();
+          return;
+        }
+        setProblem(error instanceof Error ? error.message : String(error));
+      });
+  };
+
   // Somebody following an invitation link, who has no account yet.
   if (invitation) {
     return (
@@ -534,6 +553,9 @@ export function App() {
           recoveredAt={open.recoveredAt}
           clients={clients}
           brand={brand}
+          choices={choices}
+          onKeepChoice={(field, words) => changeChoices(() => api.addChoice(field, words))}
+          onForgetChoice={(field, words) => changeChoices(() => api.removeChoice(field, words))}
           onBack={() => {
             setOpen(null);
             // The editor writes out its pending draft as it goes; picking it up
@@ -545,9 +567,9 @@ export function App() {
         />
       ) : (
         <>
-          {/* The library in and out of a file. Everything else on this screen
-              acts on one design; these two are the whole of it, and are the
-              only copy of it that survives this computer. */}
+          {/* The library in and out of a file, and help: things done now and
+              then, never mid-design, so they wait in the list under the name
+              rather than taking the bar. */}
           <TopBar
             status={folder}
             session={session}
@@ -558,34 +580,52 @@ export function App() {
                 .catch(() => undefined)
                 .finally(signedOut);
             }}
-          >
-            <Button
-              disabled={busy}
-              onClick={() => window.open(api.libraryUrl(), '_blank')}
-              title="Download every client and design as one file"
-            >
-              Export library
-            </Button>
-            <Button
-              disabled={busy}
-              onClick={() => libraryFile.current?.click()}
-              title="Load a library file. Designs already here are left alone."
-            >
-              Import library
-            </Button>
-            <input
-              ref={libraryFile}
-              type="file"
-              accept="application/json,.json"
-              className="hidden"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) importLibrary(file);
-                event.target.value = '';
-              }}
-            />
-            <IconButton icon="help" label="Help, and what the words mean" onClick={() => setHelp(true)} />
-          </TopBar>
+            menu={(close) => (
+              <>
+                <IconItem
+                  icon="download"
+                  disabled={busy}
+                  onClick={() => {
+                    close();
+                    window.open(api.libraryUrl(), '_blank');
+                  }}
+                >
+                  Export library
+                </IconItem>
+                <IconItem
+                  icon="upload"
+                  disabled={busy}
+                  onClick={() => {
+                    close();
+                    libraryFile.current?.click();
+                  }}
+                >
+                  Import library
+                </IconItem>
+                <IconItem
+                  icon="help"
+                  onClick={() => {
+                    close();
+                    setHelp(true);
+                  }}
+                >
+                  Help
+                </IconItem>
+              </>
+            )}
+          />
+          {/* Outside the list, which is gone by the time a file is chosen. */}
+          <input
+            ref={libraryFile}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) importLibrary(file);
+              event.target.value = '';
+            }}
+          />
           <Dashboard
             sections={sections}
             drafts={drafts}
@@ -624,6 +664,9 @@ function Editor({
   recoveredAt,
   clients,
   brand,
+  choices,
+  onKeepChoice,
+  onForgetChoice,
   onBack,
   onProblem,
   onRefresh,
@@ -634,6 +677,10 @@ function Editor({
   recoveredAt?: string;
   clients: Client[];
   brand: Brand;
+  /** What the company has added to the lists of type, deck, entry and planing. */
+  choices: Choices;
+  onKeepChoice: (field: ChoiceField, words: string) => void;
+  onForgetChoice: (field: ChoiceField, words: string) => void;
   onBack: () => void;
   onProblem: (message: string | null) => void;
   onRefresh: () => Promise<void>;
@@ -687,6 +734,18 @@ function Editor({
   const canStore = missing.length === 0 && errors.length === 0;
 
   const patch = (patch: Partial<Pallet>) => dispatch({ type: 'patchPallet', patch });
+
+  /** One of the four lists, with the company's own entries on it. */
+  const choice = (field: ChoiceField) => (
+    <ChoiceSelect
+      field={field}
+      value={pallet[field]}
+      saved={choices[field]}
+      onChange={(value) => patch({ [field]: value } as Partial<Pallet>)}
+      onKeep={(words) => onKeepChoice(field, words)}
+      onForget={(words) => onForgetChoice(field, words)}
+    />
+  );
 
   /**
    * Work the store does not have: either changes since the last Save, or a
@@ -1210,16 +1269,26 @@ function Editor({
 
       {help && <Help onClose={() => setHelp(false)} />}
 
+      {/*
+        The form is as wide as it needs and no wider, and the drawing has the
+        rest. It used to be the other way round: the drawing had a fixed share
+        and the form sat centred in what was left, which on a big screen was
+        grey margin either side of it. The drawing still keeps at least its old
+        share, so on a small laptop it is the form that gives way.
+      */}
       <div className="flex min-h-0 flex-1">
-        <div className="min-w-0 flex-1 overflow-y-auto bg-ground px-4 py-4" data-form-scroll>
+        <div className="min-w-0 flex-[0_1_62rem] overflow-y-auto bg-ground px-4 py-4" data-form-scroll>
           {/*
             One sheet, read top to bottom in the order a design is thought
             about: what it is called and whose it is, how big, what kind of
             pallet, then the timber layer by layer. It used to be a stack of
             boxed cards with every field the width of its column; the parts
             are now ruled off one sheet, and a field is as wide as its answer.
+
+            A container, so what goes two columns does so by the width the
+            sheet has rather than the width of the window.
           */}
-          <div className="mx-auto max-w-[60rem] rounded-card border border-line bg-card shadow-card">
+          <div className="@container rounded-card border border-line bg-card shadow-card">
             <div className="px-6 pb-5 pt-5">
               {/* Optional: unnamed, the sheet heads itself with the overall
                   size and the dashboard reads "Untitled". */}
@@ -1319,69 +1388,21 @@ function Editor({
 
             {/* Every attribute below is allowed not to have an answer, and the
                 two ways of not having one mean different things on the sheet.
-                See NOT_APPLICABLE in types.ts. */}
+                See NOT_APPLICABLE in types.ts. Two columns where the sheet is
+                wide enough for the tolerances to sit on one line. */}
             <Section title="Specification">
-              <div className="grid grid-cols-1 gap-x-10 gap-y-2 lg:grid-cols-2">
+              <div className="grid grid-cols-1 gap-x-10 gap-y-2 @min-[56rem]:grid-cols-2">
                 <Prop label="Type" id={fieldId('palletType')} hint={HINTS.palletType}>
-                  <Select
-                    className="w-full max-w-72"
-                    value={pallet.palletType}
-                    options={[
-                      BLANK,
-                      ['block_4way', 'Block, 4-way'],
-                      ['stringer_2way', 'Stringer, 2-way'],
-                      ['plywood_type1', 'Plywood type 1, sheet on blocks'],
-                      ['plywood_type2', 'Plywood type 2, sheet on centre boards'],
-                      ['plywood_type3', 'Plywood type 3, sheet over a boarded deck'],
-                      ['wing', 'Wing'],
-                      ['other', 'Other'],
-                      NOT_ON_SHEET,
-                    ]}
-                    onChange={(palletType) => patch({ palletType })}
-                  />
+                  {choice('palletType')}
                 </Prop>
                 <Prop label="Deck" id={fieldId('deckType')} hint={HINTS.deckType}>
-                  <Select
-                    className="w-full max-w-72"
-                    value={pallet.deckType}
-                    options={[
-                      BLANK,
-                      ['single_face', 'Single face'],
-                      ['double_face_reversible', 'Double face, reversible'],
-                      ['double_face_non_reversible', 'Double face, non-reversible'],
-                      NOT_ON_SHEET,
-                    ]}
-                    onChange={(deckType) => patch({ deckType })}
-                  />
+                  {choice('deckType')}
                 </Prop>
                 <Prop label="Entry" id={fieldId('entry')} hint={HINTS.entry}>
-                  <Select
-                    className="w-full max-w-72"
-                    value={pallet.entry}
-                    options={[
-                      BLANK,
-                      ['2_way', '2-way'],
-                      ['4_way', '4-way'],
-                      ['partial_4way', 'Partial 4-way'],
-                      NOT_ON_SHEET,
-                    ]}
-                    onChange={(entry) => patch({ entry })}
-                  />
+                  {choice('entry')}
                 </Prop>
                 <Prop label="Planing" id={fieldId('planing')} hint={HINTS.planing}>
-                  <Select
-                    className="w-full max-w-72"
-                    value={pallet.planing}
-                    options={[
-                      BLANK,
-                      ['none', 'None'],
-                      ['1_side', '1 side'],
-                      ['2_side', '2 sides'],
-                      ['4_side', '4 sides'],
-                      NOT_ON_SHEET,
-                    ]}
-                    onChange={(planing) => patch({ planing })}
-                  />
+                  {choice('planing')}
                 </Prop>
                 <Prop label="Species" id={fieldId('species')} hint={HINTS.species}>
                   <TextInput
@@ -1413,13 +1434,6 @@ function Editor({
                     />
                   </label>
                 </Prop>
-              </div>
-            </Section>
-
-            <Handling pallet={pallet} patch={patch} />
-
-            <Section title="Load and notes">
-              <div className="grid grid-cols-1 gap-x-10 gap-y-2 lg:grid-cols-2">
                 <Prop label="Static load" id={fieldId('staticLoadKg')} hint={HINTS.staticLoad}>
                   <Unit unit="kg">
                     <NumberOrNaInput
@@ -1439,7 +1453,7 @@ function Editor({
                   </Unit>
                 </Prop>
                 {/* The whole width: it is the one free-text line on the sheet. */}
-                <div className="lg:col-span-2">
+                <div className="col-span-full">
                   <Prop label="Notes" id={fieldId('notes')}>
                     <TextInput
                       value={pallet.notes ?? ''}
@@ -1451,17 +1465,19 @@ function Editor({
 
               <p className="mt-4 text-label text-ink-faint">
                 Blank prints “—”. Type <code className="rounded bg-ground px-1">na</code>, or pick
-                n/a, to leave the line off the sheet.
+                n/a, to remove the line from the sheet.
               </p>
             </Section>
 
             <Layers layers={pallet.layers} layout={layout} selection={selection} dispatch={dispatch} />
 
             <Nails pallet={pallet} dispatch={dispatch} nailType={brand.defaults.nailType} />
+
+            <Handling pallet={pallet} patch={patch} />
           </div>
         </div>
 
-        <div className="flex w-[36%] min-w-0 shrink-0 flex-col border-l border-line bg-card">
+        <div className="flex min-w-[36%] flex-1 flex-col border-l border-line bg-card">
           <Preview layout={layout} selection={selection} dispatch={dispatch} />
 
           {/* Only there while a board is picked: a board is the one thing
@@ -1484,8 +1500,9 @@ function Editor({
 }
 
 /**
- * What the pallet may be moved with — the block printed in the corner of the
- * sheet, edited with the same icons it prints with.
+ * What the pallet may be moved with, and whether it may be racked — the block
+ * printed in the corner of the sheet, edited with the same icons it prints
+ * with. Last on the form, as it is last on the sheet's written side.
  *
  * A yes or a no each, not the three states the fields above it have. Ticking is
  * a claim about what the shop may put under this pallet, so the list is rebuilt
@@ -1508,7 +1525,7 @@ function Handling({
   };
 
   return (
-    <Section title="Handling" id={fieldId('handling')}>
+    <Section title={HANDLING_HEADING} id={fieldId('handling')}>
       {/* A tick or a cross each, as the sheet prints them: what the pallet
           may not be lifted with is said as plainly as what it may. */}
       <div className="flex flex-wrap gap-2">

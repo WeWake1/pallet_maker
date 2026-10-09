@@ -17,6 +17,7 @@ import type { Registry, Tenant } from './registry.js';
  *
  *   <data root>/tenants/<slug>/designs/<id>.json
  *                             /clients.json
+ *                             /choices.json    what it added to the lists
  *                             /brand.json      optional, beats the shipped one
  *                             /backups/
  *

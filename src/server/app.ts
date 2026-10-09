@@ -18,6 +18,7 @@ import {
   requireVendor,
   unauthenticated,
 } from './auth.js';
+import { ChoiceError, isChoiceField } from '../choices.js';
 import { palletToDxf } from '../dxf/drawing.js';
 import { analysePallet } from '../geometry/layout.js';
 import { PalletLayoutError } from '../geometry/types.js';
@@ -35,6 +36,7 @@ import { exportLibrary, importDesign, importLibrary } from './library.js';
 import { requestId, requestLogger } from './log.js';
 import type { Logger } from './log.js';
 import {
+  ChoiceRepository,
   ClientNotFoundError,
   ClientRepository,
   ConcurrentEditError,
@@ -175,6 +177,7 @@ export function createApp(source: StoreHandle | Tenants, options: AppOptions = {
   const now = () => today(currentTenant().tenant.timezone);
   const pallets = new PalletRepository(storeNow, { now });
   const clients = new ClientRepository(storeNow, { now });
+  const choices = new ChoiceRepository(storeNow);
   const local = options.local === true && tenants === null;
 
   const brandInUse = () => currentTenant().brand();
@@ -440,6 +443,35 @@ export function createApp(source: StoreHandle | Tenants, options: AppOptions = {
     res.status(204).end();
   }));
 
+  /**
+   * What the company has added to the lists of type, deck, entry and planing,
+   * shared by everybody in it. A design keeps the words it uses, so nothing
+   * here is needed to print one, and taking an entry off changes no design.
+   */
+  app.get('/api/choices', wrap((_req, res) => {
+    fresh(res);
+    res.json(choices.get());
+  }));
+
+  app.post('/api/choices/:field', wrap((req, res) => {
+    const field = req.params.field;
+    if (!isChoiceField(field)) {
+      res.status(404).json({ error: 'There is no such list' });
+      return;
+    }
+    const body = req.body as { value?: unknown };
+    res.json(choices.add(field, String(body.value ?? '')));
+  }));
+
+  app.delete('/api/choices/:field', wrap((req, res) => {
+    const field = req.params.field;
+    if (!isChoiceField(field)) {
+      res.status(404).json({ error: 'There is no such list' });
+      return;
+    }
+    res.json(choices.remove(field, String(req.query.value ?? '')));
+  }));
+
   app.get('/api/pallets', wrap((_req, res) => {
     res.json(pallets.list());
   }));
@@ -583,7 +615,7 @@ export function createApp(source: StoreHandle | Tenants, options: AppOptions = {
    * that outlives the folder.
    */
   app.get('/api/library.json', wrap((_req, res) => {
-    const library = exportLibrary(pallets, clients);
+    const library = exportLibrary(pallets, clients, choices);
     fresh(res);
     res
       .type('application/json')
@@ -654,6 +686,10 @@ export function createApp(source: StoreHandle | Tenants, options: AppOptions = {
 
     if (error instanceof DuplicateClientError) {
       res.status(409).json({ error: error.message });
+      return;
+    }
+    if (error instanceof ChoiceError) {
+      res.status(400).json({ error: error.message });
       return;
     }
     if (error instanceof PalletLayoutError) {
