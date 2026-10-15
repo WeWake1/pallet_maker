@@ -404,6 +404,7 @@ function BoardsRow({
         onChange={(count) => dispatch({ type: 'setSlotCount', layerId: layer.id, count })}
       />
       <TextInput
+        className="w-full text-center"
         label={`${name}: material`}
         value={common(slots, (slot) => slot.material) ?? ''}
         placeholder={MIXED}
@@ -449,7 +450,7 @@ function BlocksRow({ layer, dispatch }: { layer: Layer; dispatch: (action: Actio
       <span className="flex items-center gap-0.5" title={`${grid.rows} rows of ${grid.cols}`}>
         <NumberInput
           label="Rows of blocks"
-          className="w-full min-w-0 px-1! text-center"
+          className="w-full min-w-0 px-1!"
           value={grid.rows}
           min={1}
           max={MAX_GRID_SIDE}
@@ -458,7 +459,7 @@ function BlocksRow({ layer, dispatch }: { layer: Layer; dispatch: (action: Actio
         <span className="text-label text-ink-faint">×</span>
         <NumberInput
           label="Blocks in each row"
-          className="w-full min-w-0 px-1! text-center"
+          className="w-full min-w-0 px-1!"
           value={grid.cols}
           min={1}
           max={MAX_GRID_SIDE}
@@ -466,6 +467,7 @@ function BlocksRow({ layer, dispatch }: { layer: Layer; dispatch: (action: Actio
         />
       </span>
       <TextInput
+        className="w-full text-center"
         label="Blocks: material"
         value={common(cells, (cell) => cell.material) ?? ''}
         placeholder={MIXED}
@@ -497,7 +499,12 @@ function SheetRow({
         onChange={(thickness) => patch({ thickness })}
       />
       <span className="px-2 text-ui text-ink-faint">1</span>
-      <TextInput label="Sheet: material" value={sheet.material} onChange={(material) => patch({ material })} />
+      <TextInput
+        className="w-full text-center"
+        label="Sheet: material"
+        value={sheet.material}
+        onChange={(material) => patch({ material })}
+      />
     </>
   );
 }
@@ -889,8 +896,14 @@ function SlotRow({
         min={1}
         onChange={(thickness) => patch({ thickness })}
       />
-      <TextInput label={`Board ${index + 1}: material`} value={slot.material} onChange={(material) => patch({ material })} />
       <TextInput
+        className="w-full text-center"
+        label={`Board ${index + 1}: material`}
+        value={slot.material}
+        onChange={(material) => patch({ material })}
+      />
+      <TextInput
+        className="w-full text-center"
         label={`Board ${index + 1}: variant`}
         value={slot.variant ?? ''}
         onChange={(value) => patch({ variant: value === '' ? undefined : value })}
@@ -1006,7 +1019,12 @@ function CellRow({
       <NumberInput label={`Block ${where}: length`} value={cell.lengthMm} min={1} onChange={(lengthMm) => patch({ lengthMm })} />
       <NumberInput label={`Block ${where}: width`} value={cell.widthMm} min={1} onChange={(widthMm) => patch({ widthMm })} />
       <NumberInput label={`Block ${where}: height`} value={cell.heightMm} min={1} onChange={(heightMm) => patch({ heightMm })} />
-      <TextInput label={`Block ${where}: material`} value={cell.material} onChange={(material) => patch({ material })} />
+      <TextInput
+        className="w-full text-center"
+        label={`Block ${where}: material`}
+        value={cell.material}
+        onChange={(material) => patch({ material })}
+      />
       <Button
         size="sm"
         title="Copy this cell to every cell in the grid"

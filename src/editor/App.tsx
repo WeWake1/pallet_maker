@@ -1327,7 +1327,7 @@ function Editor({
                     has a code to give it. */}
                 <Labelled label="Code" hint={HINTS.palletCode} id={fieldId('palletCode')}>
                   <input
-                    className={`${bare} w-32`}
+                    className={`${bare} w-32 text-center`}
                     value={pallet.palletCode}
                     placeholder={brand.defaults.palletCodePlaceholder}
                     onChange={(event) => patch({ palletCode: event.target.value })}
@@ -1335,7 +1335,7 @@ function Editor({
                 </Labelled>
                 <Labelled label="Client part no" hint={HINTS.clientPartNo} id={fieldId('clientPartNo')}>
                   <input
-                    className={`${bare} w-32`}
+                    className={`${bare} w-32 text-center`}
                     value={pallet.clientPartNo ?? ''}
                     onChange={(event) =>
                       patch({ clientPartNo: event.target.value === '' ? undefined : event.target.value })
@@ -1406,7 +1406,7 @@ function Editor({
                 </Prop>
                 <Prop label="Species" id={fieldId('species')} hint={HINTS.species}>
                   <TextInput
-                    className="w-40"
+                    className="w-40 text-center"
                     value={pallet.species}
                     placeholder={brand.defaults.species}
                     onChange={(species) => patch({ species })}
@@ -1416,7 +1416,7 @@ function Editor({
                   <label className="flex items-center gap-2">
                     <span className="text-label text-ink-faint">part</span>
                     <TextInput
-                      className="w-24"
+                      className="w-24 text-center"
                       label="Component tolerance"
                       value={pallet.componentTolerance}
                       placeholder={DEFAULT_COMPONENT_TOLERANCE}
@@ -1426,7 +1426,7 @@ function Editor({
                   <label id={fieldId('palletTolerance')} className="flex items-center gap-2">
                     <span className="pl-1 text-label text-ink-faint">pallet</span>
                     <TextInput
-                      className="w-24"
+                      className="w-24 text-center"
                       label="Total pallet tolerance"
                       value={pallet.palletTolerance}
                       placeholder={DEFAULT_PALLET_TOLERANCE}
@@ -1820,12 +1820,14 @@ function Nails({
             {pallet.nails.map((nail, index) => (
               <div key={index} className={NAIL_COLUMNS}>
                 <TextInput
+                  className="w-full text-center"
                   label={`Nail row ${index + 1}: joint`}
                   value={nail.label}
                   placeholder="top board to centre board"
                   onChange={(label) => dispatch({ type: 'patchNail', index, patch: { label } })}
                 />
                 <TextInput
+                  className="w-full text-center"
                   label={`Nail row ${index + 1}: type`}
                   value={nail.type}
                   onChange={(type) => dispatch({ type: 'patchNail', index, patch: { type } })}

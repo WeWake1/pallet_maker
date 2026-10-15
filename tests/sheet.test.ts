@@ -166,7 +166,7 @@ describe('the sheet', () => {
     // its boards: as deep as the pallet is high in both elevations, as wide as
     // the pallet is long in both plans. The views' own boxes are not compared —
     // they carry different dimension lanes and are not the same size, which is
-    // why each is centred in its cell rather than aligned to a corner.
+    // why a row lines its views up by their drawings rather than their boxes.
     const svgs = sheetViews(layout, rows);
     const drawn = (svg: string) => {
       // Stroked rectangles only: the first rect in the view is its white
@@ -215,6 +215,45 @@ describe('the sheet', () => {
       expect(drawn.width).toBeLessThanOrEqual(mmToPx(cell) + 1);
       expect(drawn.height).toBeLessThanOrEqual(mmToPx(room) + 1);
     }
+  });
+
+  /**
+   * The bug this guards: each view was centred in its row as a box, lanes and
+   * all. Where the top boards run along the pallet and the bottom boards across
+   * it, the bottom view carries its board spacings along the bottom, a lane
+   * deeper than the top view — and centring split that lane, so the bottom
+   * view's drawing printed higher than the top view's beside it. With both
+   * decks running the same way the lanes matched and the fault hid.
+   */
+  it('lines the drawings of a row up with each other, not their boxes', () => {
+    const crossed = computeLayout(loadFixture('block-1000x800'));
+    const rows = drawingRows(crossed);
+    const lanes = (view: 'top' | 'bottom') => {
+      const m = measureView(crossed, view, { scale: rows.scale });
+      return m.chromeY - m.chromeTop;
+    };
+    // The case itself: the two plans do not carry the same lanes below.
+    expect(lanes('bottom')).toBeGreaterThan(lanes('top'));
+
+    // Where each drawing's top edge lands on the page.
+    const svg = renderSheetSvg(loadFixture('block-1000x800'), crossed);
+    const placed = Object.fromEntries(
+      [
+        ...svg.matchAll(
+          /<g transform="translate\([\d.-]+ ([\d.-]+)\)"><g data-width="[\d.]+" data-height="[\d.]+"><title>([^<]+)<\/title>/g,
+        ),
+      ].map((m) => [m[2]!, Number(m[1])]),
+    );
+    const edge = (view: 'top' | 'bottom' | 'side' | 'end', title: string) =>
+      placed[title]! + measureView(crossed, view, { scale: rows.scale }).chromeTop;
+    expect(Math.abs(edge('top', 'TOP VIEW') - edge('bottom', 'BOTTOM VIEW'))).toBeLessThan(0.05);
+    expect(Math.abs(edge('side', 'SIDE VIEW') - edge('end', 'END VIEW'))).toBeLessThan(0.05);
+
+    // And the printed sheet hangs each view from the same drop.
+    const html = renderSheet(loadFixture('block-1000x800'), crossed);
+    rows.drops.plan.forEach((drop, i) => {
+      expect(html).toContain(`.row.plan figure:nth-child(${i + 1}) { flex: 0 0 ${rows.cells.plan[i]!.toFixed(2)}mm; padding-top: ${drop.toFixed(2)}mm; }`);
+    });
   });
 
   /**

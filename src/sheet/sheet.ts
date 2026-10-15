@@ -38,14 +38,15 @@ export interface SheetOptions {
 /** A length as CSS wants it: enough precision for the printer, no more. */
 const fmtMm = (mm: number): string => mm.toFixed(2);
 
-/** One rule per cell, fixing its width so the printed sheet divides its rows
- *  exactly as the SVG sheet does. */
+/** One rule per cell, fixing its width and how far down it the view starts, so
+ *  the printed sheet divides and lines up its rows exactly as the SVG sheet does. */
 function cellWidths(rows: DrawingRows): string {
   return (['plan', 'elevation'] as const)
     .flatMap((row) =>
       rows.cells[row].map(
         (width, i) =>
-          `  .row.${row} figure:nth-child(${i + 1}) { flex: 0 0 ${fmtMm(width)}mm; }`,
+          `  .row.${row} figure:nth-child(${i + 1}) { flex: 0 0 ${fmtMm(width)}mm; ` +
+          `padding-top: ${fmtMm(rows.drops[row][i]!)}mm; }`,
       ),
     )
     .join('\n');
@@ -66,6 +67,11 @@ export interface DrawingRows {
   scale: number;
   /** Cell widths in mm, in the order the views are placed along the row. */
   cells: Record<keyof typeof PAIRS, number[]>;
+  /**
+   * How far down its cell each view starts, in mm, in the same order: whatever
+   * puts its drawing level with the other drawing in the row. See `lineUp`.
+   */
+  drops: Record<keyof typeof PAIRS, number[]>;
 }
 
 /**
@@ -123,15 +129,36 @@ function measure(
     views.map((view) => measureView(layout, view, { scale }));
   const plan = measured(PAIRS.plan);
   const elevation = measured(PAIRS.elevation);
-  const deepest = (views: ViewMeasure[]) =>
-    Math.max(...views.map((m) => m.height)) / PX_PER_MM;
+  const planRow = lineUp(plan);
+  const elevationRow = lineUp(elevation);
 
   return {
-    plan: deepest(plan),
-    elevation: deepest(elevation),
+    plan: planRow.depth,
+    elevation: elevationRow.depth,
     scale,
     cells: { plan: share(plan), elevation: share(elevation) },
+    drops: { plan: planRow.drops, elevation: elevationRow.drops },
   };
+}
+
+/**
+ * The views of a row set level by their drawings, and how deep that makes it.
+ *
+ * The two views of a pair draw the same extent — both plans are the footprint,
+ * both elevations the pallet's height — but rarely carry the same lanes. Where
+ * the top deck's boards run along the pallet and the bottom deck's across it,
+ * one plan has its board spacings down the side and the other has them along
+ * the bottom, a lane deeper. Centred as boxes, that lane put the bottom view's
+ * drawing half a lane higher than the top view's. So each view is dropped by
+ * whatever puts its drawing's top edge level with the lowest one in the row;
+ * the drawings then share both edges, and the row is as deep as the deepest
+ * view comes out after its drop.
+ */
+function lineUp(views: ViewMeasure[]): { depth: number; drops: number[] } {
+  const top = Math.max(...views.map((m) => m.chromeTop));
+  const drops = views.map((m) => top - m.chromeTop);
+  const depth = Math.max(...views.map((m, i) => drops[i]! + m.height));
+  return { depth: depth / PX_PER_MM, drops: drops.map((drop) => drop / PX_PER_MM) };
 }
 
 /**
@@ -169,8 +196,13 @@ function rowScale(layout: Layout, views: readonly ViewKind[], budget: number): n
     const chrome = measured.reduce((sum, m) => sum + m.chromeX, 0);
     const drawings = measured.reduce((sum, m) => sum + m.uSpan, 0);
     const byWidth = Math.max(room - chrome, 1) / drawings;
+    // Lined up, every view in the row starts as far down as the one with the
+    // most above its drawing — see lineUp — and that is what the depth pays.
+    const above = Math.max(...measured.map((m) => m.chromeTop));
     const byHeight = Math.min(
-      ...measured.map((m) => Math.max(height - m.chromeY, 1) / m.vSpan),
+      ...measured.map(
+        (m) => Math.max(height - above - (m.chromeY - m.chromeTop), 1) / m.vSpan,
+      ),
     );
     const next = Math.min(byWidth, byHeight);
 
@@ -196,7 +228,7 @@ function rowScale(layout: Layout, views: readonly ViewKind[], budget: number): n
  * length wherever it appears: the pallet's height measures the same in the side
  * and end elevations, and its footprint the same under the plans as across them.
  * A view narrower than its cell — the end elevation, which is the short way
- * across the pallet — is centred in it by the sheet. The isometric is a picture
+ * across the pallet — is centred across it by the sheet. The isometric is a picture
  * rather than a projection and keeps a scale of its own.
  *
  * `fragment` gives each one back as a `<g>` with no nested `<svg>` and no
@@ -575,6 +607,9 @@ ${cellWidths(rows)}
     justify-content: center;
     min-width: 0;
   }
+  /* The two views of a row hang from the drop that levels their drawings, not
+     centred as boxes — see lineUp. */
+  .row.plan figure, .row.elevation figure { align-items: flex-start; box-sizing: border-box; }
   .row svg { display: block; }
 
   /* The projection note keeps the middle of the page; the logo takes the

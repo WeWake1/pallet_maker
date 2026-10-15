@@ -10,6 +10,10 @@ import type { LoadKg } from '../types.js';
  * A field, less its width. A field is as wide as what goes in it: four digits
  * of millimetres want a box four digits wide, and a box the width of the
  * column says "type a sentence here" to someone about to type 1200.
+ *
+ * What is in a box that size sits in the middle of it: every number field
+ * below centres its figure, and the short words in the design form — a
+ * species, a material, a tolerance — ask for the same with `text-center`.
  */
 export const inputBase =
   'rounded-md border border-line bg-card px-2 py-1.5 text-ui text-ink ' +
@@ -311,7 +315,7 @@ export function NumberInput({
   return (
     <input
       ref={inputRef}
-      className={`${inputBase} ${className} tabular-nums`}
+      className={`${inputBase} ${className} text-center tabular-nums`}
       type="number"
       value={numberText(typed, value)}
       min={min}
@@ -373,7 +377,7 @@ export function DecimalInput({
 
   return (
     <input
-      className={`${inputBase} ${className} tabular-nums`}
+      className={`${inputBase} ${className} text-center tabular-nums`}
       type="text"
       inputMode="decimal"
       value={typed ?? (Number.isFinite(value) ? String(value) : '')}
@@ -424,7 +428,7 @@ export function OptionalNumberInput({
 
   return (
     <input
-      className={`${inputBase} ${className} tabular-nums`}
+      className={`${inputBase} ${className} text-center tabular-nums`}
       type="number"
       value={typed ?? (value === undefined ? '' : String(value))}
       min={min}
@@ -469,7 +473,7 @@ export function NumberOrNaInput({
 
   return (
     <input
-      className={`${inputBase} ${className} tabular-nums`}
+      className={`${inputBase} ${className} text-center tabular-nums`}
       type="text"
       inputMode="numeric"
       value={typed ?? (value === undefined ? '' : String(value))}

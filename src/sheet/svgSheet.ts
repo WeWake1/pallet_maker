@@ -429,12 +429,12 @@ function drawingColumn(views: Record<string, string>, rows: DrawingRows): string
   const top = PAGE.padding + SHEET.headerHeight + SHEET.headerGap;
 
   /** One row of views, each in the cell `drawingRows` measured out for it. */
-  const row = (names: string[], cells: number[], y: number, height: number): string => {
+  const row = (names: string[], cells: number[], drops: number[], y: number, height: number): string => {
     let x = left;
     return names
       .map((name, i) => {
         const cell = cells[i]!;
-        const placed = place(views[name]!, x, y, cell, height);
+        const placed = place(views[name]!, x, y, cell, height, drops[i]);
         x += cell + SHEET.columnGap;
         return placed;
       })
@@ -442,9 +442,9 @@ function drawingColumn(views: Record<string, string>, rows: DrawingRows): string
   };
 
   let y = top;
-  const parts = [row(['top', 'bottom'], rows.cells.plan, y, rows.plan)];
+  const parts = [row(['top', 'bottom'], rows.cells.plan, rows.drops.plan, y, rows.plan)];
   y += rows.plan + SHEET.rowGap;
-  parts.push(row(['side', 'end'], rows.cells.elevation, y, rows.elevation));
+  parts.push(row(['side', 'end'], rows.cells.elevation, rows.drops.elevation, y, rows.elevation));
   y += rows.elevation + SHEET.rowGap;
   parts.push(place(views.iso!, left, y, DRAWING.width, rows.iso));
 
@@ -457,12 +457,23 @@ function drawingColumn(views: Record<string, string>, rows: DrawingRows): string
  * A view arrives as a `<g>` drawn at its natural size from the origin, so
  * placing it is a translate and nothing else — no nested viewport, no scaling,
  * and the stroke weights land exactly as the printed sheet's do.
+ *
+ * A view in a row of two hangs `drop` mm down its cell, which is what levels its
+ * drawing with the other one (see `lineUp` in sheet.ts); the isometric, alone on
+ * its row, is centred.
  */
-function place(view: string, left: number, top: number, width: number, height: number): string {
+function place(
+  view: string,
+  left: number,
+  top: number,
+  width: number,
+  height: number,
+  drop?: number,
+): string {
   const size = fragmentSize(view);
   if (!size) throw new Error('A view was not rendered as a sized fragment');
   const x = px(left) + (px(width) - size.width) / 2;
-  const y = px(top) + (px(height) - size.height) / 2;
+  const y = drop === undefined ? px(top) + (px(height) - size.height) / 2 : px(top + drop);
   return el('g', { transform: `translate(${fmt(x)} ${fmt(y)})` }, view);
 }
 

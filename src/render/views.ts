@@ -139,6 +139,12 @@ export interface ViewMeasure {
    */
   chromeX: number;
   chromeY: number;
+  /**
+   * The part of `chromeY` above the drawing: the lanes and title over it. What
+   * a row has to line its views up by, since two views with the same drawing
+   * seldom carry the same lanes above and below it.
+   */
+  chromeTop: number;
   /** The pallet the view draws, in mm: across the page, and down it. */
   uSpan: number;
   vSpan: number;
@@ -165,6 +171,7 @@ export function measureView(
     height: scene.height,
     chromeX: scene.width - frame.uSpan * scene.scale,
     chromeY: scene.height - frame.vSpan * scene.scale,
+    chromeTop: scene.top,
     uSpan: frame.uSpan,
     vSpan: frame.vSpan,
   };
