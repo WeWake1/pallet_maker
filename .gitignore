@@ -1,7 +1,7 @@
 node_modules/
 dist/
 out/
-*.sqlite
+
 *.sqlite-shm
 *.sqlite-wal
 *.sqlite-journal
