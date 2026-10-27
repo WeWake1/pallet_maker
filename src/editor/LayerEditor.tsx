@@ -404,7 +404,6 @@ function BoardsRow({
         onChange={(count) => dispatch({ type: 'setSlotCount', layerId: layer.id, count })}
       />
       <TextInput
-        className="w-full text-center"
         label={`${name}: material`}
         value={common(slots, (slot) => slot.material) ?? ''}
         placeholder={MIXED}
@@ -467,7 +466,6 @@ function BlocksRow({ layer, dispatch }: { layer: Layer; dispatch: (action: Actio
         />
       </span>
       <TextInput
-        className="w-full text-center"
         label="Blocks: material"
         value={common(cells, (cell) => cell.material) ?? ''}
         placeholder={MIXED}
@@ -500,7 +498,6 @@ function SheetRow({
       />
       <span className="px-2 text-ui text-ink-faint">1</span>
       <TextInput
-        className="w-full text-center"
         label="Sheet: material"
         value={sheet.material}
         onChange={(material) => patch({ material })}
@@ -897,7 +894,6 @@ function SlotRow({
         onChange={(thickness) => patch({ thickness })}
       />
       <TextInput
-        className="w-full text-center"
         label={`Board ${index + 1}: material`}
         value={slot.material}
         onChange={(material) => patch({ material })}
@@ -1020,7 +1016,6 @@ function CellRow({
       <NumberInput label={`Block ${where}: width`} value={cell.widthMm} min={1} onChange={(widthMm) => patch({ widthMm })} />
       <NumberInput label={`Block ${where}: height`} value={cell.heightMm} min={1} onChange={(heightMm) => patch({ heightMm })} />
       <TextInput
-        className="w-full text-center"
         label={`Block ${where}: material`}
         value={cell.material}
         onChange={(material) => patch({ material })}

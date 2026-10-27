@@ -13,7 +13,7 @@ import type { LoadKg } from '../types.js';
  *
  * What is in a box that size sits in the middle of it: every number field
  * below centres its figure, and the short words in the design form — a
- * species, a material, a tolerance — ask for the same with `text-center`.
+ * species, a tolerance — ask for the same with `text-center`.
  */
 export const inputBase =
   'rounded-md border border-line bg-card px-2 py-1.5 text-ui text-ink ' +
