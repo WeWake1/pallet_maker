@@ -1,0 +1,278 @@
+{
+  "id": "4d903cd1-2601-4ac9-9291-67a3cbab8c82",
+  "palletCode": "",
+  "clientId": "2fbfeea6-2933-4116-86de-0d38a3488e14",
+  "clientName": "AMBICA PATTERNS IND PVT LTD",
+  "palletName": "1120 x 890 x 110",
+  "overallLength": 1120,
+  "overallWidth": 890,
+  "overallHeight": 0,
+  "palletType": "na",
+  "deckType": "na",
+  "entry": "na",
+  "species": "pine",
+  "planing": "na",
+  "staticLoadKg": "na",
+  "dynamicLoadKg": "na",
+  "handling": [
+    "pallet_truck",
+    "forklift"
+  ],
+  "nails": [],
+  "nailPlacements": [],
+  "updatedAt": "2026-09-18",
+  "layers": [
+    {
+      "id": "68a3eae3-6404-4cef-a297-491a9649c4b6",
+      "kind": "top_deck",
+      "order": 1,
+      "direction": "across_width",
+      "sameLevelAsPrev": false,
+      "spanMm": null,
+      "offsetMm": 0,
+      "runSpanMm": null,
+      "runOffsetMm": 0,
+      "content": {
+        "type": "sequence",
+        "slots": [
+          {
+            "length": 890,
+            "width": 90,
+            "thickness": 17,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 890,
+            "width": 90,
+            "thickness": 17,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 890,
+            "width": 90,
+            "thickness": 17,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 890,
+            "width": 90,
+            "thickness": 17,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 890,
+            "width": 90,
+            "thickness": 17,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 890,
+            "width": 90,
+            "thickness": 17,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 890,
+            "width": 90,
+            "thickness": 17,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 890,
+            "width": 90,
+            "thickness": 17,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 890,
+            "width": 90,
+            "thickness": 17,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "0d3fcb7a-c562-4d0f-aa89-1806f30b5a43",
+      "kind": "bearer",
+      "order": 2,
+      "direction": "along_length",
+      "sameLevelAsPrev": false,
+      "spanMm": null,
+      "offsetMm": 0,
+      "runSpanMm": null,
+      "runOffsetMm": 0,
+      "content": {
+        "type": "sequence",
+        "slots": [
+          {
+            "length": 1120,
+            "width": 90,
+            "thickness": 17,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 1120,
+            "width": 90,
+            "thickness": 17,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 1120,
+            "width": 90,
+            "thickness": 17,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "3ff75332-59ed-4b0b-b03b-920e9a8b441e",
+      "kind": "block",
+      "order": 3,
+      "direction": "along_length",
+      "sameLevelAsPrev": false,
+      "spanMm": null,
+      "offsetMm": 0,
+      "runSpanMm": null,
+      "runOffsetMm": 0,
+      "content": {
+        "type": "grid",
+        "grid": {
+          "rows": 3,
+          "cols": 3,
+          "cells": [
+            [
+              {
+                "lengthMm": 130,
+                "widthMm": 90,
+                "heightMm": 65,
+                "material": "pine"
+              },
+              {
+                "lengthMm": 130,
+                "widthMm": 90,
+                "heightMm": 65,
+                "material": "pine"
+              },
+              {
+                "lengthMm": 130,
+                "widthMm": 90,
+                "heightMm": 65,
+                "material": "pine"
+              }
+            ],
+            [
+              {
+                "lengthMm": 130,
+                "widthMm": 90,
+                "heightMm": 65,
+                "material": "pine"
+              },
+              {
+                "lengthMm": 130,
+                "widthMm": 90,
+                "heightMm": 65,
+                "material": "pine"
+              },
+              {
+                "lengthMm": 130,
+                "widthMm": 90,
+                "heightMm": 65,
+                "material": "pine"
+              }
+            ],
+            [
+              {
+                "lengthMm": 130,
+                "widthMm": 90,
+                "heightMm": 65,
+                "material": "pine"
+              },
+              {
+                "lengthMm": 130,
+                "widthMm": 90,
+                "heightMm": 65,
+                "material": "pine"
+              },
+              {
+                "lengthMm": 130,
+                "widthMm": 90,
+                "heightMm": 65,
+                "material": "pine"
+              }
+            ]
+          ],
+          "rowSpanMm": null,
+          "rowOffsetMm": 0,
+          "colSpanMm": null,
+          "colOffsetMm": 0
+        }
+      }
+    },
+    {
+      "id": "e701fbab-05e7-45db-8f38-03688b4698ab",
+      "kind": "bottom_deck",
+      "order": 4,
+      "direction": "along_length",
+      "sameLevelAsPrev": false,
+      "spanMm": null,
+      "offsetMm": 0,
+      "runSpanMm": null,
+      "runOffsetMm": 0,
+      "content": {
+        "type": "sequence",
+        "slots": [
+          {
+            "length": 1120,
+            "width": 90,
+            "thickness": 17,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 1120,
+            "width": 90,
+            "thickness": 17,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 1120,
+            "width": 90,
+            "thickness": 17,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          }
+        ]
+      }
+    }
+  ]
+}

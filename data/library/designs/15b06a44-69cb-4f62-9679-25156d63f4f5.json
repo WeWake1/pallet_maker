@@ -1,0 +1,254 @@
+{
+  "id": "15b06a44-69cb-4f62-9679-25156d63f4f5",
+  "palletCode": "sumonth",
+  "clientId": "1de3fbd7-e721-4101-a171-c41918616d9d",
+  "clientName": "Aditya Auto Doddaballapur",
+  "palletName": "1440 x 840",
+  "overallLength": 1440,
+  "overallWidth": 840,
+  "overallHeight": 0,
+  "palletType": "block_4way",
+  "deckType": "double_face_non_reversible",
+  "entry": "4_way",
+  "species": "pine",
+  "planing": "none",
+  "staticLoadKg": "na",
+  "dynamicLoadKg": "na",
+  "handling": [
+    "pallet_truck",
+    "forklift"
+  ],
+  "nails": [],
+  "nailPlacements": [],
+  "updatedAt": "2026-08-08",
+  "layers": [
+    {
+      "id": "598cef5e-1555-44ad-b892-4b10040081f7",
+      "kind": "top_deck",
+      "order": 1,
+      "direction": "along_length",
+      "sameLevelAsPrev": false,
+      "spanMm": null,
+      "offsetMm": 0,
+      "runSpanMm": null,
+      "runOffsetMm": 0,
+      "content": {
+        "type": "sequence",
+        "slots": [
+          {
+            "length": 1440,
+            "width": 89,
+            "thickness": 16,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 1440,
+            "width": 89,
+            "thickness": 16,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 1440,
+            "width": 89,
+            "thickness": 16,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 1440,
+            "width": 89,
+            "thickness": 16,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 1440,
+            "width": 89,
+            "thickness": 16,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 1440,
+            "width": 89,
+            "thickness": 16,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "eee3f93c-1cde-4a36-862a-5dce39c6af7c",
+      "kind": "bearer",
+      "order": 2,
+      "direction": "across_width",
+      "sameLevelAsPrev": false,
+      "spanMm": null,
+      "offsetMm": 0,
+      "runSpanMm": null,
+      "runOffsetMm": 0,
+      "content": {
+        "type": "sequence",
+        "slots": [
+          {
+            "length": 840,
+            "width": 89,
+            "thickness": 16,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 840,
+            "width": 89,
+            "thickness": 16,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 840,
+            "width": 89,
+            "thickness": 16,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "410c7bb7-7285-4717-b72c-0de6edb4c374",
+      "kind": "block",
+      "order": 3,
+      "direction": "along_length",
+      "sameLevelAsPrev": false,
+      "spanMm": null,
+      "offsetMm": 0,
+      "runSpanMm": null,
+      "runOffsetMm": 0,
+      "content": {
+        "type": "grid",
+        "grid": {
+          "rows": 3,
+          "cols": 3,
+          "cells": [
+            [
+              {
+                "lengthMm": 86,
+                "widthMm": 86,
+                "heightMm": 95,
+                "material": "pine"
+              },
+              {
+                "lengthMm": 86,
+                "widthMm": 86,
+                "heightMm": 95,
+                "material": "pine"
+              },
+              {
+                "lengthMm": 86,
+                "widthMm": 86,
+                "heightMm": 95,
+                "material": "pine"
+              }
+            ],
+            [
+              {
+                "lengthMm": 86,
+                "widthMm": 86,
+                "heightMm": 95,
+                "material": "pine"
+              },
+              {
+                "lengthMm": 86,
+                "widthMm": 86,
+                "heightMm": 95,
+                "material": "pine"
+              },
+              {
+                "lengthMm": 86,
+                "widthMm": 86,
+                "heightMm": 95,
+                "material": "pine"
+              }
+            ],
+            [
+              {
+                "lengthMm": 86,
+                "widthMm": 86,
+                "heightMm": 95,
+                "material": "pine"
+              },
+              {
+                "lengthMm": 86,
+                "widthMm": 86,
+                "heightMm": 95,
+                "material": "pine"
+              },
+              {
+                "lengthMm": 86,
+                "widthMm": 86,
+                "heightMm": 95,
+                "material": "pine"
+              }
+            ]
+          ],
+          "rowSpanMm": null,
+          "rowOffsetMm": 0,
+          "colSpanMm": null,
+          "colOffsetMm": 0
+        }
+      }
+    },
+    {
+      "id": "c797dc20-8b51-4484-b48b-7529c00b8ff1",
+      "kind": "bottom_deck",
+      "order": 4,
+      "direction": "along_length",
+      "sameLevelAsPrev": false,
+      "spanMm": null,
+      "offsetMm": 0,
+      "runSpanMm": null,
+      "runOffsetMm": 0,
+      "content": {
+        "type": "sequence",
+        "slots": [
+          {
+            "length": 1440,
+            "width": 89,
+            "thickness": 16,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 1440,
+            "width": 89,
+            "thickness": 16,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 1440,
+            "width": 89,
+            "thickness": 16,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          }
+        ]
+      }
+    }
+  ]
+}

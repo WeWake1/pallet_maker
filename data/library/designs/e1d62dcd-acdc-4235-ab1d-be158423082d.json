@@ -1,0 +1,202 @@
+{
+  "id": "e1d62dcd-acdc-4235-ab1d-be158423082d",
+  "palletCode": "",
+  "clientId": "33a8f594-d79c-4898-961e-1dd7989614b6",
+  "clientName": "Reitzel India Pvt Ltd",
+  "palletName": "1066 x 1066 x 140 (Sepal)",
+  "overallLength": 1066,
+  "overallWidth": 1066,
+  "overallHeight": 0,
+  "palletType": "na",
+  "deckType": "na",
+  "entry": "na",
+  "species": "pine",
+  "planing": "none",
+  "staticLoadKg": "na",
+  "dynamicLoadKg": "na",
+  "handling": [
+    "pallet_truck",
+    "forklift"
+  ],
+  "nails": [],
+  "nailPlacements": [],
+  "updatedAt": "2026-08-13",
+  "layers": [
+    {
+      "id": "7b7214fc-5cf6-4b8d-b887-195ebdba479b",
+      "kind": "top_deck",
+      "order": 1,
+      "direction": "along_length",
+      "sameLevelAsPrev": false,
+      "spanMm": null,
+      "offsetMm": 0,
+      "runSpanMm": null,
+      "runOffsetMm": 0,
+      "content": {
+        "type": "sequence",
+        "slots": [
+          {
+            "length": 1066,
+            "width": 95,
+            "thickness": 19,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 1066,
+            "width": 95,
+            "thickness": 19,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 1066,
+            "width": 95,
+            "thickness": 19,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 1066,
+            "width": 95,
+            "thickness": 19,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 1066,
+            "width": 95,
+            "thickness": 19,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 1066,
+            "width": 95,
+            "thickness": 19,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 1066,
+            "width": 95,
+            "thickness": 19,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "4cc2b777-98e3-4053-9c00-d02bb37e84c2",
+      "kind": "runner",
+      "order": 2,
+      "direction": "across_width",
+      "sameLevelAsPrev": false,
+      "spanMm": null,
+      "offsetMm": 0,
+      "runSpanMm": null,
+      "runOffsetMm": 0,
+      "content": {
+        "type": "sequence",
+        "slots": [
+          {
+            "length": 1066,
+            "width": 45,
+            "thickness": 95,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 1066,
+            "width": 45,
+            "thickness": 95,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 1066,
+            "width": 45,
+            "thickness": 95,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 1066,
+            "width": 45,
+            "thickness": 95,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "9ccaf245-1b8d-4039-8db9-8df34579bbec",
+      "kind": "bottom_deck",
+      "order": 3,
+      "direction": "along_length",
+      "sameLevelAsPrev": false,
+      "spanMm": null,
+      "offsetMm": 0,
+      "runSpanMm": null,
+      "runOffsetMm": 0,
+      "content": {
+        "type": "sequence",
+        "slots": [
+          {
+            "length": 1066,
+            "width": 95,
+            "thickness": 19,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 1066,
+            "width": 95,
+            "thickness": 19,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 1066,
+            "width": 95,
+            "thickness": 19,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 1066,
+            "width": 95,
+            "thickness": 19,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 1066,
+            "width": 95,
+            "thickness": 19,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "id": "18b345fa-fc0c-4f2a-81b8-be6be9fbb34e",
+  "palletCode": "",
+  "clientId": "33a8f594-d79c-4898-961e-1dd7989614b6",
+  "clientName": "Reitzel India Pvt Ltd",
+  "palletName": "90\" x 45\" Plywood Sheet",
+  "overallLength": 2286,
+  "overallWidth": 1143,
+  "overallHeight": 0,
+  "palletType": "na",
+  "deckType": "na",
+  "entry": "na",
+  "species": "Ply",
+  "planing": "na",
+  "staticLoadKg": "na",
+  "dynamicLoadKg": "na",
+  "handling": [
+    "pallet_truck",
+    "forklift"
+  ],
+  "nails": [],
+  "nailPlacements": [],
+  "updatedAt": "2026-08-13",
+  "layers": [
+    {
+      "id": "53d40bd5-bac9-4914-8a18-0487ca1196d9",
+      "kind": "panel",
+      "order": 1,
+      "direction": "along_length",
+      "sameLevelAsPrev": false,
+      "spanMm": null,
+      "offsetMm": 0,
+      "runSpanMm": null,
+      "runOffsetMm": 0,
+      "content": {
+        "type": "sheet",
+        "sheet": {
+          "length": 2286,
+          "width": 1143,
+          "thickness": 12,
+          "material": "plywood"
+        }
+      }
+    }
+  ]
+}

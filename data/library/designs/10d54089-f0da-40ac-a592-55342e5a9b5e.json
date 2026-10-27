@@ -1,0 +1,246 @@
+{
+  "id": "10d54089-f0da-40ac-a592-55342e5a9b5e",
+  "palletCode": "",
+  "clientId": "e0d2addf-10ee-4e18-96e3-693beb5c228f",
+  "clientName": "Aditya Auto Bommasandra",
+  "palletName": "1040 x 780",
+  "overallLength": 1040,
+  "overallWidth": 780,
+  "overallHeight": 0,
+  "palletType": "block_4way",
+  "deckType": "double_face_non_reversible",
+  "entry": "4_way",
+  "species": "pine",
+  "planing": "none",
+  "staticLoadKg": "na",
+  "dynamicLoadKg": "na",
+  "handling": [
+    "pallet_truck",
+    "forklift"
+  ],
+  "nails": [],
+  "nailPlacements": [],
+  "updatedAt": "2026-09-17",
+  "layers": [
+    {
+      "id": "fa4954ab-1c02-4161-821d-d01143787f2e",
+      "kind": "top_deck",
+      "order": 1,
+      "direction": "along_length",
+      "sameLevelAsPrev": false,
+      "spanMm": null,
+      "offsetMm": 0,
+      "runSpanMm": null,
+      "runOffsetMm": 0,
+      "content": {
+        "type": "sequence",
+        "slots": [
+          {
+            "length": 1040,
+            "width": 89,
+            "thickness": 16,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 1040,
+            "width": 89,
+            "thickness": 16,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 1040,
+            "width": 89,
+            "thickness": 16,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 1040,
+            "width": 89,
+            "thickness": 16,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 1040,
+            "width": 89,
+            "thickness": 16,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "4d0e68ba-8c41-430e-b845-73b2430ee484",
+      "kind": "bearer",
+      "order": 2,
+      "direction": "across_width",
+      "sameLevelAsPrev": false,
+      "spanMm": null,
+      "offsetMm": 0,
+      "runSpanMm": null,
+      "runOffsetMm": 0,
+      "content": {
+        "type": "sequence",
+        "slots": [
+          {
+            "length": 780,
+            "width": 89,
+            "thickness": 16,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 780,
+            "width": 89,
+            "thickness": 16,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 780,
+            "width": 89,
+            "thickness": 16,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "c7ee961f-31a7-4d21-8265-bc880e1e3524",
+      "kind": "block",
+      "order": 3,
+      "direction": "along_length",
+      "sameLevelAsPrev": false,
+      "spanMm": null,
+      "offsetMm": 0,
+      "runSpanMm": null,
+      "runOffsetMm": 0,
+      "content": {
+        "type": "grid",
+        "grid": {
+          "rows": 3,
+          "cols": 3,
+          "cells": [
+            [
+              {
+                "lengthMm": 85,
+                "widthMm": 75,
+                "heightMm": 95,
+                "material": "pine"
+              },
+              {
+                "lengthMm": 85,
+                "widthMm": 75,
+                "heightMm": 95,
+                "material": "pine"
+              },
+              {
+                "lengthMm": 85,
+                "widthMm": 75,
+                "heightMm": 95,
+                "material": "pine"
+              }
+            ],
+            [
+              {
+                "lengthMm": 85,
+                "widthMm": 75,
+                "heightMm": 95,
+                "material": "pine"
+              },
+              {
+                "lengthMm": 85,
+                "widthMm": 75,
+                "heightMm": 95,
+                "material": "pine"
+              },
+              {
+                "lengthMm": 85,
+                "widthMm": 75,
+                "heightMm": 95,
+                "material": "pine"
+              }
+            ],
+            [
+              {
+                "lengthMm": 85,
+                "widthMm": 75,
+                "heightMm": 95,
+                "material": "pine"
+              },
+              {
+                "lengthMm": 85,
+                "widthMm": 75,
+                "heightMm": 95,
+                "material": "pine"
+              },
+              {
+                "lengthMm": 85,
+                "widthMm": 75,
+                "heightMm": 95,
+                "material": "pine"
+              }
+            ]
+          ],
+          "rowSpanMm": null,
+          "rowOffsetMm": 0,
+          "colSpanMm": null,
+          "colOffsetMm": 0
+        }
+      }
+    },
+    {
+      "id": "828da258-7260-45e6-bc6f-c3f7e4311cd5",
+      "kind": "bottom_deck",
+      "order": 4,
+      "direction": "across_width",
+      "sameLevelAsPrev": false,
+      "spanMm": null,
+      "offsetMm": 0,
+      "runSpanMm": null,
+      "runOffsetMm": 0,
+      "content": {
+        "type": "sequence",
+        "slots": [
+          {
+            "length": 780,
+            "width": 89,
+            "thickness": 16,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 780,
+            "width": 89,
+            "thickness": 16,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 780,
+            "width": 89,
+            "thickness": 16,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          }
+        ]
+      }
+    }
+  ]
+}

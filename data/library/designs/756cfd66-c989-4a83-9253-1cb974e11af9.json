@@ -1,0 +1,710 @@
+{
+  "id": "756cfd66-c989-4a83-9253-1cb974e11af9",
+  "palletCode": "",
+  "clientId": "455404df-0732-4b4e-a477-e3af2cfac5e8",
+  "clientName": "Biocon Biologics",
+  "palletName": "1219 x 1016 (Top)",
+  "overallLength": 1219,
+  "overallWidth": 1016,
+  "overallHeight": 0,
+  "palletType": "na",
+  "deckType": "na",
+  "entry": "na",
+  "species": "pine",
+  "planing": "na",
+  "handling": [
+    "pallet_truck",
+    "forklift",
+    "manual"
+  ],
+  "nails": [],
+  "nailPlacements": [
+    {
+      "upperLayerId": "3f2f3b09-8526-4a68-a24f-77c98be26652",
+      "upperSource": {
+        "kind": "slot",
+        "index": 3
+      },
+      "lowerLayerId": "1077441e-0447-4a3c-9cf5-2a6e1b7a996d",
+      "lowerSource": {
+        "kind": "slot",
+        "index": 0
+      },
+      "count": 0
+    },
+    {
+      "upperLayerId": "3f2f3b09-8526-4a68-a24f-77c98be26652",
+      "upperSource": {
+        "kind": "slot",
+        "index": 3
+      },
+      "lowerLayerId": "1077441e-0447-4a3c-9cf5-2a6e1b7a996d",
+      "lowerSource": {
+        "kind": "slot",
+        "index": 1
+      },
+      "count": 0
+    },
+    {
+      "upperLayerId": "3f2f3b09-8526-4a68-a24f-77c98be26652",
+      "upperSource": {
+        "kind": "slot",
+        "index": 3
+      },
+      "lowerLayerId": "1077441e-0447-4a3c-9cf5-2a6e1b7a996d",
+      "lowerSource": {
+        "kind": "slot",
+        "index": 2
+      },
+      "count": 0
+    },
+    {
+      "upperLayerId": "3f2f3b09-8526-4a68-a24f-77c98be26652",
+      "upperSource": {
+        "kind": "slot",
+        "index": 3
+      },
+      "lowerLayerId": "1077441e-0447-4a3c-9cf5-2a6e1b7a996d",
+      "lowerSource": {
+        "kind": "slot",
+        "index": 3
+      },
+      "count": 0
+    },
+    {
+      "upperLayerId": "3f2f3b09-8526-4a68-a24f-77c98be26652",
+      "upperSource": {
+        "kind": "slot",
+        "index": 3
+      },
+      "lowerLayerId": "1077441e-0447-4a3c-9cf5-2a6e1b7a996d",
+      "lowerSource": {
+        "kind": "slot",
+        "index": 4
+      },
+      "count": 0
+    },
+    {
+      "upperLayerId": "3f2f3b09-8526-4a68-a24f-77c98be26652",
+      "upperSource": {
+        "kind": "slot",
+        "index": 3
+      },
+      "lowerLayerId": "1077441e-0447-4a3c-9cf5-2a6e1b7a996d",
+      "lowerSource": {
+        "kind": "slot",
+        "index": 5
+      },
+      "count": 0
+    },
+    {
+      "upperLayerId": "3f2f3b09-8526-4a68-a24f-77c98be26652",
+      "upperSource": {
+        "kind": "slot",
+        "index": 2
+      },
+      "lowerLayerId": "1077441e-0447-4a3c-9cf5-2a6e1b7a996d",
+      "lowerSource": {
+        "kind": "slot",
+        "index": 5
+      },
+      "count": 0
+    },
+    {
+      "upperLayerId": "3f2f3b09-8526-4a68-a24f-77c98be26652",
+      "upperSource": {
+        "kind": "slot",
+        "index": 2
+      },
+      "lowerLayerId": "1077441e-0447-4a3c-9cf5-2a6e1b7a996d",
+      "lowerSource": {
+        "kind": "slot",
+        "index": 4
+      },
+      "count": 0
+    },
+    {
+      "upperLayerId": "3f2f3b09-8526-4a68-a24f-77c98be26652",
+      "upperSource": {
+        "kind": "slot",
+        "index": 2
+      },
+      "lowerLayerId": "1077441e-0447-4a3c-9cf5-2a6e1b7a996d",
+      "lowerSource": {
+        "kind": "slot",
+        "index": 3
+      },
+      "count": 0
+    },
+    {
+      "upperLayerId": "3f2f3b09-8526-4a68-a24f-77c98be26652",
+      "upperSource": {
+        "kind": "slot",
+        "index": 2
+      },
+      "lowerLayerId": "1077441e-0447-4a3c-9cf5-2a6e1b7a996d",
+      "lowerSource": {
+        "kind": "slot",
+        "index": 2
+      },
+      "count": 0
+    },
+    {
+      "upperLayerId": "3f2f3b09-8526-4a68-a24f-77c98be26652",
+      "upperSource": {
+        "kind": "slot",
+        "index": 2
+      },
+      "lowerLayerId": "1077441e-0447-4a3c-9cf5-2a6e1b7a996d",
+      "lowerSource": {
+        "kind": "slot",
+        "index": 1
+      },
+      "count": 0
+    },
+    {
+      "upperLayerId": "3f2f3b09-8526-4a68-a24f-77c98be26652",
+      "upperSource": {
+        "kind": "slot",
+        "index": 2
+      },
+      "lowerLayerId": "1077441e-0447-4a3c-9cf5-2a6e1b7a996d",
+      "lowerSource": {
+        "kind": "slot",
+        "index": 0
+      },
+      "count": 0
+    },
+    {
+      "upperLayerId": "3f2f3b09-8526-4a68-a24f-77c98be26652",
+      "upperSource": {
+        "kind": "slot",
+        "index": 1
+      },
+      "lowerLayerId": "1077441e-0447-4a3c-9cf5-2a6e1b7a996d",
+      "lowerSource": {
+        "kind": "slot",
+        "index": 0
+      },
+      "count": 0
+    },
+    {
+      "upperLayerId": "3f2f3b09-8526-4a68-a24f-77c98be26652",
+      "upperSource": {
+        "kind": "slot",
+        "index": 1
+      },
+      "lowerLayerId": "1077441e-0447-4a3c-9cf5-2a6e1b7a996d",
+      "lowerSource": {
+        "kind": "slot",
+        "index": 1
+      },
+      "count": 0
+    },
+    {
+      "upperLayerId": "3f2f3b09-8526-4a68-a24f-77c98be26652",
+      "upperSource": {
+        "kind": "slot",
+        "index": 1
+      },
+      "lowerLayerId": "1077441e-0447-4a3c-9cf5-2a6e1b7a996d",
+      "lowerSource": {
+        "kind": "slot",
+        "index": 2
+      },
+      "count": 0
+    },
+    {
+      "upperLayerId": "3f2f3b09-8526-4a68-a24f-77c98be26652",
+      "upperSource": {
+        "kind": "slot",
+        "index": 1
+      },
+      "lowerLayerId": "1077441e-0447-4a3c-9cf5-2a6e1b7a996d",
+      "lowerSource": {
+        "kind": "slot",
+        "index": 3
+      },
+      "count": 0
+    },
+    {
+      "upperLayerId": "3f2f3b09-8526-4a68-a24f-77c98be26652",
+      "upperSource": {
+        "kind": "slot",
+        "index": 1
+      },
+      "lowerLayerId": "1077441e-0447-4a3c-9cf5-2a6e1b7a996d",
+      "lowerSource": {
+        "kind": "slot",
+        "index": 4
+      },
+      "count": 0
+    },
+    {
+      "upperLayerId": "3f2f3b09-8526-4a68-a24f-77c98be26652",
+      "upperSource": {
+        "kind": "slot",
+        "index": 1
+      },
+      "lowerLayerId": "1077441e-0447-4a3c-9cf5-2a6e1b7a996d",
+      "lowerSource": {
+        "kind": "slot",
+        "index": 5
+      },
+      "count": 0
+    },
+    {
+      "upperLayerId": "3f2f3b09-8526-4a68-a24f-77c98be26652",
+      "upperSource": {
+        "kind": "slot",
+        "index": 0
+      },
+      "lowerLayerId": "1077441e-0447-4a3c-9cf5-2a6e1b7a996d",
+      "lowerSource": {
+        "kind": "slot",
+        "index": 5
+      },
+      "count": 0
+    },
+    {
+      "upperLayerId": "3f2f3b09-8526-4a68-a24f-77c98be26652",
+      "upperSource": {
+        "kind": "slot",
+        "index": 0
+      },
+      "lowerLayerId": "1077441e-0447-4a3c-9cf5-2a6e1b7a996d",
+      "lowerSource": {
+        "kind": "slot",
+        "index": 4
+      },
+      "count": 0
+    },
+    {
+      "upperLayerId": "3f2f3b09-8526-4a68-a24f-77c98be26652",
+      "upperSource": {
+        "kind": "slot",
+        "index": 0
+      },
+      "lowerLayerId": "1077441e-0447-4a3c-9cf5-2a6e1b7a996d",
+      "lowerSource": {
+        "kind": "slot",
+        "index": 3
+      },
+      "count": 0
+    },
+    {
+      "upperLayerId": "3f2f3b09-8526-4a68-a24f-77c98be26652",
+      "upperSource": {
+        "kind": "slot",
+        "index": 0
+      },
+      "lowerLayerId": "1077441e-0447-4a3c-9cf5-2a6e1b7a996d",
+      "lowerSource": {
+        "kind": "slot",
+        "index": 2
+      },
+      "count": 0
+    },
+    {
+      "upperLayerId": "3f2f3b09-8526-4a68-a24f-77c98be26652",
+      "upperSource": {
+        "kind": "slot",
+        "index": 0
+      },
+      "lowerLayerId": "1077441e-0447-4a3c-9cf5-2a6e1b7a996d",
+      "lowerSource": {
+        "kind": "slot",
+        "index": 1
+      },
+      "count": 0
+    },
+    {
+      "upperLayerId": "3f2f3b09-8526-4a68-a24f-77c98be26652",
+      "upperSource": {
+        "kind": "slot",
+        "index": 0
+      },
+      "lowerLayerId": "1077441e-0447-4a3c-9cf5-2a6e1b7a996d",
+      "lowerSource": {
+        "kind": "slot",
+        "index": 0
+      },
+      "count": 0
+    },
+    {
+      "upperLayerId": "1077441e-0447-4a3c-9cf5-2a6e1b7a996d",
+      "upperSource": {
+        "kind": "slot",
+        "index": 1
+      },
+      "lowerLayerId": "170517f8-52cf-48c2-a8e2-8e746f8de74a",
+      "lowerSource": {
+        "kind": "slot",
+        "index": 0
+      },
+      "count": 1
+    },
+    {
+      "upperLayerId": "1077441e-0447-4a3c-9cf5-2a6e1b7a996d",
+      "upperSource": {
+        "kind": "slot",
+        "index": 2
+      },
+      "lowerLayerId": "170517f8-52cf-48c2-a8e2-8e746f8de74a",
+      "lowerSource": {
+        "kind": "slot",
+        "index": 0
+      },
+      "count": 1
+    },
+    {
+      "upperLayerId": "1077441e-0447-4a3c-9cf5-2a6e1b7a996d",
+      "upperSource": {
+        "kind": "slot",
+        "index": 3
+      },
+      "lowerLayerId": "170517f8-52cf-48c2-a8e2-8e746f8de74a",
+      "lowerSource": {
+        "kind": "slot",
+        "index": 0
+      },
+      "count": 1
+    },
+    {
+      "upperLayerId": "1077441e-0447-4a3c-9cf5-2a6e1b7a996d",
+      "upperSource": {
+        "kind": "slot",
+        "index": 4
+      },
+      "lowerLayerId": "170517f8-52cf-48c2-a8e2-8e746f8de74a",
+      "lowerSource": {
+        "kind": "slot",
+        "index": 0
+      },
+      "count": 1
+    },
+    {
+      "upperLayerId": "1077441e-0447-4a3c-9cf5-2a6e1b7a996d",
+      "upperSource": {
+        "kind": "slot",
+        "index": 5
+      },
+      "lowerLayerId": "170517f8-52cf-48c2-a8e2-8e746f8de74a",
+      "lowerSource": {
+        "kind": "slot",
+        "index": 0
+      },
+      "count": 1
+    },
+    {
+      "upperLayerId": "1077441e-0447-4a3c-9cf5-2a6e1b7a996d",
+      "upperSource": {
+        "kind": "slot",
+        "index": 0
+      },
+      "lowerLayerId": "170517f8-52cf-48c2-a8e2-8e746f8de74a",
+      "lowerSource": {
+        "kind": "slot",
+        "index": 0
+      },
+      "count": 1
+    },
+    {
+      "upperLayerId": "1077441e-0447-4a3c-9cf5-2a6e1b7a996d",
+      "upperSource": {
+        "kind": "slot",
+        "index": 0
+      },
+      "lowerLayerId": "170517f8-52cf-48c2-a8e2-8e746f8de74a",
+      "lowerSource": {
+        "kind": "slot",
+        "index": 1
+      },
+      "count": 1
+    },
+    {
+      "upperLayerId": "1077441e-0447-4a3c-9cf5-2a6e1b7a996d",
+      "upperSource": {
+        "kind": "slot",
+        "index": 1
+      },
+      "lowerLayerId": "170517f8-52cf-48c2-a8e2-8e746f8de74a",
+      "lowerSource": {
+        "kind": "slot",
+        "index": 1
+      },
+      "count": 1
+    },
+    {
+      "upperLayerId": "1077441e-0447-4a3c-9cf5-2a6e1b7a996d",
+      "upperSource": {
+        "kind": "slot",
+        "index": 2
+      },
+      "lowerLayerId": "170517f8-52cf-48c2-a8e2-8e746f8de74a",
+      "lowerSource": {
+        "kind": "slot",
+        "index": 1
+      },
+      "count": 1
+    },
+    {
+      "upperLayerId": "1077441e-0447-4a3c-9cf5-2a6e1b7a996d",
+      "upperSource": {
+        "kind": "slot",
+        "index": 3
+      },
+      "lowerLayerId": "170517f8-52cf-48c2-a8e2-8e746f8de74a",
+      "lowerSource": {
+        "kind": "slot",
+        "index": 1
+      },
+      "count": 1
+    },
+    {
+      "upperLayerId": "1077441e-0447-4a3c-9cf5-2a6e1b7a996d",
+      "upperSource": {
+        "kind": "slot",
+        "index": 4
+      },
+      "lowerLayerId": "170517f8-52cf-48c2-a8e2-8e746f8de74a",
+      "lowerSource": {
+        "kind": "slot",
+        "index": 1
+      },
+      "count": 1
+    },
+    {
+      "upperLayerId": "1077441e-0447-4a3c-9cf5-2a6e1b7a996d",
+      "upperSource": {
+        "kind": "slot",
+        "index": 5
+      },
+      "lowerLayerId": "170517f8-52cf-48c2-a8e2-8e746f8de74a",
+      "lowerSource": {
+        "kind": "slot",
+        "index": 1
+      },
+      "count": 1
+    }
+  ],
+  "updatedAt": "2026-08-25",
+  "layers": [
+    {
+      "id": "a2eed63b-7d3c-4535-b5a7-910ef6c3c510",
+      "kind": "top_deck",
+      "order": 1,
+      "direction": "along_length",
+      "sameLevelAsPrev": false,
+      "spanMm": null,
+      "offsetMm": 0,
+      "runSpanMm": null,
+      "runOffsetMm": 0,
+      "content": {
+        "type": "sequence",
+        "slots": [
+          {
+            "length": 1219,
+            "width": 95,
+            "thickness": 20,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 1219,
+            "width": 95,
+            "thickness": 20,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 1219,
+            "width": 95,
+            "thickness": 20,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "3f2f3b09-8526-4a68-a24f-77c98be26652",
+      "kind": "top_deck",
+      "order": 2,
+      "direction": "along_length",
+      "sameLevelAsPrev": true,
+      "spanMm": null,
+      "offsetMm": 0,
+      "runSpanMm": null,
+      "runOffsetMm": 0,
+      "content": {
+        "type": "sequence",
+        "slots": [
+          {
+            "length": 1219,
+            "width": 20,
+            "thickness": 45,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 95
+          },
+          {
+            "length": 1219,
+            "width": 20,
+            "thickness": 45,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 108
+          },
+          {
+            "length": 1219,
+            "width": 20,
+            "thickness": 45,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": -108
+          },
+          {
+            "length": 1219,
+            "width": 20,
+            "thickness": 45,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": -95
+          }
+        ]
+      }
+    },
+    {
+      "id": "1077441e-0447-4a3c-9cf5-2a6e1b7a996d",
+      "kind": "bearer",
+      "order": 3,
+      "direction": "across_width",
+      "sameLevelAsPrev": false,
+      "spanMm": null,
+      "offsetMm": 0,
+      "runSpanMm": null,
+      "runOffsetMm": 0,
+      "content": {
+        "type": "sequence",
+        "slots": [
+          {
+            "length": 1016,
+            "width": 89,
+            "thickness": 16,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 1016,
+            "width": 89,
+            "thickness": 16,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 1016,
+            "width": 89,
+            "thickness": 16,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 1016,
+            "width": 89,
+            "thickness": 16,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 1016,
+            "width": 89,
+            "thickness": 16,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 1016,
+            "width": 89,
+            "thickness": 16,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "170517f8-52cf-48c2-a8e2-8e746f8de74a",
+      "kind": "bottom_deck",
+      "order": 4,
+      "direction": "along_length",
+      "sameLevelAsPrev": false,
+      "spanMm": null,
+      "offsetMm": 0,
+      "runSpanMm": null,
+      "runOffsetMm": 0,
+      "content": {
+        "type": "sequence",
+        "slots": [
+          {
+            "length": 1219,
+            "width": 20,
+            "thickness": 20,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 1219,
+            "width": 20,
+            "thickness": 20,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "c931c812-2e1d-44a9-8068-e593a7ec67fa",
+      "kind": "bottom_deck",
+      "order": 5,
+      "direction": "across_width",
+      "sameLevelAsPrev": true,
+      "spanMm": null,
+      "offsetMm": 0,
+      "runSpanMm": 976,
+      "runOffsetMm": 20,
+      "content": {
+        "type": "sequence",
+        "slots": [
+          {
+            "length": 976,
+            "width": 20,
+            "thickness": 20,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          },
+          {
+            "length": 976,
+            "width": 20,
+            "thickness": 20,
+            "material": "pine",
+            "joinedToPrev": false,
+            "nudgeMm": 0
+          }
+        ]
+      }
+    }
+  ]
+}
